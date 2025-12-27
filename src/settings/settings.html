@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - CYC Annotate</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet" href="../../styles/settings.css">
+</head>
+<body data-theme="dark">
+  <div class="settings-container">
+    <div class="settings-content">
+      <div class="settings-header">
+        <div class="header-content">
+          <h1>Settings</h1>
+          <p class="settings-subtitle">Customize your annotation experience</p>
+        </div>
+      </div>
+      
+      <div class="search-container">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input type="text" id="settings-search" class="settings-search" placeholder="Search settings...">
+        <button id="clear-search" class="clear-search-btn" style="display: none;">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      
+      <div class="header-divider"></div>
+      
+      <div id="directory-warning" class="directory-warning" style="display: none;">
+        <span class="material-symbols-outlined">warning</span>
+        <div class="warning-content">
+          <div class="warning-title">Auto-Save Directory Not Found</div>
+          <div class="warning-message">You have auto-snapshots enabled, but the directory no longer exists. Please update your save directory in settings.</div>
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <div class="section-header">
+          <span class="material-symbols-outlined section-icon">palette</span>
+          <h2 class="section-title">Appearance</h2>
+        </div>
+        
+        <div class="section-content">
+          <div class="setting-item">
+            <div class="setting-label-wrapper">
+              <label>Theme</label>
+              <span class="setting-description">Choose your preferred color scheme</span>
+            </div>
+            <div class="theme-toggle">
+              <button class="theme-btn" data-theme="light">
+                <span class="material-symbols-outlined">light_mode</span>
+                <span>Light</span>
+              </button>
+              <button class="theme-btn active" data-theme="dark">
+                <span class="material-symbols-outlined">dark_mode</span>
+                <span>Dark</span>
+              </button>
+            </div>
+          </div>
+          
+          <div class="setting-item" data-keywords="accent color customize theme">
+            <div class="setting-label-wrapper">
+              <label>Accent Color</label>
+              <span class="setting-description">Customize the accent color used throughout the app</span>
+            </div>
+            <div class="accent-color-wrapper">
+              <button id="accent-color-preview" class="accent-color-preview" title="Click to open color picker"></button>
+              <input type="color" id="accent-color-picker" class="accent-color-picker" value="#40E0D0" tabindex="0">
+              <input type="text" id="accent-color-hex" class="accent-color-hex" placeholder="#40E0D0" maxlength="7" tabindex="0">
+              <button id="reset-accent-color" class="reset-btn" title="Reset to default">
+                <span class="material-symbols-outlined">refresh</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="settings-section" data-section="toolbar">
+        <div class="section-header">
+          <span class="material-symbols-outlined section-icon">view_compact</span>
+          <h2 class="section-title">Toolbar</h2>
+        </div>
+        
+        <div class="section-content">
+          <div class="setting-item" data-keywords="layout toolbar orientation vertical horizontal">
+            <div class="setting-label-wrapper">
+              <label>Layout</label>
+              <span class="setting-description">Choose toolbar orientation</span>
+            </div>
+            <div class="layout-toggle">
+              <button class="layout-btn active" data-layout="vertical" title="Vertical">
+                <span class="material-symbols-outlined">view_column</span>
+                <span>Vertical</span>
+              </button>
+              <button class="layout-btn" data-layout="horizontal" title="Horizontal">
+                <span class="material-symbols-outlined">view_agenda</span>
+                <span>Horizontal</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="settings-section" data-section="shortcuts">
+        <div class="section-header">
+          <span class="material-symbols-outlined section-icon">keyboard</span>
+          <h2 class="section-title">Shortcuts</h2>
+        </div>
+        
+        <div class="section-content">
+          <div class="setting-item" data-keywords="shortcut keyboard toggle annotate tool hotkey">
+            <div class="setting-label-wrapper">
+              <label>Toggle Annotate Tool</label>
+              <span class="setting-description">Keyboard shortcut to show/hide the annotation toolbar</span>
+            </div>
+            <div class="shortcut-input-wrapper">
+              <input type="text" id="shortcut-input" class="shortcut-input" readonly placeholder="Click to set...">
+              <button id="reset-shortcut" class="reset-btn" title="Reset to default">
+                <span class="material-symbols-outlined">refresh</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="settings-section" data-section="features">
+        <div class="section-header">
+          <span class="material-symbols-outlined section-icon">tune</span>
+          <h2 class="section-title">Features</h2>
+        </div>
+        
+        <div class="section-content">
+          <div class="setting-item" data-keywords="sound effects audio play sounds">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="sounds-enabled">
+                <label>Sound Effects</label>
+                <span class="setting-description">Play sounds for actions like clear and open</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="sounds-enabled" checked>
+                <label for="sounds-enabled" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-item" data-keywords="draw solve math expression calculate automatic">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="draw-solve-enabled">
+                <label>Draw and Solve</label>
+                <span class="setting-description">Automatically solve math expressions in text (e.g., 1+1 = 2)</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="draw-solve-enabled">
+                <label for="draw-solve-enabled" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-item" data-keywords="reduce clutter toolbar menu compact">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="reduce-clutter-enabled">
+                <label>Reduce Clutter</label>
+                <span class="setting-description">Move undo, redo, toggle visibility, and settings into a submenu</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="reduce-clutter-enabled">
+                <label for="reduce-clutter-enabled" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="settings-section" data-section="system">
+        <div class="section-header">
+          <span class="material-symbols-outlined section-icon">settings</span>
+          <h2 class="section-title">System</h2>
+        </div>
+        
+        <div class="section-content">
+          <div class="setting-item" data-keywords="system tray icon notification area show hide">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="show-tray-icon">
+                <label>Show System Tray Icon</label>
+                <span class="setting-description">Display the app icon in the system tray</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="show-tray-icon" checked>
+                <label for="show-tray-icon" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-item" data-keywords="launch startup boot auto start background">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="launch-on-startup">
+                <label>Launch on Startup</label>
+                <span class="setting-description">Automatically start the app when your computer boots</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="launch-on-startup">
+                <label for="launch-on-startup" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-item" data-keywords="screenshot notification alert capture">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="screenshot-notification">
+                <label>Screenshot Notification</label>
+                <span class="setting-description">Show a notification when a screenshot is taken</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="screenshot-notification" checked>
+                <label for="screenshot-notification" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-item" data-keywords="auto save snapshot screenshot directory folder location">
+            <div class="setting-row">
+              <div class="setting-label-wrapper">
+                <label>Auto-Save Snapshots</label>
+                <span class="setting-description">Automatically save snapshots to a default location without asking</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="auto-save-snapshots">
+                <label for="auto-save-snapshots" class="toggle-label"></label>
+              </div>
+            </div>
+            <div id="save-directory-wrapper" class="save-directory-wrapper" style="display: none;">
+              <div class="save-directory-content">
+                <span id="save-directory-path" class="save-directory-path">No directory selected</span>
+                <button id="select-save-directory-btn" class="select-directory-btn">
+                  <span class="material-symbols-outlined">folder</span>
+                  <span>Choose Folder</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="settings-section" data-section="reset">
+        <div class="section-header">
+          <span class="material-symbols-outlined section-icon">restart_alt</span>
+          <h2 class="section-title">Reset</h2>
+        </div>
+        
+        <div class="section-content">
+          <div class="reset-buttons-group">
+            <div class="reset-section" data-keywords="reset default restore">
+              <button id="reset-everything-btn" class="reset-everything-btn">
+                <span class="material-symbols-outlined">restart_alt</span>
+                <span>Reset Everything</span>
+              </button>
+              <p class="reset-description">Reset all settings to their default values</p>
+            </div>
+            <div class="reset-section" data-keywords="onboarding welcome tutorial">
+              <button id="show-onboarding-btn" class="reset-everything-btn">
+                <span class="material-symbols-outlined">school</span>
+                <span>Show Onboarding</span>
+              </button>
+              <p class="reset-description">View the welcome tutorial and setup guide again</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div id="no-results" class="no-results" style="display: none;">
+        <span class="material-symbols-outlined">search_off</span>
+        <p>No settings found</p>
+        <span class="no-results-hint">Try a different search term</span>
+      </div>
+    </div>
+    
+    <div class="settings-footer">
+      <div class="footer-content">
+        <div class="footer-info">
+          <span class="app-name">CYC Annotate App</span>
+          <span class="app-version">Version 1.0.0</span>
+        </div>
+        <div class="footer-links">
+          <a href="mailto:help@creatoryogames.com" class="footer-link">
+            <span class="material-symbols-outlined">bug_report</span>
+            <span>Report Issue</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

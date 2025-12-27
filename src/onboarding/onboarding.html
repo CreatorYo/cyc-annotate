@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to CYC Annotate</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet" href="../../styles/onboarding.css">
+</head>
+<body data-theme="dark">
+  <div class="onboarding-container">
+    <div class="onboarding-content">
+      <div class="progress-container">
+        <div class="progress-steps">
+          <div class="step-indicator active" data-step="0">
+            <div class="step-circle">1</div>
+            <div class="step-label">Welcome</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-indicator" data-step="1">
+            <div class="step-circle">2</div>
+            <div class="step-label">Shortcut</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-indicator" data-step="2">
+            <div class="step-circle">3</div>
+            <div class="step-label">Color</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-indicator" data-step="3">
+            <div class="step-circle">4</div>
+            <div class="step-label">Tour</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="onboarding-step active" data-step="0">
+        <div class="step-content">
+          <div class="welcome-icon">
+            <span class="material-symbols-outlined">edit</span>
+          </div>
+          <h1 class="step-title">Welcome to CYC Annotate</h1>
+          <p class="step-description">Your powerful annotation tool for screenshots, drawings, and more. Let's get you started!</p>
+        </div>
+      </div>
+
+      <div class="onboarding-step" data-step="1">
+        <div class="step-content">
+          <div class="step-icon">
+            <span class="material-symbols-outlined">keyboard</span>
+          </div>
+          <h1 class="step-title">Set Your Keyboard Shortcut</h1>
+          <p class="step-description">Choose a shortcut to quickly toggle the annotation tool. Press your desired key combination.</p>
+          <div class="shortcut-setup">
+            <input type="text" id="shortcut-input" class="shortcut-input" placeholder="Press your shortcut keys..." readonly>
+            <button class="btn-link" id="reset-shortcut-btn">Reset to Default</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="onboarding-step" data-step="2">
+        <div class="step-content">
+          <div class="step-icon">
+            <span class="material-symbols-outlined">palette</span>
+          </div>
+          <h1 class="step-title">Choose Your Accent Color</h1>
+          <p class="step-description">Select a color that matches your style. This will be used throughout the app.</p>
+          <div class="color-setup">
+            <div class="color-preview-wrapper">
+              <button id="color-preview" class="color-preview" style="background: #40E0D0;"></button>
+              <input type="color" id="color-picker" class="color-picker" value="#40E0D0">
+              <input type="text" id="color-hex" class="color-hex" value="#40E0D0" maxlength="7">
+            </div>
+            <div class="color-presets">
+              <div class="color-preset" data-color="#40E0D0" style="background: #40E0D0;"></div>
+              <div class="color-preset" data-color="#ef4444" style="background: #ef4444;"></div>
+              <div class="color-preset" data-color="#3b82f6" style="background: #3b82f6;"></div>
+              <div class="color-preset" data-color="#10b981" style="background: #10b981;"></div>
+              <div class="color-preset" data-color="#f59e0b" style="background: #f59e0b;"></div>
+              <div class="color-preset" data-color="#8b5cf6" style="background: #8b5cf6;"></div>
+            </div>
+            <button class="btn-link" id="reset-color-btn">Reset to Default</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="onboarding-step" data-step="3">
+        <div class="step-content">
+          <div class="step-icon">
+            <span class="material-symbols-outlined">explore</span>
+          </div>
+          <h1 class="step-title">Discover Features</h1>
+          <p class="step-description">Here are some key features to help you get started:</p>
+          <div class="features-grid">
+            <div class="feature-card">
+              <span class="material-symbols-outlined feature-icon">camera_alt</span>
+              <h3 class="feature-title">Screenshot Capture</h3>
+              <p class="feature-desc">Take screenshots of specific areas with our built-in capture tool</p>
+            </div>
+            <div class="feature-card">
+              <span class="material-symbols-outlined feature-icon">edit</span>
+              <h3 class="feature-title">Drawing Tools</h3>
+              <p class="feature-desc">Draw, annotate, and highlight with various tools and colors</p>
+            </div>
+            <div class="feature-card">
+              <span class="material-symbols-outlined feature-icon">text_fields</span>
+              <h3 class="feature-title">Text & Math</h3>
+              <p class="feature-desc">Add text and solve math expressions automatically</p>
+            </div>
+            <div class="feature-card">
+              <span class="material-symbols-outlined feature-icon">shapes</span>
+              <h3 class="feature-title">Shapes</h3>
+              <p class="feature-desc">Insert rectangles, circles, and other shapes</p>
+            </div>
+            <div class="feature-card">
+              <span class="material-symbols-outlined feature-icon">undo</span>
+              <h3 class="feature-title">Undo/Redo</h3>
+              <p class="feature-desc">Easily undo or redo your actions</p>
+            </div>
+            <div class="feature-card">
+              <span class="material-symbols-outlined feature-icon">settings</span>
+              <h3 class="feature-title">Customizable</h3>
+              <p class="feature-desc">Customize colors, shortcuts, and more in settings</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="bottom-nav-bar">
+      <button class="btn-secondary" id="bottom-back-btn" style="display: none;">Back</button>
+      <button class="btn-primary" id="bottom-next-btn">Get Started</button>
+    </div>
+  </div>
+
+  <script src="onboarding.js"></script>
+</body>
+</html>
+
