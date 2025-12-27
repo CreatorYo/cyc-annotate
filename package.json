@@ -1,25 +1,33 @@
 {
   "name": "CYC Annotate",
-  "version": "1.0.0",
+  "version": "1.3.1",
   "main": "src/main/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make && npm run cleanup",
-    "cleanup": "node -e \"const fs=require('fs');const path=require('path');const dir=path.join('out','CYCAnnotate-win32-x64');if(fs.existsSync(dir)){fs.rmSync(dir,{recursive:true,force:true});console.log('Cleaned up intermediate build directory');}\""
+    "cleanup": "node -e \"const fs=require('fs');const path=require('path');const dir=path.join('out','CYCAnnotate-win32-x64');if(fs.existsSync(dir)){fs.rmSync(dir,{recursive:true,force:true});console.log('Cleaned up intermediate build directory');}\"",
+    "release": "node release.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
-  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CreatorYo/cyc-annotate"
+  },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",
-    "@electron-forge/maker-msix": "^7.10.2",
+    "@electron-forge/maker-squirrel": "^7.10.2",
     "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
     "@electron-forge/plugin-fuses": "^7.10.2",
     "@electron/fuses": "^1.8.0",
+    "@electron/windows-sign": "^2.0.2",
     "electron": "^39.2.7"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
   }
 }

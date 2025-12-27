@@ -1,6 +1,12 @@
 const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, nativeImage, dialog, Notification } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const fs = require('fs')
 const path = require('path')
+
+// Prefer .ico for Windows taskbar, fallback to .png
+const iconPathIco = path.join(__dirname, '../../icon.ico')
+const iconPathPng = path.join(__dirname, '../../icon.png')
+const iconPath = fs.existsSync(iconPathIco) ? iconPathIco : iconPathPng
 
 let win
 let settingsWin
@@ -10,8 +16,13 @@ let notificationWin = null
 let tray
 let visible = false
 let shortcut = 'Control+Shift+D'
+let captureOverlayActive = false
 
 function ensureAlwaysOnTop() {
+  // Don't restore alwaysOnTop if capture overlay is active
+  if (captureOverlayActive) {
+    return
+  }
   if (win && !win.isDestroyed()) {
     try {
       if (!win.isAlwaysOnTop()) {
@@ -63,9 +74,12 @@ function createTray() {
   }
   
   try {
-    const iconPath = path.join(__dirname, '../../icon.png')
-    if (fs.existsSync(iconPath)) {
-      tray = new Tray(iconPath)
+    // Prefer .ico for Windows, fallback to .png
+    const trayIconPathIco = path.join(__dirname, '../../icon.ico')
+    const trayIconPathPng = path.join(__dirname, '../../icon.png')
+    const trayIconPath = fs.existsSync(trayIconPathIco) ? trayIconPathIco : trayIconPathPng
+    if (fs.existsSync(trayIconPath)) {
+      tray = new Tray(trayIconPath)
     } else {
       const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
       tray = new Tray(icon)
@@ -255,6 +269,7 @@ function showDesktopNotification(title, body, filePath) {
     focusable: true,
     show: false,
     opacity: 0,
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -343,6 +358,7 @@ function createOnboardingWindow() {
     autoHideMenuBar: true,
     show: false,
     resizable: true,
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -370,7 +386,8 @@ function createMainWindow() {
     alwaysOnTop: true,
     show: false,
     skipTaskbar: true, 
-    opacity: 0, 
+    opacity: 0,
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -481,14 +498,15 @@ function createMainWindow() {
     }
 
     settingsWin = new BrowserWindow({
-      width: 750,
+      width: 1000,
       height: 700,
-      minWidth: 600,
+      minWidth: 800,
       minHeight: 550,
       frame: true,
       title: 'Settings - CYC Annotate',
       autoHideMenuBar: true,
       show: false,
+      icon: iconPath,
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false
@@ -672,8 +690,25 @@ function createMainWindow() {
       }
       captureOverlayWin = null
 
+      // Set flag to prevent alwaysOnTop from being restored
+      captureOverlayActive = true
+      
       if (win && !win.isDestroyed()) {
         win.setIgnoreMouseEvents(true, { forward: true })
+        // Lower the main window's z-order so drawings appear behind the overlay
+        win.setAlwaysOnTop(false)
+        // Small delay to ensure the main window is moved behind before overlay is created
+        setTimeout(() => {
+          if (win && !win.isDestroyed() && captureOverlayWin && !captureOverlayWin.isDestroyed()) {
+            // Ensure overlay is on top
+            captureOverlayWin.moveTop()
+            try {
+              captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
+            } catch (e) {
+              captureOverlayWin.setAlwaysOnTop(true)
+            }
+          }
+        }, 50)
       }
 
       const { screen } = require('electron')
@@ -708,13 +743,20 @@ function createMainWindow() {
         resizable: false,
         movable: false,
         focusable: true,
-        show: true,
+        show: false,
         webPreferences: {
           nodeIntegration: true,
           contextIsolation: false,
           backgroundThrottling: false
         }
       })
+
+      // Set overlay to highest always-on-top level
+      try {
+        captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
+      } catch (e) {
+        captureOverlayWin.setAlwaysOnTop(true)
+      }
 
       captureOverlayWin.setIgnoreMouseEvents(false)
       
@@ -742,19 +784,38 @@ function createMainWindow() {
       })
       
       captureOverlayWin.loadFile('src/capture/capture-overlay.html')
-      captureOverlayWin.focus()
+      
+      // Show and bring overlay to front after a short delay to ensure it's on top
+      captureOverlayWin.once('ready-to-show', () => {
+        captureOverlayWin.show()
+        captureOverlayWin.focus()
+        captureOverlayWin.moveTop()
+        // Ensure it stays on top
+        try {
+          captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
+        } catch (e) {
+          captureOverlayWin.setAlwaysOnTop(true)
+        }
+      })
+      
       captureOverlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
       captureOverlayWin.on('closed', () => {
+        captureOverlayActive = false
         if (win && !win.isDestroyed()) {
           win.setIgnoreMouseEvents(false)
+          // Restore the main window's always-on-top status
+          ensureAlwaysOnTop()
         }
         captureOverlayWin = null
       })
     } catch (error) {
       console.error('Error opening capture overlay:', error)
+      captureOverlayActive = false
       if (win && !win.isDestroyed()) {
         win.setIgnoreMouseEvents(false)
+        // Restore the main window's always-on-top status on error
+        ensureAlwaysOnTop()
       }
     }
   })
@@ -769,8 +830,11 @@ function createMainWindow() {
         captureOverlayWin = null
       }
 
+      captureOverlayActive = false
       if (win && !win.isDestroyed()) {
         win.setIgnoreMouseEvents(false)
+        // Restore the main window's always-on-top status
+        ensureAlwaysOnTop()
       }
 
       if (!overlayBounds || !bounds || bounds.width < 10 || bounds.height < 10) {
@@ -853,6 +917,11 @@ function createMainWindow() {
         captureOverlayWin.destroy()
         captureOverlayWin = null
       }
+      captureOverlayActive = false
+      if (win && !win.isDestroyed()) {
+        // Restore the main window's always-on-top status
+        ensureAlwaysOnTop()
+      }
     }
   })
 
@@ -861,8 +930,11 @@ function createMainWindow() {
       captureOverlayWin.destroy()
       captureOverlayWin = null
     }
+    captureOverlayActive = false
     if (win && !win.isDestroyed()) {
       win.setIgnoreMouseEvents(false)
+      // Restore the main window's always-on-top status
+      ensureAlwaysOnTop()
       win.webContents.send('capture-cancelled')
     }
   })
@@ -918,6 +990,8 @@ function createMainWindow() {
   if (savedAccentColor && win && !win.isDestroyed()) {
     win.webContents.once('did-finish-load', () => {
       win.webContents.executeJavaScript(`localStorage.setItem('accent-color', '${savedAccentColor}')`)
+      // Also send via IPC to ensure it's applied immediately
+      win.webContents.send('accent-color-changed', savedAccentColor)
     })
   }
 
@@ -962,11 +1036,144 @@ ipcMain.on('onboarding-complete', (event, data) => {
     }
     if (data.accentColor && win && !win.isDestroyed()) {
       win.webContents.executeJavaScript(`localStorage.setItem('accent-color', '${data.accentColor}')`)
+      // Send via IPC to ensure it's applied immediately
+      win.webContents.send('accent-color-changed', data.accentColor)
     }
   }
 })
 
+// Auto-updater configuration
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+
+// Configure GitHub releases for updates
+// electron-updater will automatically read from package.json repository field if available
+// Or you can explicitly set owner and repo via environment variables or here
+
+// Read repository info from package.json
+const packageJson = require('../../package.json')
+let githubOwner = null
+let githubRepo = null
+
+if (packageJson.repository && packageJson.repository.url) {
+  // Extract owner and repo from repository URL (supports both https and git@ formats)
+  const repoMatch = packageJson.repository.url.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?$/)
+  if (repoMatch) {
+    githubOwner = repoMatch[1]
+    githubRepo = repoMatch[2]
+  }
+}
+
+// Allow override via environment variables
+githubOwner = process.env.GITHUB_OWNER || githubOwner
+githubRepo = process.env.GITHUB_REPO || githubRepo
+
+// Configure updater
+if (app.isPackaged && (githubOwner && githubRepo)) {
+  const feedConfig = {
+    provider: 'github',
+    owner: githubOwner,
+    repo: githubRepo
+  }
+  
+  // For private repositories, add token
+  if (process.env.GITHUB_TOKEN) {
+    feedConfig.token = process.env.GITHUB_TOKEN
+  }
+  
+  autoUpdater.setFeedURL(feedConfig)
+  console.log(`Configured GitHub updates: ${githubOwner}/${githubRepo}`)
+} else if (app.isPackaged) {
+  console.warn('GitHub repository not configured. Update package.json repository field or set GITHUB_OWNER/GITHUB_REPO environment variables.')
+}
+
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for update...')
+  sendUpdateStatus('checking', 'Checking for updates...')
+})
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available:', info.version)
+  sendUpdateStatus('available', `Update available: ${info.version}`, info)
+})
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Update not available')
+  sendUpdateStatus('not-available', 'You are using the latest version')
+})
+
+autoUpdater.on('error', (err) => {
+  console.error('Error in auto-updater:', err)
+  sendUpdateStatus('error', `Update check failed: ${err.message}`)
+})
+
+autoUpdater.on('download-progress', (progressObj) => {
+  const message = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}% (${progressObj.transferred}/${progressObj.total})`
+  sendUpdateStatus('download-progress', message, progressObj)
+})
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded:', info.version)
+  sendUpdateStatus('downloaded', `Update ${info.version} downloaded. Restart the app to install.`, info)
+})
+
+function sendUpdateStatus(status, message, data = null) {
+  // Send to main window if it exists
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('update-status', { status, message, data })
+  }
+  // Send to settings window if it exists
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send('update-status', { status, message, data })
+  }
+}
+
+// IPC handlers for update checking
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    await autoUpdater.checkForUpdates()
+    return { success: true }
+  } catch (error) {
+    console.error('Error checking for updates:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('download-update', async () => {
+  try {
+    await autoUpdater.downloadUpdate()
+    return { success: true }
+  } catch (error) {
+    console.error('Error downloading update:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('install-update', async () => {
+  try {
+    autoUpdater.quitAndInstall(false, true)
+    return { success: true }
+  } catch (error) {
+    console.error('Error installing update:', error)
+    return { success: false, error: error.message }
+  }
+})
+
 app.whenReady().then(() => {
+  // Set app identifier for Windows taskbar
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('creatoryocreations.cycannotate')
+  }
+  
+  // Check for updates on startup (only if app is packaged)
+  if (app.isPackaged) {
+    // Check for updates automatically on startup (silently, won't show UI)
+    autoUpdater.checkForUpdates().catch(err => {
+      console.log('Auto-update check failed:', err.message)
+    })
+  }
+  
   const onboardingCompleted = getSetting('onboarding-completed', false)
   
   if (!onboardingCompleted) {

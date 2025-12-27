@@ -122,6 +122,12 @@ function updateAccentColor(color) {
   document.documentElement.style.setProperty('--accent-hover', hoverColor)
   document.documentElement.style.setProperty('--accent-active-bg', `rgba(${r}, ${g}, ${b}, 0.15)`)
   document.documentElement.style.setProperty('--accent-active-shadow', `rgba(${r}, ${g}, ${b}, 0.3)`)
+  
+  // Set button text color based on accent color contrast for accessibility
+  const accentIsLight = isLightColor(normalizedColor)
+  const buttonTextColor = accentIsLight ? '#000000' : '#ffffff'
+  document.documentElement.style.setProperty('--accent-btn-text-color', buttonTextColor)
+  
   localStorage.setItem('accent-color', normalizedColor)
 
   updateLayoutButtonColors()
@@ -351,15 +357,15 @@ if (soundsCheckbox) {
   })
 }
 
-const drawSolveCheckbox = document.getElementById('draw-solve-enabled')
-if (drawSolveCheckbox) {
-  const drawSolveEnabled = localStorage.getItem('draw-solve-enabled')
-  if (drawSolveEnabled !== null) {
-    drawSolveCheckbox.checked = drawSolveEnabled === 'true'
+const textSolveCheckbox = document.getElementById('text-solve-enabled')
+if (textSolveCheckbox) {
+  const textSolveEnabled = localStorage.getItem('text-solve-enabled')
+  if (textSolveEnabled !== null) {
+    textSolveCheckbox.checked = textSolveEnabled === 'true'
   }
   
-  drawSolveCheckbox.addEventListener('change', (e) => {
-    localStorage.setItem('draw-solve-enabled', e.target.checked)
+  textSolveCheckbox.addEventListener('change', (e) => {
+    localStorage.setItem('text-solve-enabled', e.target.checked)
   })
 }
 
@@ -634,9 +640,9 @@ if (resetEverythingBtn) {
         ipcRenderer.send('sounds-changed', defaultSounds)
       }
 
-      if (drawSolveCheckbox) {
-        drawSolveCheckbox.checked = false
-        localStorage.setItem('draw-solve-enabled', false)
+      if (textSolveCheckbox) {
+        textSolveCheckbox.checked = false
+        localStorage.setItem('text-solve-enabled', false)
       }
 
       if (showTrayIconCheckbox) {
@@ -683,6 +689,78 @@ if (resetEverythingBtn) {
 const settingsSearch = document.getElementById('settings-search')
 const clearSearchBtn = document.getElementById('clear-search')
 const noResults = document.getElementById('no-results')
+const sidebarSearchToggle = document.getElementById('sidebar-search-toggle')
+const sidebarSearchContainer = document.querySelector('.sidebar-search-container')
+
+// Category navigation
+const categoryTitles = {
+  appearance: { title: 'Appearance', subtitle: 'Customize your app\'s look and feel' },
+  toolbar: { title: 'Toolbar', subtitle: 'Configure toolbar layout and behavior' },
+  shortcuts: { title: 'Shortcuts', subtitle: 'Manage keyboard shortcuts' },
+  features: { title: 'Features', subtitle: 'Enable or disable app features' },
+  system: { title: 'System', subtitle: 'System settings and preferences' },
+  reset: { title: 'Reset', subtitle: 'Reset settings or view onboarding' },
+  about: { title: 'About', subtitle: 'Application information and support' }
+}
+
+let currentCategory = 'appearance'
+
+function showCategory(category) {
+  currentCategory = category
+  
+  // Update nav items
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.classList.remove('active')
+    if (item.dataset.category === category) {
+      item.classList.add('active')
+    }
+  })
+  
+  // Update title and subtitle
+  const categoryTitle = document.getElementById('category-title')
+  const categorySubtitle = document.getElementById('category-subtitle')
+  if (categoryTitle && categorySubtitle && categoryTitles[category]) {
+    categoryTitle.textContent = categoryTitles[category].title
+    categorySubtitle.textContent = categoryTitles[category].subtitle
+  }
+  
+  // Show/hide sections
+  document.querySelectorAll('.settings-section').forEach(section => {
+    if (section.dataset.category === category) {
+      section.classList.add('active')
+    } else {
+      section.classList.remove('active')
+    }
+  })
+  
+  // Clear search when switching categories
+  if (settingsSearch) {
+    settingsSearch.value = ''
+    performSearch('')
+  }
+}
+
+// Initialize category navigation
+function initCategoryNavigation() {
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const category = item.dataset.category
+      if (category) {
+        showCategory(category)
+      }
+    })
+  })
+  
+  // Show initial category
+  showCategory(currentCategory)
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCategoryNavigation)
+} else {
+  initCategoryNavigation()
+}
 
 function performSearch(query) {
   const searchTerm = query.toLowerCase().trim()
@@ -691,7 +769,13 @@ function performSearch(query) {
   let hasResults = false
 
   if (searchTerm === '') {
+    // Show current category section
     sections.forEach(section => {
+      if (section.dataset.category === currentCategory) {
+        section.classList.add('active')
+      } else {
+        section.classList.remove('active')
+      }
       section.classList.remove('hidden')
     })
     settingItems.forEach(item => {
@@ -704,10 +788,12 @@ function performSearch(query) {
 
   clearSearchBtn.style.display = 'flex'
 
+  // When searching, show all sections that match
   sections.forEach(section => {
-    const sectionTitle = section.querySelector('.section-title')?.textContent.toLowerCase() || ''
     const sectionData = section.getAttribute('data-section') || ''
-    const sectionMatches = sectionTitle.includes(searchTerm) || sectionData.includes(searchTerm)
+    const category = section.getAttribute('data-category') || ''
+    const categoryTitle = categoryTitles[category]?.title.toLowerCase() || ''
+    const sectionMatches = categoryTitle.includes(searchTerm) || sectionData.includes(searchTerm)
     
     let sectionHasVisibleItems = false
     
@@ -731,8 +817,10 @@ function performSearch(query) {
     })
     
     if (sectionHasVisibleItems || sectionMatches) {
+      section.classList.add('active')
       section.classList.remove('hidden')
     } else {
+      section.classList.remove('active')
       section.classList.add('hidden')
     }
   })
@@ -744,15 +832,46 @@ function performSearch(query) {
   }
 }
 
+// Toggle sidebar search
+if (sidebarSearchToggle && sidebarSearchContainer) {
+  sidebarSearchToggle.addEventListener('click', () => {
+    const isVisible = sidebarSearchContainer.style.display !== 'none'
+    if (isVisible) {
+      sidebarSearchContainer.style.display = 'none'
+      sidebarSearchToggle.classList.remove('active')
+      if (settingsSearch) {
+        settingsSearch.value = ''
+        performSearch('')
+      }
+    } else {
+      sidebarSearchContainer.style.display = 'block'
+      sidebarSearchToggle.classList.add('active')
+      setTimeout(() => {
+        if (settingsSearch) {
+          settingsSearch.focus()
+        }
+      }, 100)
+    }
+  })
+}
+
 if (settingsSearch) {
   settingsSearch.addEventListener('input', (e) => {
     performSearch(e.target.value)
+    if (clearSearchBtn) {
+      clearSearchBtn.style.display = e.target.value.trim() ? 'flex' : 'none'
+    }
   })
 
   settingsSearch.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       settingsSearch.value = ''
       performSearch('')
+      if (clearSearchBtn) clearSearchBtn.style.display = 'none'
+      if (sidebarSearchToggle && sidebarSearchContainer) {
+        sidebarSearchContainer.style.display = 'none'
+        sidebarSearchToggle.classList.remove('active')
+      }
       settingsSearch.blur()
     }
   })
@@ -763,7 +882,125 @@ if (clearSearchBtn) {
     if (settingsSearch) {
       settingsSearch.value = ''
       performSearch('')
+      clearSearchBtn.style.display = 'none'
       settingsSearch.focus()
     }
   })
 }
+
+// Update check functionality
+const checkUpdateBtn = document.getElementById('check-update-btn')
+const updateStatusText = document.getElementById('update-status-text')
+
+let updateDownloaded = false
+
+if (checkUpdateBtn && updateStatusText) {
+  checkUpdateBtn.addEventListener('click', async () => {
+    checkUpdateBtn.disabled = true
+    checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Checking...</span>'
+    updateStatusText.textContent = 'Checking for updates...'
+    
+    try {
+      const result = await ipcRenderer.invoke('check-for-updates')
+      if (!result.success) {
+        updateStatusText.textContent = `Error: ${result.error || 'Failed to check for updates'}`
+        checkUpdateBtn.disabled = false
+        checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
+      }
+    } catch (error) {
+      updateStatusText.textContent = `Error: ${error.message || 'Failed to check for updates'}`
+      checkUpdateBtn.disabled = false
+      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
+    }
+  })
+}
+
+// Listen for update status from main process
+ipcRenderer.on('update-status', (event, { status, message, data }) => {
+  if (!updateStatusText || !checkUpdateBtn) return
+  
+  updateStatusText.textContent = message
+  
+  switch (status) {
+    case 'checking':
+      checkUpdateBtn.disabled = true
+      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Checking...</span>'
+      break
+      
+    case 'available':
+      checkUpdateBtn.disabled = false
+      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">download</span><span>Download Update</span>'
+      checkUpdateBtn.onclick = async () => {
+        checkUpdateBtn.disabled = true
+        checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Downloading...</span>'
+        updateStatusText.textContent = 'Downloading update...'
+        try {
+          await ipcRenderer.invoke('download-update')
+        } catch (error) {
+          updateStatusText.textContent = `Download failed: ${error.message}`
+          checkUpdateBtn.disabled = false
+          checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">download</span><span>Download Update</span>'
+        }
+      }
+      break
+      
+    case 'not-available':
+      checkUpdateBtn.disabled = false
+      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">check_circle</span><span>Up to Date</span>'
+      setTimeout(() => {
+        checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
+        checkUpdateBtn.onclick = async () => {
+          checkUpdateBtn.disabled = true
+          checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Checking...</span>'
+          updateStatusText.textContent = 'Checking for updates...'
+          try {
+            await ipcRenderer.invoke('check-for-updates')
+          } catch (error) {
+            updateStatusText.textContent = `Error: ${error.message || 'Failed to check for updates'}`
+            checkUpdateBtn.disabled = false
+            checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
+          }
+        }
+      }, 3000)
+      break
+      
+    case 'error':
+      checkUpdateBtn.disabled = false
+      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">error</span><span>Retry</span>'
+      checkUpdateBtn.onclick = async () => {
+        checkUpdateBtn.disabled = true
+        checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Checking...</span>'
+        updateStatusText.textContent = 'Checking for updates...'
+        try {
+          await ipcRenderer.invoke('check-for-updates')
+        } catch (error) {
+          updateStatusText.textContent = `Error: ${error.message || 'Failed to check for updates'}`
+          checkUpdateBtn.disabled = false
+          checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
+        }
+      }
+      break
+      
+    case 'download-progress':
+      if (data) {
+        const percent = Math.round(data.percent || 0)
+        updateStatusText.textContent = `Downloading: ${percent}%`
+      }
+      break
+      
+    case 'downloaded':
+      updateDownloaded = true
+      checkUpdateBtn.disabled = false
+      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">restart_alt</span><span>Restart to Install</span>'
+      checkUpdateBtn.onclick = async () => {
+        if (confirm('The update will be installed when you restart the app. Restart now?')) {
+          try {
+            await ipcRenderer.invoke('install-update')
+          } catch (error) {
+            updateStatusText.textContent = `Installation failed: ${error.message}`
+          }
+        }
+      }
+      break
+  }
+})

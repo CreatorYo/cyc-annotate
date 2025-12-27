@@ -3,32 +3,41 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 const fs = require('fs');
 const path = require('path');
 
+const iconPath = path.join(__dirname, 'icon.png');
+const iconPathWithoutExt = path.join(__dirname, 'icon');
+if (!fs.existsSync(iconPath) && !fs.existsSync(iconPathWithoutExt + '.ico') && !fs.existsSync(iconPathWithoutExt + '.png')) {
+  console.warn('Warning: Icon file not found at expected location:', iconPath);
+}
+
 module.exports = {
   packagerConfig: {
     name: 'CYCAnnotate',
-    executableName: 'CYC Annotate',
-    asar: true
+    executableName: 'CYCAnnotate',
+    asar: true,
+    // Prefer .ico for Windows, fallback to .png
+    icon: fs.existsSync(path.join(__dirname, 'icon.ico')) 
+      ? path.join(__dirname, 'icon.ico')
+      : path.join(__dirname, 'icon')
   },
   rebuildConfig: {},
   makers: [
     {
-      name: '@electron-forge/maker-msix',
+      name: '@electron-forge/maker-squirrel',
       config: {
-        windowsKitVersion: '10.0.26100.0',
-        manifestVariables: {
-          publisher: 'CN=D8CE1B84-55BC-4649-B982-017495080FFB',
-          packageIdentity: 'creatoryocreations.cycannotate',
-          packageDisplayName: 'CYC Annotate',
-          packageDescription: 'CYC Annotate Application',
-          publisherDisplayName: 'CreatorYo Creations',
-          appExecutable: 'CYC Annotate.exe',
-          appDisplayName: 'CYC Annotate',
-          targetArch: 'x64',
-          packageVersion: '1.0.0.0',
-          packageMinOSVersion: '10.0.17763.0',
-          packageMaxOSVersionTested: '10.0.26100.0'
-        },
-        sign: false,
+        name: 'CYCAnnotate',
+        authors: 'CreatorYoCreations',
+        description: 'CYC Annotate - Screen annotation tool',
+        setupIcon: fs.existsSync(path.join(__dirname, 'icon.ico')) 
+          ? path.join(__dirname, 'icon.ico')
+          : path.join(__dirname, 'icon.png'),
+        loadingGif: undefined, // Use default loading animation
+        setupExe: 'CYCAnnotate-Setup.exe',
+        certificateFile: undefined, // Optional: path to certificate for code signing
+        certificatePassword: undefined,
+        // Create a proper installer with all standard features
+        noMsi: false, // Also create MSI installer
+        remoteReleases: undefined, // For auto-updates, set this to your update server
+        remoteToken: undefined,
       }
     }
   ],

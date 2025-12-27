@@ -183,6 +183,43 @@ function playSound(type) {
       
       source.start(audioContext.currentTime)
       source.stop(audioContext.currentTime + duration)
+    } else if (type === 'color') {
+      // Light, pleasant chime sound for color selection
+      const duration = 0.12
+      const sampleRate = audioContext.sampleRate
+      const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate)
+      const data = buffer.getChannelData(0)
+
+      for (let i = 0; i < buffer.length; i++) {
+        const t = i / sampleRate
+
+        const decay = Math.exp(-t * 30)
+
+        // Pleasant chime with two frequencies
+        const chime1 = Math.sin(2 * Math.PI * 600 * t) * 0.5 * decay
+        const chime2 = Math.sin(2 * Math.PI * 900 * t) * 0.3 * decay
+
+        // Gentle high frequency sparkle
+        const sparkle = Math.sin(2 * Math.PI * 1500 * t) * 0.2 * Math.exp(-t * 50)
+
+        // Subtle low frequency for warmth
+        const warmth = Math.sin(2 * Math.PI * 300 * t) * 0.15 * decay
+
+        data[i] = (chime1 + chime2 + sparkle + warmth) * decay
+      }
+      
+      const source = audioContext.createBufferSource()
+      const gainNode = audioContext.createGain()
+      
+      source.buffer = buffer
+      source.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      gainNode.gain.setValueAtTime(0.5, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
+      
+      source.start(audioContext.currentTime)
+      source.stop(audioContext.currentTime + duration)
     }
   } catch (e) {
     console.warn('Error playing sound:', e)
@@ -604,25 +641,88 @@ function evaluateMathExpression(expression) {
   }
 }
 
+function parseFormattedText(element) {
+  const segments = []
+  
+  function traverse(node, formatting = { bold: false, italic: false, underline: false }) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent
+      if (text) {
+        segments.push({ text, formatting: { ...formatting } })
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const tagName = node.tagName.toLowerCase()
+      const newFormatting = { ...formatting }
+      
+      if (tagName === 'b' || tagName === 'strong') {
+        newFormatting.bold = true
+      } else if (tagName === 'i' || tagName === 'em') {
+        newFormatting.italic = true
+      } else if (tagName === 'u') {
+        newFormatting.underline = true
+      }
+      
+      for (let child of node.childNodes) {
+        traverse(child, newFormatting)
+      }
+    }
+  }
+  
+  for (let child of element.childNodes) {
+    traverse(child)
+  }
+  
+  if (segments.length === 0) {
+    segments.push({ text: element.textContent || '', formatting: { bold: false, italic: false, underline: false } })
+  }
+  
+  // Merge consecutive segments with the same formatting
+  const merged = []
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]
+    
+    if (merged.length > 0) {
+      const last = merged[merged.length - 1]
+      const formatMatch = last.formatting.bold === segment.formatting.bold &&
+                         last.formatting.italic === segment.formatting.italic &&
+                         last.formatting.underline === segment.formatting.underline
+      
+      if (formatMatch) {
+        // Same formatting - just concatenate (preserves original spacing)
+        last.text += segment.text
+      } else {
+        // Different formatting - keep as separate segment
+        merged.push({ text: segment.text, formatting: { ...segment.formatting } })
+      }
+    } else {
+      merged.push({ text: segment.text, formatting: { ...segment.formatting } })
+    }
+  }
+  
+  return merged
+}
+
 function finishTextInput() {
   const textInput = document.getElementById('text-input')
-  let text = textInput.textContent.trim()
+  const textContent = textInput.textContent.trim()
   
-  if (text && state.textInput) {
+  if (textContent && state.textInput) {
     
     updateTextFormatting()
     
     const drawSolveEnabled = localStorage.getItem('draw-solve-enabled') === 'true'
     
-    if (drawSolveEnabled) {
+    let segments = parseFormattedText(textInput)
       
-      const result = evaluateMathExpression(text)
+    if (drawSolveEnabled && segments.length > 0) {
+      const fullText = segments.map(s => s.text).join('')
+      const result = evaluateMathExpression(fullText)
       if (result !== null) {
-        const trimmedText = text.trim()
+        const trimmedText = fullText.trim()
         if (trimmedText.endsWith('=')) {
-          text = `${trimmedText} ${result}`
+          segments[segments.length - 1].text = `${trimmedText} ${result}`
         } else {
-          text = `${text} = ${result}`
+          segments.push({ text: ` = ${result}`, formatting: { bold: false, italic: false, underline: false } })
         }
       }
     }
@@ -630,35 +730,76 @@ function finishTextInput() {
     ctx.save()
     ctx.fillStyle = state.color
     const fontSize = Math.max(12, state.strokeSize * 4)
-    
-    let fontStyle = 'normal'
-    let fontWeight = 'normal'
-    if (state.textFormatting) {
-      if (state.textFormatting.bold) fontWeight = 'bold'
-      if (state.textFormatting.italic) fontStyle = 'italic'
-    }
-    
-    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
     ctx.textBaseline = 'top'
     ctx.globalAlpha = 1.0
 
     const maxWidth = Math.max(400, canvas.width * 0.8)
-    const lines = wrapText(ctx, text, maxWidth)
-
     const lineHeight = fontSize * 1.2
-    lines.forEach((line, index) => {
-      const y = state.textInput.y + (index * lineHeight)
-      ctx.fillText(line, state.textInput.x, y)
+    let currentX = state.textInput.x
+    let currentY = state.textInput.y
+    
+    // Build lines with proper word wrapping
+    const lines = []
+    let currentLine = []
+    let currentLineWidth = 0
+
+    segments.forEach(segment => {
+      const fontStyle = segment.formatting.italic ? 'italic' : 'normal'
+      const fontWeight = segment.formatting.bold ? 'bold' : 'normal'
+      ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
       
-      if (state.textFormatting && state.textFormatting.underline) {
-        const textWidth = ctx.measureText(line).width
+      // Split into words (spaces are handled naturally)
+      const words = segment.text.trim().split(/\s+/).filter(w => w.length > 0)
+      
+      words.forEach(word => {
+        const spaceBefore = currentLine.length > 0 ? ' ' : ''
+        const testText = currentLine.length > 0 
+          ? (currentLine.map(p => p.text).join(' ') + ' ' + word)
+          : word
+        const testWidth = ctx.measureText(testText).width
+        
+        if (testWidth > maxWidth && currentLine.length > 0) {
+          // Wrap to next line
+          lines.push([...currentLine])
+          currentLine = [{ text: word, formatting: segment.formatting }]
+        } else {
+          // Add to current line
+          currentLine.push({ text: word, formatting: segment.formatting })
+        }
+      })
+    })
+    
+    if (currentLine.length > 0) {
+      lines.push(currentLine)
+    }
+
+    // Render each line
+    lines.forEach((line, lineIndex) => {
+      let x = currentX
+      const y = state.textInput.y + (lineIndex * lineHeight)
+      
+      line.forEach((part, partIndex) => {
+        const fontStyle = part.formatting.italic ? 'italic' : 'normal'
+        const fontWeight = part.formatting.bold ? 'bold' : 'normal'
+        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+        
+        // Add space between words (not before first word)
+        const space = partIndex > 0 ? ' ' : ''
+        const text = space + part.text
+        ctx.fillText(text, x, y)
+        
+        if (part.formatting.underline) {
+          const textWidth = ctx.measureText(text).width
         ctx.strokeStyle = state.color
         ctx.lineWidth = Math.max(1, fontSize / 15)
         ctx.beginPath()
-        ctx.moveTo(state.textInput.x, y + fontSize + 2)
-        ctx.lineTo(state.textInput.x + textWidth, y + fontSize + 2)
+          ctx.moveTo(x, y + fontSize + 2)
+          ctx.lineTo(x + textWidth, y + fontSize + 2)
         ctx.stroke()
       }
+        
+        x += ctx.measureText(text).width
+      })
     })
     
     ctx.restore()
@@ -1023,6 +1164,7 @@ document.addEventListener('keydown', (e) => {
       const color = colorMap[e.key]
       if (color) {
         setColor(color)
+        playSound('color')
       }
       break
   }
@@ -2041,7 +2183,8 @@ function updateAccentColor(color) {
   localStorage.setItem('accent-color', color)
 }
 
-const savedAccentColor = localStorage.getItem('accent-color') || '#9c27b0'
+// Get accent color from localStorage, with fallback to default teal color
+const savedAccentColor = localStorage.getItem('accent-color') || '#40E0D0'
 updateAccentColor(savedAccentColor)
 
 function createTooltip(element) {

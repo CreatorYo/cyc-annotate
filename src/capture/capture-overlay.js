@@ -24,7 +24,10 @@ function applyAccentColor(color) {
     
     if (selectionRect) {
       selectionRect.style.borderColor = accentColor
-      selectionRect.style.backgroundColor = bgColor
+      // Transparent background so selected area appears normal brightness
+      selectionRect.style.backgroundColor = 'transparent'
+      // Dark overlay everywhere except inside the selection rectangle
+      selectionRect.style.boxShadow = '0 0 0 9999px rgba(0, 0, 0, 0.3)'
     }
   } catch (e) {
     console.warn('Could not apply accent color:', e)
@@ -42,6 +45,21 @@ function init() {
 
   applyAccentColor()
 
+  // Force crosshair cursor on all elements
+  document.body.style.cursor = 'crosshair'
+  document.documentElement.style.cursor = 'crosshair'
+  
+  // Ensure cursor stays crosshair on mouse move (when not selecting)
+  const cursorHandler = (e) => {
+    if (!isSelecting) {
+      document.body.style.cursor = 'crosshair'
+      if (e.target) {
+        e.target.style.cursor = 'crosshair'
+      }
+    }
+  }
+
+  document.addEventListener('mousemove', cursorHandler, true)
   document.addEventListener('mousedown', handleMouseDown)
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseup', handleMouseUp)

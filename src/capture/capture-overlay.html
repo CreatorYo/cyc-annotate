@@ -13,13 +13,18 @@
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      cursor: crosshair !important;
+    }
+
+    html, body {
+      cursor: crosshair !important;
     }
 
     body {
       width: 100vw;
       height: 100vh;
-      background: rgba(0, 0, 0, 0.3);
-      cursor: crosshair;
+      background: transparent;
+      cursor: crosshair !important;
       overflow: hidden;
       user-select: none;
     }
@@ -27,9 +32,11 @@
     #selection-rect {
       position: absolute;
       border: 2px solid var(--accent-color, #40E0D0);
-      background: var(--accent-bg, rgba(64, 224, 208, 0.1));
+      background: transparent;
       pointer-events: none;
       display: none;
+      cursor: crosshair !important;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
     }
 
     #instructions {
@@ -45,6 +52,7 @@
       font-size: 14px;
       pointer-events: none;
       z-index: 1000;
+      cursor: crosshair !important;
     }
 
     #instructions.hidden {
