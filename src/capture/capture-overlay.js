@@ -5,6 +5,7 @@ let startX = 0
 let startY = 0
 let selectionRect = null
 let instructions = null
+let overlay = null
 
 function hexToRgb(hex) {
   const r = parseInt(hex.substr(1, 2), 16)
@@ -15,7 +16,7 @@ function hexToRgb(hex) {
 
 function applyAccentColor(color) {
   try {
-    const accentColor = color || localStorage.getItem('accent-color') || '#40E0D0'
+    const accentColor = color || localStorage.getItem('accent-color') || '#3bbbf6'
     const rgb = hexToRgb(accentColor)
     const bgColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`
     
@@ -24,10 +25,11 @@ function applyAccentColor(color) {
     
     if (selectionRect) {
       selectionRect.style.borderColor = accentColor
-      // Transparent background so selected area appears normal brightness
       selectionRect.style.backgroundColor = 'transparent'
-      // Dark overlay everywhere except inside the selection rectangle
-      selectionRect.style.boxShadow = '0 0 0 9999px rgba(0, 0, 0, 0.3)'
+    }
+    
+    if (overlay) {
+      overlay.style.background = 'rgba(0, 0, 0, 0.4)'
     }
   } catch (e) {
     console.warn('Could not apply accent color:', e)
@@ -37,29 +39,29 @@ function applyAccentColor(color) {
 function init() {
   selectionRect = document.getElementById('selection-rect')
   instructions = document.getElementById('instructions')
+  overlay = document.getElementById('overlay')
   
-  if (!selectionRect || !instructions) {
+  if (!selectionRect || !instructions || !overlay) {
     setTimeout(init, 10)
     return
   }
 
   applyAccentColor()
 
-  // Force crosshair cursor on all elements
-  document.body.style.cursor = 'crosshair'
-  document.documentElement.style.cursor = 'crosshair'
-  
-  // Ensure cursor stays crosshair on mouse move (when not selecting)
-  const cursorHandler = (e) => {
-    if (!isSelecting) {
-      document.body.style.cursor = 'crosshair'
-      if (e.target) {
-        e.target.style.cursor = 'crosshair'
-      }
+  const updateCursorClass = () => {
+    if (isSelecting) {
+      document.body.classList.add('selecting')
+    } else {
+      document.body.classList.remove('selecting')
     }
   }
-
-  document.addEventListener('mousemove', cursorHandler, true)
+  
+  updateCursorClass()
+  
+  document.addEventListener('mousemove', (e) => {
+    updateCursorClass()
+  }, { passive: true, capture: true })
+  
   document.addEventListener('mousedown', handleMouseDown)
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseup', handleMouseUp)
@@ -67,7 +69,7 @@ function init() {
 }
 
 function updateSelectionRect(x, y, width, height) {
-  if (!selectionRect) return
+  if (!selectionRect || !overlay) return
   
   const left = Math.min(x, x + width)
   const top = Math.min(y, y + height)
@@ -79,6 +81,20 @@ function updateSelectionRect(x, y, width, height) {
   selectionRect.style.width = absWidth + 'px'
   selectionRect.style.height = absHeight + 'px'
   selectionRect.style.display = 'block'
+  
+  if (absWidth > 0 && absHeight > 0) {
+    selectionRect.style.boxShadow = '0 0 0 9999px rgba(0, 0, 0, 0.4)'
+    if (!overlay.classList.contains('hidden')) {
+      overlay.style.display = 'none'
+      overlay.classList.add('hidden')
+    }
+  } else {
+    selectionRect.style.boxShadow = 'none'
+    if (overlay.classList.contains('hidden')) {
+      overlay.style.display = 'block'
+      overlay.classList.remove('hidden')
+    }
+  }
 }
 
 function getSelectionBounds() {
@@ -100,8 +116,15 @@ function handleMouseDown(e) {
   startX = e.clientX
   startY = e.clientY
   
+  document.body.classList.add('selecting')
+  
   if (instructions) {
     instructions.classList.add('hidden')
+  }
+  
+  if (overlay && !overlay.classList.contains('hidden')) {
+    overlay.style.display = 'none'
+    overlay.classList.add('hidden')
   }
   
   updateSelectionRect(startX, startY, 0, 0)
@@ -127,6 +150,8 @@ function handleMouseUp(e) {
   
   isSelecting = false
   
+  document.body.classList.remove('selecting')
+  
   const bounds = getSelectionBounds()
   
   if (bounds && bounds.width > 10 && bounds.height > 10) {
@@ -134,6 +159,11 @@ function handleMouseUp(e) {
   } else {
     if (selectionRect) {
       selectionRect.style.display = 'none'
+      selectionRect.style.boxShadow = 'none'
+    }
+    if (overlay && overlay.classList.contains('hidden')) {
+      overlay.style.display = 'block'
+      overlay.classList.remove('hidden')
     }
     if (instructions) {
       instructions.classList.remove('hidden')
@@ -168,8 +198,16 @@ function selectEntireScreen() {
 function resetSelection() {
   isSelecting = false
   
+  document.body.classList.remove('selecting')
+  
   if (selectionRect) {
     selectionRect.style.display = 'none'
+    selectionRect.style.boxShadow = 'none'
+  }
+  
+  if (overlay && overlay.classList.contains('hidden')) {
+    overlay.style.display = 'block'
+    overlay.classList.remove('hidden')
   }
   
   if (instructions) {
@@ -206,9 +244,12 @@ ipcRenderer.on('set-accent-color', (event, color) => {
   applyAccentColor(color)
 })
 
+ipcRenderer.on('select-all-screen', () => {
+  selectEntireScreen()
+})
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init)
 } else {
   init()
 }
-

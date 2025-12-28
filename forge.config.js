@@ -3,41 +3,46 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 const fs = require('fs');
 const path = require('path');
 
-const iconPath = path.join(__dirname, 'icon.png');
-const iconPathWithoutExt = path.join(__dirname, 'icon');
-if (!fs.existsSync(iconPath) && !fs.existsSync(iconPathWithoutExt + '.ico') && !fs.existsSync(iconPathWithoutExt + '.png')) {
-  console.warn('Warning: Icon file not found at expected location:', iconPath);
-}
-
 module.exports = {
   packagerConfig: {
     name: 'CYCAnnotate',
     executableName: 'CYCAnnotate',
     asar: true,
-    // Prefer .ico for Windows, fallback to .png
-    icon: fs.existsSync(path.join(__dirname, 'icon.ico')) 
-      ? path.join(__dirname, 'icon.ico')
-      : path.join(__dirname, 'icon')
+    icon: path.join(__dirname, 'icon'),
+    ignore: [
+      /^\/\.git/,
+      /^\/node_modules\/\.cache/,
+      /^\/out/,
+      /^\/\.vscode/,
+      /^\/\.idea/,
+      /^\/\.DS_Store/,
+      /^\/\.gitignore/,
+      /^\/forge\.config\.js/,
+      /^\/package-lock\.json/,
+      /^\/\.github/,
+      /^\/assets\/icons/,
+      /^\/build\/appx/
+    ],
+    prune: true,
+    overwrite: true
   },
   rebuildConfig: {},
   makers: [
     {
-      name: '@electron-forge/maker-squirrel',
+      name: '@electron-forge/maker-msix',
       config: {
-        name: 'CYCAnnotate',
-        authors: 'CreatorYoCreations',
-        description: 'CYC Annotate - Screen annotation tool',
-        setupIcon: fs.existsSync(path.join(__dirname, 'icon.ico')) 
-          ? path.join(__dirname, 'icon.ico')
-          : path.join(__dirname, 'icon.png'),
-        loadingGif: undefined, // Use default loading animation
-        setupExe: 'CYCAnnotate-Setup.exe',
-        certificateFile: undefined, // Optional: path to certificate for code signing
-        certificatePassword: undefined,
-        // Create a proper installer with all standard features
-        noMsi: false, // Also create MSI installer
-        remoteReleases: undefined, // For auto-updates, set this to your update server
-        remoteToken: undefined,
+        packageAssets: path.join(__dirname, 'build', 'appx'),
+        manifestVariables: {
+          publisher: 'CN=CreatorYoCreations',
+          packageDisplayName: 'CYC Annotate',
+          packageDescription: 'CYC Annotate - Screen annotation tool',
+          packageName: 'creatoryocreations.cycannotate',
+          identityName: 'creatoryocreations.cycannotate'
+        },
+        windowsSignOptions: {
+          certificateFile: path.join(__dirname, 'devcert.pfx'),
+          certificatePassword: 'devcert'
+        }
       }
     }
   ],

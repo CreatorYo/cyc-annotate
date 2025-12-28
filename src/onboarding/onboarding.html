@@ -5,9 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to CYC Annotate</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet" href="../../styles/window-controls.css">
   <link rel="stylesheet" href="../../styles/onboarding.css">
 </head>
-<body data-theme="dark">
+<body>
+  <div class="window-titlebar" style="-webkit-app-region: drag; position: fixed; top: 0; left: 0; right: 0; height: 32px; z-index: 9999;"></div>
+  <div class="window-controls">
+    <button id="window-minimize" class="window-control-btn" title="Minimize" tabindex="-1">
+      <span class="material-symbols-outlined">remove</span>
+    </button>
+    <button id="window-maximize" class="window-control-btn" title="Maximize" style="display: none;" tabindex="-1">
+      <span class="material-symbols-outlined" id="maximize-icon">crop_square</span>
+    </button>
+    <button id="window-close" class="window-control-btn window-close-btn" title="Close" tabindex="-1">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
   <div class="onboarding-container">
     <div class="onboarding-content">
       <div class="progress-container">
@@ -24,7 +38,7 @@
           <div class="step-line"></div>
           <div class="step-indicator" data-step="2">
             <div class="step-circle">3</div>
-            <div class="step-label">Color</div>
+            <div class="step-label">Colour</div>
           </div>
           <div class="step-line"></div>
           <div class="step-indicator" data-step="3">
@@ -35,12 +49,35 @@
       </div>
 
       <div class="onboarding-step active" data-step="0">
-        <div class="step-content">
-          <div class="welcome-icon">
-            <span class="material-symbols-outlined">edit</span>
+        <div class="welcome-screen">
+          <div class="welcome-background">
+            <div class="icon-pattern">
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 0s">edit</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 0.2s">text_fields</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 0.4s">shapes</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 0.6s">brush</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 0.8s">rectangle</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 1s">radio_button_unchecked</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 1.2s">arrow_forward</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 1.4s">remove</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 1.6s">edit</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 1.8s">text_fields</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 2s">shapes</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 2.2s">brush</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 2.4s">rectangle</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 2.6s">radio_button_unchecked</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 2.8s">arrow_forward</span>
+              <span class="material-symbols-outlined pattern-icon" style="--delay: 3s">remove</span>
+            </div>
+            <div class="welcome-mask"></div>
           </div>
-          <h1 class="step-title">Welcome to CYC Annotate</h1>
-          <p class="step-description">Your powerful annotation tool for screenshots, drawings, and more. Let's get you started!</p>
+          <div class="welcome-content">
+            <h1 class="welcome-title">Welcome to CYC Annotate</h1>
+            <button class="welcome-btn" id="welcome-start-btn">
+              <span class="welcome-btn-text">Let's Get Started</span>
+              <span class="welcome-btn-arrow material-symbols-rounded">arrow_forward</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -51,6 +88,7 @@
           </div>
           <h1 class="step-title">Set Your Keyboard Shortcut</h1>
           <p class="step-description">Choose a shortcut to quickly toggle the annotation tool. Press your desired key combination.</p>
+          <p class="step-note"><strong>You can always change this later in settings.</strong></p>
           <div class="shortcut-setup">
             <input type="text" id="shortcut-input" class="shortcut-input" placeholder="Press your shortcut keys..." readonly>
             <button class="btn-link" id="reset-shortcut-btn">Reset to Default</button>
@@ -63,21 +101,19 @@
           <div class="step-icon">
             <span class="material-symbols-outlined">palette</span>
           </div>
-          <h1 class="step-title">Choose Your Accent Color</h1>
-          <p class="step-description">Select a color that matches your style. This will be used throughout the app.</p>
+          <h1 class="step-title">Choose Your Accent Colour</h1>
+          <p class="step-description">Select a colour that matches your style. This will be used throughout the app.</p>
           <div class="color-setup">
             <div class="color-preview-wrapper">
-              <button id="color-preview" class="color-preview" style="background: #40E0D0;"></button>
-              <input type="color" id="color-picker" class="color-picker" value="#40E0D0">
-              <input type="text" id="color-hex" class="color-hex" value="#40E0D0" maxlength="7">
+              <button id="color-preview" class="color-preview" style="background: #3bbbf6;"></button>
+              <input type="color" id="color-picker" class="color-picker" value="#3bbbf6">
+              <input type="text" id="color-hex" class="color-hex" value="#3bbbf6" maxlength="7">
             </div>
             <div class="color-presets">
-              <div class="color-preset" data-color="#40E0D0" style="background: #40E0D0;"></div>
               <div class="color-preset" data-color="#ef4444" style="background: #ef4444;"></div>
-              <div class="color-preset" data-color="#3b82f6" style="background: #3b82f6;"></div>
-              <div class="color-preset" data-color="#10b981" style="background: #10b981;"></div>
+              <div class="color-preset" data-color="#3b6df6" style="background: #3b6df6;"></div>
+              <div class="color-preset" data-color="#AEEA00" style="background: #AEEA00;"></div>
               <div class="color-preset" data-color="#f59e0b" style="background: #f59e0b;"></div>
-              <div class="color-preset" data-color="#8b5cf6" style="background: #8b5cf6;"></div>
             </div>
             <button class="btn-link" id="reset-color-btn">Reset to Default</button>
           </div>
@@ -85,7 +121,7 @@
       </div>
 
       <div class="onboarding-step" data-step="3">
-        <div class="step-content">
+        <div class="step-content" data-step="3">
           <div class="step-icon">
             <span class="material-symbols-outlined">explore</span>
           </div>
@@ -100,7 +136,7 @@
             <div class="feature-card">
               <span class="material-symbols-outlined feature-icon">edit</span>
               <h3 class="feature-title">Drawing Tools</h3>
-              <p class="feature-desc">Draw, annotate, and highlight with various tools and colors</p>
+              <p class="feature-desc">Draw, annotate, and highlight with various tools and colours</p>
             </div>
             <div class="feature-card">
               <span class="material-symbols-outlined feature-icon">text_fields</span>
@@ -119,8 +155,8 @@
             </div>
             <div class="feature-card">
               <span class="material-symbols-outlined feature-icon">settings</span>
-              <h3 class="feature-title">Customizable</h3>
-              <p class="feature-desc">Customize colors, shortcuts, and more in settings</p>
+              <h3 class="feature-title">Customisable</h3>
+              <p class="feature-desc">Customise colours, shortcuts, and more in settings</p>
             </div>
           </div>
         </div>

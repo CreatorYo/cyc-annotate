@@ -1,0 +1,54 @@
+.window-titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 9999;
+  -webkit-app-region: drag;
+}
+
+.window-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 32px;
+  display: flex;
+  flex-direction: row;
+  z-index: 10000;
+  -webkit-app-region: no-drag;
+}
+
+.window-control-btn {
+  width: 46px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  padding: 0;
+  -webkit-app-region: no-drag;
+}
+
+.window-control-btn:hover {
+  background: var(--hover-bg);
+}
+
+.window-close-btn:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+.window-control-btn .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.window-control-btn#window-maximize .material-symbols-outlined {
+  font-size: 14px;
+}
+

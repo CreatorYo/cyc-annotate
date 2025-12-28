@@ -1,33 +1,86 @@
 {
-  "name": "CYC Annotate",
-  "version": "1.3.1",
+  "name": "cyc-annotate",
+  "version": "1.5.2",
   "main": "src/main/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make && npm run cleanup",
-    "cleanup": "node -e \"const fs=require('fs');const path=require('path');const dir=path.join('out','CYCAnnotate-win32-x64');if(fs.existsSync(dir)){fs.rmSync(dir,{recursive:true,force:true});console.log('Cleaned up intermediate build directory');}\"",
-    "release": "node release.js"
+    "make": "node -e \"const fs=require('fs');const path=require('path');const outDir=path.join(__dirname,'out');if(fs.existsSync(outDir)){fs.rmSync(outDir,{recursive:true,force:true});console.log('✓ Deleted out directory');}\" && electron-forge make && npm run cleanup",
+    "build:nsis": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis --x64",
+    "build:installer": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis --x64",
+    "cleanup": "node -e \"const fs=require('fs');const path=require('path');const dir=path.join('out','CYCAnnotate-win32-x64');if(fs.existsSync(dir)){fs.rmSync(dir,{recursive:true,force:true});console.log('Cleaned up intermediate build directory');}\""
   },
   "keywords": [],
-  "author": "",
+  "author": "CreatorYoCreations",
   "license": "ISC",
-  "description": "",
+  "description": "CYC Annotate - Screen annotation tool",
   "repository": {
     "type": "git",
     "url": "https://github.com/CreatorYo/cyc-annotate"
   },
+  "build": {
+    "appId": "creatoryocreations.cycannotate",
+    "productName": "CYC Annotate",
+    "beforeBuild": null,
+    "compression": "maximum",
+    "files": [
+      "src/**/*",
+      "styles/**/*",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "extraFiles": [],
+    "asarUnpack": [],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "${productName} Setup ${version}.${ext}",
+      "forceCodeSigning": false,
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CYC Annotate",
+      "warningsAsErrors": false,
+      "menuCategory": false,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "compression": "maximum"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "CreatorYo",
+      "repo": "cyc-annotate"
+    }
+  },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",
+    "@electron-forge/maker-msix": "^7.10.2",
     "@electron-forge/maker-squirrel": "^7.10.2",
     "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
     "@electron-forge/plugin-fuses": "^7.10.2",
     "@electron/fuses": "^1.8.0",
     "@electron/windows-sign": "^2.0.2",
-    "electron": "^39.2.7"
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
-    "electron-updater": "^6.6.2"
   }
 }

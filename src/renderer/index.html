@@ -79,7 +79,7 @@
     
     <div class="color-palette">
       <button class="color-swatch" data-color="#ef4444" style="background-color: #ef4444;" data-tooltip="Red" data-shortcut="Q"></button>
-      <button class="color-swatch" data-color="#3b82f6" style="background-color: #3b82f6;" data-tooltip="Blue" data-shortcut="W"></button>
+      <button class="color-swatch" data-color="#3bbbf6" style="background-color: #3bbbf6;" data-tooltip="Blue" data-shortcut="W"></button>
       <button class="color-swatch" data-color="#10b981" style="background-color: #10b981;" data-tooltip="Green" data-shortcut="G"></button>
       <div class="custom-color-wrapper">
         <button id="custom-color-btn" class="color-swatch custom-color active" data-tooltip="Custom Color">
@@ -210,11 +210,13 @@
           <span>Toggle Visibility</span>
         </button>
         <button id="more-menu-settings-btn" class="more-menu-item" data-tooltip="Settings" data-shortcut="Ctrl+,">
-          <span class="material-symbols-outlined">settings</span>
-          <span>Settings</span>
+          <span class="material-symbols-outlined" style="position: relative;">
+            settings
           <span id="more-settings-badge" class="settings-badge" style="display: none;">
             <span class="material-symbols-outlined">warning</span>
+            </span>
           </span>
+          <span>Settings</span>
         </button>
         </div>
       </div>
@@ -295,6 +297,16 @@
   </div>
 
   <input type="text" id="color-picker-input" style="display: none;">
+
+  <div id="search-overlay" class="search-overlay" style="display: none;">
+    <div class="search-container">
+      <span class="material-symbols-outlined search-icon">search</span>
+      <input type="text" id="search-input" class="search-input" placeholder="Search...">
+      <button id="close-search" class="close-search-btn" title="Close (Esc)">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+  </div>
 
   <canvas id="canvas"></canvas>
 

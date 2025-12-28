@@ -1,10 +1,39 @@
 const { ipcRenderer } = require('electron')
+const { initWindowControls } = require('../shared/window-controls.js')
+
+initWindowControls({ showMinimize: true, showMaximize: false, showClose: true })
+
+const DEFAULT_SHORTCUT = 'Control+Shift+D'
+const DEFAULT_COLOR = '#3bbbf6'
 
 let currentStep = 0
-let currentShortcut = 'Control+Shift+D'
-let currentColor = '#40E0D0'
+let currentShortcut = DEFAULT_SHORTCUT
+let currentColor = DEFAULT_COLOR
 let isRecordingShortcut = false
 let pressedKeys = []
+let osTheme = 'dark'
+
+function applyTheme(theme) {
+  if (theme === 'system') {
+    document.body.setAttribute('data-theme', osTheme)
+  } else {
+    document.body.setAttribute('data-theme', theme)
+  }
+}
+
+ipcRenderer.invoke('get-os-theme').then(theme => {
+  osTheme = theme
+  applyTheme('system')
+})
+
+ipcRenderer.on('os-theme-changed', (event, effectiveTheme) => {
+  osTheme = effectiveTheme
+  applyTheme('system')
+})
+
+ipcRenderer.on('theme-changed', (event, theme) => {
+  applyTheme(theme)
+})
 
 function formatShortcut(keys) {
   return keys.map(k => {
@@ -19,6 +48,19 @@ function parseShortcut(str) {
 }
 
 function updateProgress() {
+  const progressContainer = document.querySelector('.progress-container')
+  const progressSteps = document.querySelector('.progress-steps')
+  
+  if (progressContainer && progressSteps) {
+    if (currentStep === 3 || currentStep === 0) {
+      progressSteps.style.opacity = '0'
+      progressSteps.style.visibility = 'hidden'
+    } else {
+      progressSteps.style.opacity = '1'
+      progressSteps.style.visibility = 'visible'
+    }
+  }
+  
   document.querySelectorAll('.step-indicator').forEach((indicator, index) => {
     indicator.classList.remove('active', 'completed')
     if (index < currentStep) {
@@ -32,16 +74,32 @@ function updateProgress() {
 function updateBottomNav() {
   const backBtn = document.getElementById('bottom-back-btn')
   const nextBtn = document.getElementById('bottom-next-btn')
+  const welcomeScreen = document.querySelector('.welcome-screen')
+  const bottomNavBar = document.querySelector('.bottom-nav-bar')
   
   if (currentStep === 0) {
-    backBtn.style.display = 'none'
-    nextBtn.textContent = 'Get Started'
-  } else if (currentStep === 3) {
-    backBtn.style.display = 'flex'
-    nextBtn.textContent = 'Finish'
+    if (bottomNavBar) {
+      bottomNavBar.style.display = 'none'
+    }
+    if (welcomeScreen) {
+      welcomeScreen.style.display = 'flex'
+    }
   } else {
-    backBtn.style.display = 'flex'
-    nextBtn.textContent = 'Next'
+    if (bottomNavBar) {
+      bottomNavBar.style.display = 'flex'
+    }
+    if (welcomeScreen) {
+      welcomeScreen.style.display = 'none'
+    }
+    if (currentStep === 3) {
+      backBtn.style.display = 'flex'
+      nextBtn.style.display = 'flex'
+      nextBtn.textContent = 'Finish'
+    } else {
+      backBtn.style.display = 'flex'
+      nextBtn.style.display = 'flex'
+      nextBtn.textContent = 'Next'
+    }
   }
 }
 
@@ -56,6 +114,11 @@ function showStep(step) {
   currentStep = step
   updateProgress()
   updateBottomNav()
+  
+  const welcomeScreen = document.querySelector('.welcome-screen')
+  if (welcomeScreen && step !== 0) {
+    welcomeScreen.style.display = 'none'
+  }
 }
 
 function nextStep() {
@@ -79,6 +142,13 @@ if (bottomBackBtn) {
   })
 }
 
+const welcomeStartBtn = document.getElementById('welcome-start-btn')
+if (welcomeStartBtn) {
+  welcomeStartBtn.addEventListener('click', () => {
+    nextStep()
+  })
+}
+
 if (bottomNextBtn) {
   bottomNextBtn.addEventListener('click', () => {
     if (currentStep === 3) {
@@ -92,8 +162,16 @@ if (bottomNextBtn) {
 const shortcutInput = document.getElementById('shortcut-input')
 const resetShortcutBtn = document.getElementById('reset-shortcut-btn')
 
+function updateResetShortcutVisibility() {
+  if (resetShortcutBtn) {
+    const isDefault = currentShortcut === DEFAULT_SHORTCUT
+    resetShortcutBtn.style.display = isDefault ? 'none' : 'inline-block'
+  }
+}
+
 if (shortcutInput) {
   shortcutInput.value = formatShortcut(parseShortcut(currentShortcut))
+  updateResetShortcutVisibility()
   
   shortcutInput.addEventListener('focus', () => {
     isRecordingShortcut = true
@@ -107,6 +185,7 @@ if (shortcutInput) {
     if (shortcutInput.value === '') {
       shortcutInput.value = formatShortcut(parseShortcut(currentShortcut))
     }
+    updateResetShortcutVisibility()
   })
 
   shortcutInput.addEventListener('keydown', (e) => {
@@ -154,15 +233,17 @@ if (shortcutInput) {
       const shortcutStr = pressedKeys.join('+')
       shortcutInput.value = formatShortcut(pressedKeys)
       currentShortcut = shortcutStr
+      updateResetShortcutVisibility()
     }
   })
 }
 
 if (resetShortcutBtn) {
   resetShortcutBtn.addEventListener('click', () => {
-    currentShortcut = 'Control+Shift+D'
+    currentShortcut = DEFAULT_SHORTCUT
     const keys = parseShortcut(currentShortcut)
     shortcutInput.value = formatShortcut(keys)
+    updateResetShortcutVisibility()
   })
 }
 
@@ -178,12 +259,35 @@ function normalizeHex(hex) {
   return hex
 }
 
+const savedAccentColor = localStorage.getItem('accent-color')
+if (savedAccentColor) {
+  currentColor = normalizeHex(savedAccentColor)
+}
+
 function hexToRgb(hex) {
   const normalized = normalizeHex(hex)
   const r = parseInt(normalized.substr(1, 2), 16)
   const g = parseInt(normalized.substr(3, 2), 16)
   const b = parseInt(normalized.substr(5, 2), 16)
   return { r, g, b }
+}
+
+function updateResetColorVisibility() {
+  if (resetColorBtn) {
+    const normalizedCurrent = normalizeHex(currentColor)
+    const normalizedDefault = normalizeHex(DEFAULT_COLOR)
+    const isDefault = normalizedCurrent.toLowerCase() === normalizedDefault.toLowerCase()
+    resetColorBtn.style.display = isDefault ? 'none' : 'inline-block'
+  }
+}
+
+function isLightColor(color) {
+  const normalized = normalizeHex(color)
+  const r = parseInt(normalized.substr(1, 2), 16)
+  const g = parseInt(normalized.substr(3, 2), 16)
+  const b = parseInt(normalized.substr(5, 2), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.5
 }
 
 function updateColor(color) {
@@ -206,6 +310,12 @@ function updateColor(color) {
   
   document.documentElement.style.setProperty('--accent-color', color)
   document.documentElement.style.setProperty('--accent-hover', hoverColor)
+  
+  const accentIsLight = isLightColor(color)
+  const buttonTextColor = accentIsLight ? '#000000' : '#ffffff'
+  document.documentElement.style.setProperty('--accent-btn-text-color', buttonTextColor)
+  
+  updateResetColorVisibility()
 }
 
 if (colorPicker) {
@@ -253,7 +363,7 @@ document.querySelectorAll('.color-preset').forEach(preset => {
 
 if (resetColorBtn) {
   resetColorBtn.addEventListener('click', () => {
-    updateColor('#40E0D0')
+    updateColor(DEFAULT_COLOR)
   })
 }
 
@@ -270,5 +380,6 @@ function finishOnboarding() {
 
 updateProgress()
 updateColor(currentColor)
+updateResetColorVisibility()
 updateBottomNav()
 

@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron')
+const { ipcRenderer, nativeTheme } = require('electron')
 
 const canvas = document.getElementById('canvas')
 const ctx = canvas.getContext('2d')
@@ -184,7 +184,6 @@ function playSound(type) {
       source.start(audioContext.currentTime)
       source.stop(audioContext.currentTime + duration)
     } else if (type === 'color') {
-      // Light, pleasant chime sound for color selection
       const duration = 0.12
       const sampleRate = audioContext.sampleRate
       const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate)
@@ -195,14 +194,11 @@ function playSound(type) {
 
         const decay = Math.exp(-t * 30)
 
-        // Pleasant chime with two frequencies
         const chime1 = Math.sin(2 * Math.PI * 600 * t) * 0.5 * decay
         const chime2 = Math.sin(2 * Math.PI * 900 * t) * 0.3 * decay
 
-        // Gentle high frequency sparkle
         const sparkle = Math.sin(2 * Math.PI * 1500 * t) * 0.2 * Math.exp(-t * 50)
 
-        // Subtle low frequency for warmth
         const warmth = Math.sin(2 * Math.PI * 300 * t) * 0.15 * decay
 
         data[i] = (chime1 + chime2 + sparkle + warmth) * decay
@@ -617,20 +613,17 @@ function evaluateMathExpression(expression) {
       cleaned = cleaned.slice(0, -1).trim()
     }
     
-    cleaned = cleaned.replace(/[xX]/g, '*')
-    cleaned = cleaned.replace(/[^0-9+\-*/().\s]/g, '')
-    if (!cleaned.trim()) return null
-
-    const allowedChars = /^[0-9+\-*/().\s]+$/
+    cleaned = cleaned.replace(/[xX×]/g, '*')
+    
+    cleaned = cleaned.replace(/\s/g, '')
+    
+    if (!/[+\-*/]/.test(cleaned)) return null
+    if (!/[0-9]/.test(cleaned)) return null
+    
+    const allowedChars = /^[0-9+\-*/().]+$/
     if (!allowedChars.test(cleaned)) return null
 
-    const expressionToEval = cleaned.replace(/\s/g, '')
-
-    if (!/[+\-*/]/.test(expressionToEval)) return null
-
-    if (!/[0-9]/.test(expressionToEval)) return null
-
-    const result = Function('"use strict"; return (' + expressionToEval + ')')()
+    const result = Function('"use strict"; return (' + cleaned + ')')()
 
     if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
       return result
@@ -676,7 +669,6 @@ function parseFormattedText(element) {
     segments.push({ text: element.textContent || '', formatting: { bold: false, italic: false, underline: false } })
   }
   
-  // Merge consecutive segments with the same formatting
   const merged = []
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i]
@@ -688,10 +680,8 @@ function parseFormattedText(element) {
                          last.formatting.underline === segment.formatting.underline
       
       if (formatMatch) {
-        // Same formatting - just concatenate (preserves original spacing)
         last.text += segment.text
       } else {
-        // Different formatting - keep as separate segment
         merged.push({ text: segment.text, formatting: { ...segment.formatting } })
       }
     } else {
@@ -710,11 +700,11 @@ function finishTextInput() {
     
     updateTextFormatting()
     
-    const drawSolveEnabled = localStorage.getItem('draw-solve-enabled') === 'true'
+    const textSolveEnabled = localStorage.getItem('text-solve-enabled') === 'true'
     
     let segments = parseFormattedText(textInput)
       
-    if (drawSolveEnabled && segments.length > 0) {
+    if (textSolveEnabled && segments.length > 0) {
       const fullText = segments.map(s => s.text).join('')
       const result = evaluateMathExpression(fullText)
       if (result !== null) {
@@ -738,7 +728,6 @@ function finishTextInput() {
     let currentX = state.textInput.x
     let currentY = state.textInput.y
     
-    // Build lines with proper word wrapping
     const lines = []
     let currentLine = []
     let currentLineWidth = 0
@@ -748,7 +737,6 @@ function finishTextInput() {
       const fontWeight = segment.formatting.bold ? 'bold' : 'normal'
       ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
       
-      // Split into words (spaces are handled naturally)
       const words = segment.text.trim().split(/\s+/).filter(w => w.length > 0)
       
       words.forEach(word => {
@@ -759,11 +747,9 @@ function finishTextInput() {
         const testWidth = ctx.measureText(testText).width
         
         if (testWidth > maxWidth && currentLine.length > 0) {
-          // Wrap to next line
           lines.push([...currentLine])
           currentLine = [{ text: word, formatting: segment.formatting }]
         } else {
-          // Add to current line
           currentLine.push({ text: word, formatting: segment.formatting })
         }
       })
@@ -773,7 +759,6 @@ function finishTextInput() {
       lines.push(currentLine)
     }
 
-    // Render each line
     lines.forEach((line, lineIndex) => {
       let x = currentX
       const y = state.textInput.y + (lineIndex * lineHeight)
@@ -783,7 +768,6 @@ function finishTextInput() {
         const fontWeight = part.formatting.bold ? 'bold' : 'normal'
         ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
         
-        // Add space between words (not before first word)
         const space = partIndex > 0 ? ' ' : ''
         const text = space + part.text
         ctx.fillText(text, x, y)
@@ -1028,6 +1012,10 @@ document.addEventListener('keydown', (e) => {
 
   if (e.ctrlKey || e.metaKey) {
     switch (e.key.toLowerCase()) {
+      case 'f':
+        e.preventDefault()
+        toggleSearch()
+        break
       case 'z':
         if (e.shiftKey) {
           e.preventDefault()
@@ -1113,6 +1101,11 @@ document.addEventListener('keydown', (e) => {
       break
     case 'escape':
       e.preventDefault()
+      const searchOverlay = document.getElementById('search-overlay')
+      if (searchOverlay && searchOverlay.style.display !== 'none') {
+        closeSearch()
+        return
+      }
       const popups = [
         document.getElementById('stroke-popup'),
         document.getElementById('drawing-tools-popup'),
@@ -1160,7 +1153,7 @@ document.addEventListener('keydown', (e) => {
     case 'g':
       
       e.preventDefault()
-      const colorMap = { 'q': '#ef4444', 'w': '#3b82f6', 'g': '#10b981' }
+      const colorMap = { 'q': '#ef4444', 'w': '#3bbbf6', 'g': '#10b981' }
       const color = colorMap[e.key]
       if (color) {
         setColor(color)
@@ -1406,6 +1399,7 @@ if (savedCustomColor && isCustomActive) {
 
 document.querySelectorAll('.color-swatch[data-color]').forEach(swatch => {
   swatch.addEventListener('click', () => {
+    playSound('color')
     setColor(swatch.dataset.color, false) 
   })
 })
@@ -1453,7 +1447,7 @@ function initColorPicker() {
     default: state.color,
     inline: false, 
     swatches: [
-      '#ef4444', '#3b82f6', '#10b981', '#f59e0b',
+      '#ef4444', '#3bbbf6', '#10b981', '#f59e0b',
       '#8b5cf6', '#ec4899', '#06b6d4', '#ffffff',
       '#000000', '#64748b', '#f97316', '#14b8a6'
     ],
@@ -1499,7 +1493,7 @@ function initColorPicker() {
       setColor(hexColor, true)
       setTimeout(() => updateCustomColorButton(hexColor), 50)
 
-      const accentColor = localStorage.getItem('accent-color') || '#40E0D0'
+      const accentColor = localStorage.getItem('accent-color') || '#3bbbf6'
       const isLight = isLightColor(accentColor)
       const textColor = isLight ? '#000000' : '#ffffff'
       document.documentElement.style.setProperty('--picker-btn-text-color', textColor)
@@ -1576,6 +1570,7 @@ function initColorPicker() {
       option.addEventListener('click', (e) => {
         e.stopPropagation()
         if (color) {
+          playSound('color')
           setColor(color, false) 
           
           localStorage.setItem('last-preset-color', color)
@@ -1968,7 +1963,8 @@ setInterval(() => {
 }, 5000)
 
 function updateReduceClutter() {
-  const reduceClutter = localStorage.getItem('reduce-clutter') === 'true'
+  const reduceClutterValue = localStorage.getItem('reduce-clutter')
+  const reduceClutter = reduceClutterValue === null ? true : reduceClutterValue === 'true'
   const undoBtn = document.getElementById('undo-btn')
   const redoBtn = document.getElementById('redo-btn')
   const hideBtn = document.getElementById('hide-btn')
@@ -2085,15 +2081,25 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 }
 
 ipcRenderer.on('reduce-clutter-changed', (event, enabled) => {
-  localStorage.setItem('reduce-clutter', enabled)
+  localStorage.setItem('reduce-clutter', enabled ? 'true' : 'false')
   updateReduceClutter()
 })
 
 ipcRenderer.on('theme-changed', (event, theme) => {
   applyTheme(theme)
+  updateToolbarBackgroundColor()
 })
 
 ipcRenderer.on('accent-color-changed', (event, color) => {
+  updateAccentColor(color)
+})
+
+ipcRenderer.on('toolbar-bg-changed', (event, data) => {
+  localStorage.setItem('toolbar-accent-bg', data.enabled ? 'true' : 'false')
+  updateToolbarBackgroundColor()
+})
+
+ipcRenderer.on('windows-accent-color-changed', (event, color) => {
   updateAccentColor(color)
 })
 
@@ -2134,9 +2140,21 @@ if (document.readyState === 'loading') {
   initSoundsSetting()
 }
 
+let osTheme = 'dark'
+
+function getOSTheme() {
+  return osTheme
+}
+
+function getEffectiveTheme(theme) {
+  return theme === 'system' ? getOSTheme() : theme
+}
+
 function applyTheme(theme) {
-  document.body.setAttribute('data-theme', theme)
   localStorage.setItem('theme', theme)
+  
+  const effectiveTheme = getEffectiveTheme(theme)
+  document.body.setAttribute('data-theme', effectiveTheme)
   
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.classList.remove('active')
@@ -2145,6 +2163,8 @@ function applyTheme(theme) {
   if (themeBtn) {
     themeBtn.classList.add('active')
   }
+  
+  updateToolbarBackgroundColor()
 }
 
 document.querySelectorAll('.theme-btn').forEach(btn => {
@@ -2153,8 +2173,55 @@ document.querySelectorAll('.theme-btn').forEach(btn => {
   })
 })
 
-const savedTheme = localStorage.getItem('theme') || 'dark'
+ipcRenderer.invoke('get-os-theme').then(theme => {
+  osTheme = theme
+  const savedTheme = localStorage.getItem('theme') || 'system'
+  if (savedTheme === 'system') {
+    const effectiveTheme = getEffectiveTheme(savedTheme)
+    document.body.setAttribute('data-theme', effectiveTheme)
+  }
+})
+
+const savedTheme = localStorage.getItem('theme') || 'system'
 applyTheme(savedTheme)
+
+ipcRenderer.on('os-theme-changed', (event, effectiveTheme) => {
+  osTheme = effectiveTheme
+  const currentTheme = localStorage.getItem('theme') || 'system'
+  if (currentTheme === 'system') {
+    document.body.setAttribute('data-theme', effectiveTheme)
+    updateToolbarBackgroundColor()
+  }
+})
+
+function darkenTintColor(hexColor, theme) {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hexColor.slice(i, i + 2), 16))
+  const effectiveTheme = theme || document.body.getAttribute('data-theme') || 'dark'
+  const isDark = effectiveTheme === 'dark'
+  
+  const [blendedR, blendedG, blendedB] = isDark
+    ? [r, g, b].map(c => Math.floor(30 * 0.7 + (c * 0.25) * 0.3))
+    : [r, g, b].map(c => Math.floor(255 * 0.85 + (c + (255 - c) * 0.7) * 0.15))
+  
+  return `#${[blendedR, blendedG, blendedB].map(c => c.toString(16).padStart(2, '0')).join('')}`
+}
+
+function updateToolbarBackgroundColor() {
+  const styleEl = document.getElementById('toolbar-bg-override')
+  if (styleEl) styleEl.remove()
+  
+  if (localStorage.getItem('toolbar-accent-bg') === 'true') {
+    const tintedBg = darkenTintColor(
+      localStorage.getItem('accent-color') || '#3bbbf6',
+      getEffectiveTheme(localStorage.getItem('theme') || 'system')
+    )
+    const el = Object.assign(document.createElement('style'), {
+      id: 'toolbar-bg-override',
+      textContent: `:root, [data-theme="dark"], [data-theme="light"], body { --toolbar-bg: ${tintedBg} !important; }`
+    })
+    document.head.appendChild(el)
+  }
+}
 
 function updateAccentColor(color) {
   document.documentElement.style.setProperty('--accent-color', color)
@@ -2181,11 +2248,14 @@ function updateAccentColor(color) {
   }
   
   localStorage.setItem('accent-color', color)
+  
+  updateToolbarBackgroundColor()
 }
 
-// Get accent color from localStorage, with fallback to default teal color
-const savedAccentColor = localStorage.getItem('accent-color') || '#40E0D0'
+const savedAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
 updateAccentColor(savedAccentColor)
+
+updateToolbarBackgroundColor()
 
 function createTooltip(element) {
   const tooltipText = element.getAttribute('data-tooltip')
@@ -2495,6 +2565,49 @@ resetShortcutBtn.addEventListener('click', () => {
   localStorage.setItem('shortcut', 'Control+Shift+D')
   ipcRenderer.send('update-shortcut', 'Control+Shift+D')
 })
+
+function toggleSearch() {
+  const searchOverlay = document.getElementById('search-overlay')
+  const searchInput = document.getElementById('search-input')
+  
+  if (!searchOverlay || !searchInput) return
+  
+  if (searchOverlay.style.display === 'none' || !searchOverlay.style.display) {
+    searchOverlay.style.display = 'flex'
+    setTimeout(() => {
+      searchInput.focus()
+    }, 100)
+  } else {
+    closeSearch()
+  }
+}
+
+function closeSearch() {
+  const searchOverlay = document.getElementById('search-overlay')
+  const searchInput = document.getElementById('search-input')
+  
+  if (searchOverlay) {
+    searchOverlay.style.display = 'none'
+  }
+  if (searchInput) {
+    searchInput.value = ''
+  }
+}
+
+const searchInput = document.getElementById('search-input')
+const closeSearchBtn = document.getElementById('close-search')
+
+if (searchInput) {
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeSearch()
+    }
+  })
+}
+
+if (closeSearchBtn) {
+  closeSearchBtn.addEventListener('click', closeSearch)
+}
 
 ipcRenderer.on('clear', clearCanvas)
 ipcRenderer.on('draw-mode', (_, enabled) => {

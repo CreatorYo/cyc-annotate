@@ -1,9 +1,8 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, nativeImage, dialog, Notification } = require('electron')
-const { autoUpdater } = require('electron-updater')
+const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, nativeImage, dialog, Notification, nativeTheme, systemPreferences } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 
-// Prefer .ico for Windows taskbar, fallback to .png
 const iconPathIco = path.join(__dirname, '../../icon.ico')
 const iconPathPng = path.join(__dirname, '../../icon.png')
 const iconPath = fs.existsSync(iconPathIco) ? iconPathIco : iconPathPng
@@ -18,8 +17,58 @@ let visible = false
 let shortcut = 'Control+Shift+D'
 let captureOverlayActive = false
 
+function disableDefaultShortcuts(window) {
+  if (!window || window.isDestroyed()) return
+  
+  const isDev = !app.isPackaged
+  
+  window.webContents.on('before-input-event', (event, input) => {
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'f') {
+      return
+    }
+    
+    if (isDev) {
+      return
+    }
+    
+    if (input.control || input.meta) {
+      if (input.key.toLowerCase() === 'r' && !input.shift) {
+        event.preventDefault()
+        return
+      }
+      if (input.key.toLowerCase() === 'r' && input.shift) {
+        event.preventDefault()
+        return
+      }
+      if (input.key.toLowerCase() === 'i' && input.shift) {
+        event.preventDefault()
+        return
+      }
+      if (input.key.toLowerCase() === 'j' && input.shift) {
+        event.preventDefault()
+        return
+      }
+      if (input.key.toLowerCase() === 'u') {
+        event.preventDefault()
+        return
+      }
+      if (input.key.toLowerCase() === 'c' && input.shift) {
+        event.preventDefault()
+        return
+      }
+    }
+    if (input.key === 'F5') {
+      event.preventDefault()
+      return
+    }
+    if (input.key === 'F5' && (input.control || input.meta)) {
+      event.preventDefault()
+      return
+    }
+  })
+}
+
 function ensureAlwaysOnTop() {
-  // Don't restore alwaysOnTop if capture overlay is active
   if (captureOverlayActive) {
     return
   }
@@ -64,6 +113,41 @@ function setSetting(key, value) {
   }
 }
 
+function manageStartupShortcut(enabled) {
+  if (process.platform !== 'win32') return
+  
+  try {
+    const os = require('os')
+    const { execSync } = require('child_process')
+    const startupFolder = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+    
+    if (!fs.existsSync(startupFolder)) {
+      fs.mkdirSync(startupFolder, { recursive: true })
+    }
+    
+    const shortcutPath = path.join(startupFolder, `${app.getName()}.lnk`)
+    
+    if (enabled) {
+      const exePath = app.getPath('exe')
+      const workingDir = path.dirname(exePath)
+      
+      const escapedShortcutPath = shortcutPath.replace(/'/g, "''").replace(/\\/g, '\\')
+      const escapedExePath = exePath.replace(/'/g, "''").replace(/\\/g, '\\')
+      const escapedWorkingDir = workingDir.replace(/'/g, "''").replace(/\\/g, '\\')
+      
+      const psScript = `$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${escapedShortcutPath}'); $Shortcut.TargetPath = '${escapedExePath}'; $Shortcut.WorkingDirectory = '${escapedWorkingDir}'; $Shortcut.Save()`
+      
+      execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`, { stdio: 'ignore' })
+    } else {
+      if (fs.existsSync(shortcutPath)) {
+        fs.unlinkSync(shortcutPath)
+      }
+    }
+  } catch (error) {
+    console.error('Error managing startup shortcut:', error)
+  }
+}
+
 function createTray() {
   if (tray) {
     try {
@@ -74,7 +158,6 @@ function createTray() {
   }
   
   try {
-    // Prefer .ico for Windows, fallback to .png
     const trayIconPathIco = path.join(__dirname, '../../icon.ico')
     const trayIconPathPng = path.join(__dirname, '../../icon.png')
     const trayIconPath = fs.existsSync(trayIconPathIco) ? trayIconPathIco : trayIconPathPng
@@ -85,7 +168,7 @@ function createTray() {
       tray = new Tray(icon)
     }
     
-    tray.setToolTip('Annotate Tool')
+    tray.setToolTip('CYC Annotate')
 
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: 'Clear Canvas', click: () => {
@@ -93,12 +176,6 @@ function createTray() {
           win.webContents.send('clear')
         }
       }},
-      { label: 'Take Screenshot', click: () => {
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('trigger-capture')
-        }
-      }},
-      { type: 'separator' },
       { label: 'Settings', click: () => {
         if (settingsWin) {
           settingsWin.focus()
@@ -106,8 +183,12 @@ function createTray() {
           ipcMain.emit('open-settings')
         }
       }},
+      { label: 'Relaunch', click: () => {
+        app.relaunch()
+        app.exit()
+      }},
       { type: 'separator' },
-      { label: 'Quit CYC Annotoate', click: () => app.quit() }
+      { label: 'Quit CYC Annotate', click: () => app.quit() }
     ]))
 
     tray.on('click', toggleOverlay)
@@ -126,80 +207,105 @@ function destroyTray() {
   }
 }
 
+function showOverlay() {
+  if (!win || win.isDestroyed()) {
+    console.warn('Window not available for show')
+    return
+  }
+
+  if (visible) return
+
+  visible = true
+
+  try {
+    const { screen } = require('electron')
+    const cursorPoint = screen.getCursorScreenPoint()
+    const display = screen.getDisplayNearestPoint(cursorPoint)
+    const bounds = display.bounds
+
+    win.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height
+    })
+
+    ensureAlwaysOnTop()
+    win.setOpacity(0) 
+    win.show()
+    win.setIgnoreMouseEvents(false)
+    
+    let opacity = 0
+    const fadeInterval = setInterval(() => {
+      if (!win || win.isDestroyed()) {
+        clearInterval(fadeInterval)
+        return
+      }
+      opacity += 0.25
+      if (opacity >= 1) {
+        win.setOpacity(1)
+        ensureAlwaysOnTop()
+        clearInterval(fadeInterval)
+      } else {
+        win.setOpacity(opacity)
+      }
+    }, 8) 
+  } catch (error) {
+    console.error('Error showing window:', error)
+    visible = false
+  }
+
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('draw-mode', true)
+  }
+}
+
+function hideOverlay() {
+  if (!win || win.isDestroyed()) {
+    return
+  }
+
+  if (!visible) return
+
+  visible = false
+
+  try {
+    let opacity = 1
+    const fadeInterval = setInterval(() => {
+      if (!win || win.isDestroyed()) {
+        clearInterval(fadeInterval)
+        return
+      }
+      opacity -= 0.25
+      if (opacity <= 0) {
+        win.setOpacity(0)
+        win.setIgnoreMouseEvents(true, { forward: true })
+        win.hide()
+        clearInterval(fadeInterval)
+      } else {
+        win.setOpacity(opacity)
+      }
+    }, 8) 
+  } catch (error) {
+    console.error('Error hiding window:', error)
+    visible = true
+  }
+
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('draw-mode', false)
+  }
+}
+
 function toggleOverlay() {
-  
   if (!win || win.isDestroyed()) {
     console.warn('Window not available for toggle')
     return
   }
 
-  visible = !visible
-
   if (visible) {
-    try {
-      const { screen } = require('electron')
-      const cursorPoint = screen.getCursorScreenPoint()
-      const display = screen.getDisplayNearestPoint(cursorPoint)
-      const bounds = display.bounds
-
-      win.setBounds({
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height
-      })
-
-      ensureAlwaysOnTop()
-      win.setOpacity(0) 
-      win.show()
-      win.setIgnoreMouseEvents(false)
-      
-      let opacity = 0
-      const fadeInterval = setInterval(() => {
-        if (!win || win.isDestroyed()) {
-          clearInterval(fadeInterval)
-          return
-        }
-        opacity += 0.25
-        if (opacity >= 1) {
-          win.setOpacity(1)
-          ensureAlwaysOnTop()
-          clearInterval(fadeInterval)
-        } else {
-          win.setOpacity(opacity)
-        }
-      }, 8) 
-    } catch (error) {
-      console.error('Error showing window:', error)
-      visible = false
-    }
+    hideOverlay()
   } else {
-    try {
-      
-      let opacity = 1
-      const fadeInterval = setInterval(() => {
-        if (!win || win.isDestroyed()) {
-          clearInterval(fadeInterval)
-          return
-        }
-        opacity -= 0.25
-        if (opacity <= 0) {
-          win.setOpacity(0)
-          win.setIgnoreMouseEvents(true, { forward: true })
-          win.hide()
-          clearInterval(fadeInterval)
-        } else {
-          win.setOpacity(opacity)
-        }
-      }, 8) 
-    } catch (error) {
-      console.error('Error hiding window:', error)
-      visible = true
-    }
-  }
-
-  if (win && !win.isDestroyed()) {
-    win.webContents.send('draw-mode', visible)
+    showOverlay()
   }
 }
 
@@ -282,9 +388,11 @@ function showDesktopNotification(title, body, filePath) {
   
   notificationWin.loadFile('src/notification/notification.html')
   
+  disableDefaultShortcuts(notificationWin)
+  
   notificationWin.webContents.once('did-finish-load', () => {
     if (notificationWin && !notificationWin.isDestroyed()) {
-      const accentColor = getSetting('accent-color', '#40E0D0')
+      const accentColor = getSetting('accent-color', '#3bbbf6')
       notificationWin.webContents.send('set-notification-data', {
         title: title,
         body: body,
@@ -349,15 +457,17 @@ function createOnboardingWindow() {
   }
 
   onboardingWin = new BrowserWindow({
-    width: 800,
-    height: 650,
+    width: 700,
+    height: 550,
     minWidth: 700,
+    maxWidth: 700,
     minHeight: 550,
-    frame: true,
-    title: 'Welcome to CYC Annotate',
+    maxHeight: 550,
+    frame: false,
     autoHideMenuBar: true,
     show: false,
-    resizable: true,
+    resizable: false,
+    maximizable: false,
     icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
@@ -366,6 +476,20 @@ function createOnboardingWindow() {
   })
 
   onboardingWin.loadFile('src/onboarding/onboarding.html')
+
+  disableDefaultShortcuts(onboardingWin)
+
+  onboardingWin.webContents.once('did-finish-load', () => {
+    if (onboardingWin && !onboardingWin.isDestroyed()) {
+      const currentTheme = getSetting('theme', 'system')
+      if (currentTheme === 'system') {
+        const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+        onboardingWin.webContents.send('os-theme-changed', effectiveTheme)
+      } else {
+        onboardingWin.webContents.send('theme-changed', currentTheme)
+      }
+    }
+  })
 
   onboardingWin.once('ready-to-show', () => {
     onboardingWin.show()
@@ -395,6 +519,18 @@ function createMainWindow() {
   })
 
   win.loadFile('src/renderer/index.html')
+
+  disableDefaultShortcuts(win)
+
+  win.webContents.once('did-finish-load', () => {
+    const currentTheme = getSetting('theme', 'system')
+    if (currentTheme === 'system') {
+      const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+      win.webContents.send('os-theme-changed', effectiveTheme)
+    } else {
+      win.webContents.send('theme-changed', currentTheme)
+    }
+  })
 
   win.once('ready-to-show', () => {
     ensureAlwaysOnTop()
@@ -434,6 +570,7 @@ function createMainWindow() {
 
   ipcMain.on('update-shortcut', (event, newShortcut) => {
     shortcut = newShortcut
+    setSetting('shortcut', newShortcut)
     registerShortcut()
   })
 
@@ -502,8 +639,7 @@ function createMainWindow() {
       height: 700,
       minWidth: 800,
       minHeight: 550,
-      frame: true,
-      title: 'Settings - CYC Annotate',
+      frame: false,
       autoHideMenuBar: true,
       show: false,
       icon: iconPath,
@@ -514,6 +650,20 @@ function createMainWindow() {
     })
 
     settingsWin.loadFile('src/settings/settings.html')
+
+    disableDefaultShortcuts(settingsWin)
+
+    settingsWin.webContents.once('did-finish-load', () => {
+      if (settingsWin && !settingsWin.isDestroyed()) {
+        const currentTheme = getSetting('theme', 'system')
+        if (currentTheme === 'system') {
+          const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+          settingsWin.webContents.send('os-theme-changed', effectiveTheme)
+        } else {
+          settingsWin.webContents.send('theme-changed', currentTheme)
+        }
+      }
+    })
 
     settingsWin.once('ready-to-show', () => {
       settingsWin.show()
@@ -533,9 +683,69 @@ function createMainWindow() {
     })
   })
 
+  ipcMain.on('window-minimize', (event) => {
+    const senderId = event.sender.id
+    if (settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.id === senderId) {
+      settingsWin.minimize()
+    } else if (onboardingWin && !onboardingWin.isDestroyed() && onboardingWin.webContents.id === senderId) {
+      onboardingWin.minimize()
+    }
+  })
+
+  ipcMain.on('window-maximize', (event) => {
+    const senderId = event.sender.id
+    if (settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.id === senderId) {
+      if (settingsWin.isMaximized()) {
+        settingsWin.unmaximize()
+      } else {
+        settingsWin.maximize()
+      }
+    }
+  })
+
+  ipcMain.on('window-close', (event) => {
+    const senderId = event.sender.id
+    if (settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.id === senderId) {
+      settingsWin.close()
+    } else if (onboardingWin && !onboardingWin.isDestroyed() && onboardingWin.webContents.id === senderId) {
+      onboardingWin.close()
+    }
+  })
+
   ipcMain.on('theme-changed', (event, theme) => {
+    if (theme === 'system') {
+      nativeTheme.themeSource = 'system'
+    } else if (theme === 'light') {
+      nativeTheme.themeSource = 'light'
+    } else if (theme === 'dark') {
+      nativeTheme.themeSource = 'dark'
+    }
+    
     if (win && !win.isDestroyed()) {
       win.webContents.send('theme-changed', theme)
+    }
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      settingsWin.webContents.send('theme-changed', theme)
+    }
+  })
+
+  ipcMain.handle('get-os-theme', () => {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  })
+
+  nativeTheme.on('updated', () => {
+    const currentTheme = getSetting('theme', 'system')
+    if (currentTheme === 'system') {
+      const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('os-theme-changed', effectiveTheme)
+      }
+      if (settingsWin && !settingsWin.isDestroyed()) {
+        settingsWin.webContents.send('os-theme-changed', effectiveTheme)
+      }
+      if (onboardingWin && !onboardingWin.isDestroyed()) {
+        onboardingWin.webContents.send('os-theme-changed', effectiveTheme)
+      }
     }
   })
 
@@ -545,6 +755,7 @@ function createMainWindow() {
       win.webContents.send('accent-color-changed', color)
     }
   })
+
 
   ipcMain.on('layout-changed', (event, layout) => {
     if (win && !win.isDestroyed()) {
@@ -580,10 +791,15 @@ function createMainWindow() {
   })
 
   ipcMain.on('set-auto-launch', (event, enabled) => {
-    app.setLoginItemSettings({
-      openAtLogin: enabled,
-      openAsHidden: true
-    })
+    if (process.platform === 'win32') {
+      manageStartupShortcut(enabled)
+    } else if (process.platform === 'darwin') {
+      const settings = {
+        openAtLogin: enabled,
+        openAsHidden: true
+      }
+      app.setLoginItemSettings(settings)
+    }
     setSetting('launch-on-startup', enabled)
   })
 
@@ -598,8 +814,143 @@ function createMainWindow() {
     }
   })
 
-  ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
+  ipcMain.on('toolbar-bg-changed', (event, data) => {
+    setSetting('toolbar-accent-bg', data.enabled)
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('toolbar-bg-changed', data)
+    }
+  })
+
+  ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})
+
+function getWindowsVersion() {
+  if (process.platform !== 'win32') {
+    return null
+  }
+  
+  try {
+    const { execSync } = require('child_process')
+    
+    let buildNumber = 0
+    try {
+      const regQueryBuild = 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v CurrentBuild'
+      const resultBuild = execSync(regQueryBuild, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
+      const matchBuild = resultBuild.match(/CurrentBuild\s+REG_SZ\s+(\d+)/)
+      if (matchBuild) {
+        buildNumber = parseInt(matchBuild[1])
+      }
+    } catch (e) {
+      try {
+        const regQueryBuildAlt = 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v CurrentBuildNumber'
+        const resultBuildAlt = execSync(regQueryBuildAlt, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
+        const matchBuildAlt = resultBuildAlt.match(/CurrentBuildNumber\s+REG_SZ\s+(\d+)/)
+        if (matchBuildAlt) {
+          buildNumber = parseInt(matchBuildAlt[1])
+        }
+      } catch (e2) {
+        const release = os.release()
+        const parts = release.split('.')
+        if (parts.length >= 2) {
+          buildNumber = parseInt(parts[2]) || 0
+        }
+      }
+    }
+    
+    let versionName = 'Windows'
+    if (buildNumber >= 22000) {
+      versionName = 'Windows 11'
+    } else if (buildNumber >= 10240) {
+      versionName = 'Windows 10'
+    } else if (buildNumber >= 9200) {
+      versionName = 'Windows 8.1'
+    } else if (buildNumber >= 7600) {
+      versionName = 'Windows 7'
+    }
+    
+    let buildVersion = ''
+    try {
+      const regQuery = 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v DisplayVersion'
+      const result = execSync(regQuery, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
+      const match = result.match(/DisplayVersion\s+REG_SZ\s+(.+)/)
+      if (match) {
+        buildVersion = match[1].trim()
+      }
+    } catch (e) {
+      try {
+        const regQueryRelease = 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v ReleaseId'
+        const resultRelease = execSync(regQueryRelease, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
+        const matchRelease = resultRelease.match(/ReleaseId\s+REG_SZ\s+(.+)/)
+        if (matchRelease) {
+          buildVersion = matchRelease[1].trim()
+        }
+      } catch (e2) {
+      }
+    }
+    
+    if (buildVersion) {
+      return `${versionName} (${buildVersion})`
+    } else {
+      return versionName
+    }
+  } catch (error) {
+    console.error('Error getting Windows version:', error)
+    const release = os.release()
+    const parts = release.split('.')
+    if (parts.length >= 2) {
+      const buildNum = parseInt(parts[2]) || 0
+      if (buildNum >= 22000) {
+        return 'Windows 11'
+      } else if (buildNum >= 10240) {
+        return 'Windows 10'
+      }
+    }
+    return 'Windows'
+  }
+}
+
+ipcMain.handle('get-system-info', () => {
+  const systemInfo = {
+    version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    electronVersion: process.versions.electron,
+    chromeVersion: process.versions.chrome,
+    nodeVersion: process.versions.node
+  }
+  
+  if (process.platform === 'win32') {
+    systemInfo.osVersion = getWindowsVersion()
+  } else if (process.platform === 'darwin') {
+    systemInfo.osVersion = `macOS ${os.release()}`
+  } else {
+    systemInfo.osVersion = `${process.platform} ${os.release()}`
+  }
+  
+  return systemInfo
+})
+
+ipcMain.handle('show-reset-confirmation', async (event) => {
+  const result = await dialog.showMessageBox(settingsWin || null, {
+    type: 'warning',
+    title: 'Reset All Settings',
+    message: 'Are you sure you want to reset all settings?',
+    detail: 'This action cannot be undone. All your settings will be restored to their default values.',
+    buttons: ['Cancel', 'Reset'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  })
+  
+  return result.response === 1
+})
+
+ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
     setSetting('auto-save-snapshots', enabled)
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('auto-save-snapshots-changed', enabled)
+    }
   })
 
   ipcMain.on('save-directory-changed', (event, directoryPath) => {
@@ -690,17 +1041,14 @@ function createMainWindow() {
       }
       captureOverlayWin = null
 
-      // Set flag to prevent alwaysOnTop from being restored
       captureOverlayActive = true
       
       if (win && !win.isDestroyed()) {
+        win.hide()
         win.setIgnoreMouseEvents(true, { forward: true })
-        // Lower the main window's z-order so drawings appear behind the overlay
         win.setAlwaysOnTop(false)
-        // Small delay to ensure the main window is moved behind before overlay is created
         setTimeout(() => {
           if (win && !win.isDestroyed() && captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-            // Ensure overlay is on top
             captureOverlayWin.moveTop()
             try {
               captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
@@ -751,7 +1099,6 @@ function createMainWindow() {
         }
       })
 
-      // Set overlay to highest always-on-top level
       try {
         captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
       } catch (e) {
@@ -761,7 +1108,7 @@ function createMainWindow() {
       captureOverlayWin.setIgnoreMouseEvents(false)
       
       captureOverlayWin.webContents.once('did-finish-load', () => {
-        let accentColor = '#40E0D0'
+        let accentColor = '#3bbbf6'
         
         if (win && !win.isDestroyed()) {
           win.webContents.executeJavaScript('localStorage.getItem("accent-color")').then((color) => {
@@ -785,12 +1132,12 @@ function createMainWindow() {
       
       captureOverlayWin.loadFile('src/capture/capture-overlay.html')
       
-      // Show and bring overlay to front after a short delay to ensure it's on top
+      disableDefaultShortcuts(captureOverlayWin)
+      
       captureOverlayWin.once('ready-to-show', () => {
         captureOverlayWin.show()
         captureOverlayWin.focus()
         captureOverlayWin.moveTop()
-        // Ensure it stays on top
         try {
           captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
         } catch (e) {
@@ -800,12 +1147,48 @@ function createMainWindow() {
       
       captureOverlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
+      const captureContextMenu = Menu.buildFromTemplate([
+        { 
+          label: 'Select All', 
+          click: () => {
+            if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
+              captureOverlayWin.webContents.send('select-all-screen')
+            }
+          }
+        },
+        { type: 'separator' },
+        { 
+          label: 'Cancel', 
+          click: () => {
+            if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
+              captureOverlayWin.destroy()
+              captureOverlayWin = null
+            }
+            captureOverlayActive = false
+            if (win && !win.isDestroyed()) {
+              win.setIgnoreMouseEvents(false)
+              ensureAlwaysOnTop()
+              if (!visible) {
+                win.show()
+              }
+              win.webContents.send('capture-cancelled')
+            }
+          }
+        }
+      ])
+
+      captureOverlayWin.webContents.on('context-menu', (e, params) => {
+        captureContextMenu.popup()
+      })
+
       captureOverlayWin.on('closed', () => {
         captureOverlayActive = false
         if (win && !win.isDestroyed()) {
           win.setIgnoreMouseEvents(false)
-          // Restore the main window's always-on-top status
           ensureAlwaysOnTop()
+          if (!visible) {
+            win.show()
+          }
         }
         captureOverlayWin = null
       })
@@ -814,7 +1197,6 @@ function createMainWindow() {
       captureOverlayActive = false
       if (win && !win.isDestroyed()) {
         win.setIgnoreMouseEvents(false)
-        // Restore the main window's always-on-top status on error
         ensureAlwaysOnTop()
       }
     }
@@ -833,7 +1215,6 @@ function createMainWindow() {
       captureOverlayActive = false
       if (win && !win.isDestroyed()) {
         win.setIgnoreMouseEvents(false)
-        // Restore the main window's always-on-top status
         ensureAlwaysOnTop()
       }
 
@@ -919,7 +1300,6 @@ function createMainWindow() {
       }
       captureOverlayActive = false
       if (win && !win.isDestroyed()) {
-        // Restore the main window's always-on-top status
         ensureAlwaysOnTop()
       }
     }
@@ -930,13 +1310,15 @@ function createMainWindow() {
       captureOverlayWin.destroy()
       captureOverlayWin = null
     }
-    captureOverlayActive = false
-    if (win && !win.isDestroyed()) {
-      win.setIgnoreMouseEvents(false)
-      // Restore the main window's always-on-top status
-      ensureAlwaysOnTop()
-      win.webContents.send('capture-cancelled')
-    }
+      captureOverlayActive = false
+      if (win && !win.isDestroyed()) {
+        win.setIgnoreMouseEvents(false)
+        ensureAlwaysOnTop()
+        if (!visible) {
+          win.show()
+        }
+        win.webContents.send('capture-cancelled')
+      }
   })
 
   ipcMain.on('save-screenshot', async (event, dataURL, defaultFilename) => {
@@ -986,11 +1368,10 @@ function createMainWindow() {
     shortcut = savedShortcut
   }
   
-  const savedAccentColor = getSetting('accent-color', '#40E0D0')
+  const savedAccentColor = getSetting('accent-color', '#3bbbf6')
   if (savedAccentColor && win && !win.isDestroyed()) {
     win.webContents.once('did-finish-load', () => {
       win.webContents.executeJavaScript(`localStorage.setItem('accent-color', '${savedAccentColor}')`)
-      // Also send via IPC to ensure it's applied immediately
       win.webContents.send('accent-color-changed', savedAccentColor)
     })
   }
@@ -1003,16 +1384,96 @@ function createMainWindow() {
   }
     
   const launchOnStartup = getSetting('launch-on-startup', false)
-  app.setLoginItemSettings({
-    openAtLogin: launchOnStartup,
-    openAsHidden: true
-  })
+  if (process.platform === 'win32') {
+    manageStartupShortcut(launchOnStartup)
+  } else if (process.platform === 'darwin') {
+    const settings = {
+      openAtLogin: launchOnStartup,
+      openAsHidden: true
+    }
+    app.setLoginItemSettings(settings)
+  }
 
   registerShortcut()
   
   setTimeout(() => registerShortcut(), 500)
   setTimeout(() => registerShortcut(), 1000)
 }
+
+function getWindowsAccentColor() {
+  if (process.platform === 'win32') {
+    try {
+      if (systemPreferences.getAccentColor) {
+        const accentColor = systemPreferences.getAccentColor()
+        return `#${accentColor}`
+      }
+    } catch (error) {
+      console.error('Error getting Windows accent color via systemPreferences:', error)
+    }
+    
+    try {
+      const { execSync } = require('child_process')
+      const regQuery = 'reg query "HKCU\\Software\\Microsoft\\Windows\\DWM" /v ColorizationColor'
+      const result = execSync(regQuery, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
+      
+      const match = result.match(/0x([0-9a-fA-F]{8})/i)
+      if (match) {
+        const dwordValue = parseInt(match[1], 16)
+        const b = (dwordValue >> 16) & 0xFF
+        const g = (dwordValue >> 8) & 0xFF
+        const r = dwordValue & 0xFF
+        const hexColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+        return hexColor
+      }
+    } catch (regError) {
+      console.error('Error reading accent color from registry:', regError)
+    }
+    
+    return null
+  }
+  return null
+}
+
+ipcMain.handle('get-windows-accent-color', () => {
+  return getWindowsAccentColor()
+})
+
+let windowsAccentSyncEnabled = false
+
+ipcMain.on('toggle-windows-accent-sync', (event, enabled) => {
+  windowsAccentSyncEnabled = enabled
+  setSetting('sync-windows-accent-auto', enabled)
+})
+
+ipcMain.handle('get-sync-windows-accent-state', () => {
+  return windowsAccentSyncEnabled || getSetting('sync-windows-accent-auto', false)
+})
+
+app.whenReady().then(() => {
+  if (process.platform === 'win32') {
+    const syncEnabled = getSetting('sync-windows-accent-auto', false)
+    windowsAccentSyncEnabled = syncEnabled
+    
+    if (systemPreferences.on) {
+      systemPreferences.on('accent-color-changed', () => {
+        if (windowsAccentSyncEnabled) {
+          const newColor = getWindowsAccentColor()
+          if (newColor) {
+            setSetting('accent-color', newColor)
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('accent-color-changed', newColor)
+              win.webContents.send('windows-accent-color-changed', newColor)
+            }
+            if (settingsWin && !settingsWin.isDestroyed()) {
+              settingsWin.webContents.send('accent-color-changed', newColor)
+              settingsWin.webContents.send('windows-accent-color-changed', newColor)
+            }
+          }
+        }
+      })
+    }
+  }
+})
 
 ipcMain.on('onboarding-complete', (event, data) => {
   if (data.shortcut) {
@@ -1030,158 +1491,93 @@ ipcMain.on('onboarding-complete', (event, data) => {
   
   if (!win || win.isDestroyed()) {
     createMainWindow()
+    if (win && !win.isDestroyed()) {
+      win.webContents.once('did-finish-load', () => {
+        setTimeout(() => {
+          showOverlay()
+        }, 100)
+      })
+    }
   } else {
     if (data.shortcut) {
       registerShortcut()
     }
     if (data.accentColor && win && !win.isDestroyed()) {
       win.webContents.executeJavaScript(`localStorage.setItem('accent-color', '${data.accentColor}')`)
-      // Send via IPC to ensure it's applied immediately
       win.webContents.send('accent-color-changed', data.accentColor)
     }
+    showOverlay()
   }
 })
 
-// Auto-updater configuration
-autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = true
+const gotTheLock = app.requestSingleInstanceLock()
 
-// Configure GitHub releases for updates
-// electron-updater will automatically read from package.json repository field if available
-// Or you can explicitly set owner and repo via environment variables or here
-
-// Read repository info from package.json
-const packageJson = require('../../package.json')
-let githubOwner = null
-let githubRepo = null
-
-if (packageJson.repository && packageJson.repository.url) {
-  // Extract owner and repo from repository URL (supports both https and git@ formats)
-  const repoMatch = packageJson.repository.url.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?$/)
-  if (repoMatch) {
-    githubOwner = repoMatch[1]
-    githubRepo = repoMatch[2]
-  }
-}
-
-// Allow override via environment variables
-githubOwner = process.env.GITHUB_OWNER || githubOwner
-githubRepo = process.env.GITHUB_REPO || githubRepo
-
-// Configure updater
-if (app.isPackaged && (githubOwner && githubRepo)) {
-  const feedConfig = {
-    provider: 'github',
-    owner: githubOwner,
-    repo: githubRepo
-  }
-  
-  // For private repositories, add token
-  if (process.env.GITHUB_TOKEN) {
-    feedConfig.token = process.env.GITHUB_TOKEN
-  }
-  
-  autoUpdater.setFeedURL(feedConfig)
-  console.log(`Configured GitHub updates: ${githubOwner}/${githubRepo}`)
-} else if (app.isPackaged) {
-  console.warn('GitHub repository not configured. Update package.json repository field or set GITHUB_OWNER/GITHUB_REPO environment variables.')
-}
-
-// Auto-updater event handlers
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for update...')
-  sendUpdateStatus('checking', 'Checking for updates...')
-})
-
-autoUpdater.on('update-available', (info) => {
-  console.log('Update available:', info.version)
-  sendUpdateStatus('available', `Update available: ${info.version}`, info)
-})
-
-autoUpdater.on('update-not-available', (info) => {
-  console.log('Update not available')
-  sendUpdateStatus('not-available', 'You are using the latest version')
-})
-
-autoUpdater.on('error', (err) => {
-  console.error('Error in auto-updater:', err)
-  sendUpdateStatus('error', `Update check failed: ${err.message}`)
-})
-
-autoUpdater.on('download-progress', (progressObj) => {
-  const message = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}% (${progressObj.transferred}/${progressObj.total})`
-  sendUpdateStatus('download-progress', message, progressObj)
-})
-
-autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded:', info.version)
-  sendUpdateStatus('downloaded', `Update ${info.version} downloaded. Restart the app to install.`, info)
-})
-
-function sendUpdateStatus(status, message, data = null) {
-  // Send to main window if it exists
-  if (win && !win.isDestroyed()) {
-    win.webContents.send('update-status', { status, message, data })
-  }
-  // Send to settings window if it exists
-  if (settingsWin && !settingsWin.isDestroyed()) {
-    settingsWin.webContents.send('update-status', { status, message, data })
-  }
-}
-
-// IPC handlers for update checking
-ipcMain.handle('check-for-updates', async () => {
-  try {
-    await autoUpdater.checkForUpdates()
-    return { success: true }
-  } catch (error) {
-    console.error('Error checking for updates:', error)
-    return { success: false, error: error.message }
-  }
-})
-
-ipcMain.handle('download-update', async () => {
-  try {
-    await autoUpdater.downloadUpdate()
-    return { success: true }
-  } catch (error) {
-    console.error('Error downloading update:', error)
-    return { success: false, error: error.message }
-  }
-})
-
-ipcMain.handle('install-update', async () => {
-  try {
-    autoUpdater.quitAndInstall(false, true)
-    return { success: true }
-  } catch (error) {
-    console.error('Error installing update:', error)
-    return { success: false, error: error.message }
-  }
-})
-
-app.whenReady().then(() => {
-  // Set app identifier for Windows taskbar
-  if (process.platform === 'win32') {
-    app.setAppUserModelId('creatoryocreations.cycannotate')
-  }
-  
-  // Check for updates on startup (only if app is packaged)
-  if (app.isPackaged) {
-    // Check for updates automatically on startup (silently, won't show UI)
-    autoUpdater.checkForUpdates().catch(err => {
-      console.log('Auto-update check failed:', err.message)
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const currentShortcut = shortcut || getSetting('shortcut', 'Control+Shift+D')
+    const formattedShortcut = currentShortcut
+      .replace(/Control/g, 'Ctrl')
+      .replace(/Meta/g, 'Cmd')
+      .split('+')
+      .map(k => k.charAt(0).toUpperCase() + k.slice(1).toLowerCase())
+      .join('+')
+    
+    dialog.showMessageBox(null, {
+      type: 'warning',
+      title: 'CYC Annotate',
+      message: 'CYC Annotate is already running',
+      detail: `Press ${formattedShortcut} to toggle the annotation overlay.`,
+      buttons: ['OK'],
+      defaultId: 0,
+      noLink: true
     })
-  }
-  
-  const onboardingCompleted = getSetting('onboarding-completed', false)
-  
-  if (!onboardingCompleted) {
-    createOnboardingWindow()
-  } else {
-    createMainWindow()
-  }
-})
+    
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    } else if (settingsWin && !settingsWin.isDestroyed()) {
+      if (settingsWin.isMinimized()) settingsWin.restore()
+      settingsWin.focus()
+    } else if (onboardingWin && !onboardingWin.isDestroyed()) {
+      if (onboardingWin.isMinimized()) onboardingWin.restore()
+      onboardingWin.focus()
+    } else {
+      const onboardingCompleted = getSetting('onboarding-completed', false)
+      if (!onboardingCompleted) {
+        createOnboardingWindow()
+      } else {
+        createMainWindow()
+      }
+    }
+  })
+
+  app.whenReady().then(() => {
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('creatoryocreations.cycannotate')
+    }
+    
+    const savedTheme = getSetting('theme', 'system')
+    if (savedTheme === 'system') {
+      nativeTheme.themeSource = 'system'
+    } else if (savedTheme === 'light') {
+      nativeTheme.themeSource = 'light'
+    } else if (savedTheme === 'dark') {
+      nativeTheme.themeSource = 'dark'
+    } else {
+      nativeTheme.themeSource = 'system'
+    }
+    
+    const onboardingCompleted = getSetting('onboarding-completed', false)
+    
+    if (!onboardingCompleted) {
+      createOnboardingWindow()
+    } else {
+      createMainWindow()
+    }
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

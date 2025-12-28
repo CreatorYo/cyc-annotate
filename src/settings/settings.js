@@ -1,11 +1,41 @@
 const { ipcRenderer } = require('electron')
 
-const savedTheme = localStorage.getItem('theme') || 'dark'
-document.body.setAttribute('data-theme', savedTheme)
+const DEFAULT_ACCENT_COLOR = '#3bbbf6'
+const DEFAULT_SHORTCUT = 'Control+Shift+D'
+
+let osTheme = 'dark'
+
+function getOSTheme() {
+  return osTheme
+}
+
+function getEffectiveTheme(theme) {
+  return theme === 'system' ? getOSTheme() : theme
+}
+
+ipcRenderer.invoke('get-os-theme').then(theme => {
+  osTheme = theme
+  const savedTheme = localStorage.getItem('theme') || 'system'
+  if (savedTheme === 'system') {
+    const effectiveTheme = getEffectiveTheme(savedTheme)
+    document.body.setAttribute('data-theme', effectiveTheme)
+  }
+})
+
+const savedTheme = localStorage.getItem('theme') || 'system'
+const effectiveTheme = getEffectiveTheme(savedTheme)
+document.body.setAttribute('data-theme', effectiveTheme)
 
 function applyTheme(theme) {
-  document.body.setAttribute('data-theme', theme)
   localStorage.setItem('theme', theme)
+  
+  const effectiveTheme = getEffectiveTheme(theme)
+  document.body.setAttribute('data-theme', effectiveTheme)
+
+  const themeToggle = document.querySelector('.theme-toggle')
+  if (themeToggle) {
+    themeToggle.setAttribute('data-active', theme)
+  }
 
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.classList.remove('active')
@@ -14,23 +44,39 @@ function applyTheme(theme) {
   const themeBtn = document.querySelector(`.theme-btn[data-theme="${theme}"]`)
   if (themeBtn) {
     themeBtn.classList.add('active')
-    
-    themeBtn.style.background = 'var(--accent-color)'
-    updateButtonTextColor(themeBtn)
   }
 
+  const isDark = effectiveTheme === 'dark'
   document.querySelectorAll('.theme-btn:not(.active)').forEach(btn => {
-    btn.style.background = 'transparent'
-    const isDark = theme === 'dark'
-    btn.style.color = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
+    btn.style.color = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.65)'
     const icon = btn.querySelector('.material-symbols-outlined')
     if (icon) {
-      icon.style.color = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
+      icon.style.color = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.65)'
     }
   })
 
   ipcRenderer.send('theme-changed', theme)
+  
+  updateToolbarBackgroundColor()
 }
+
+ipcRenderer.on('os-theme-changed', (event, effectiveTheme) => {
+  osTheme = effectiveTheme
+  const currentTheme = localStorage.getItem('theme') || 'system'
+  if (currentTheme === 'system') {
+    document.body.setAttribute('data-theme', effectiveTheme)
+    const savedAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
+    updateAccentColor(savedAccentColor)
+    const isDark = effectiveTheme === 'dark'
+    document.querySelectorAll('.theme-btn:not(.active)').forEach(btn => {
+      btn.style.color = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
+      const icon = btn.querySelector('.material-symbols-outlined')
+      if (icon) {
+        icon.style.color = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
+      }
+    })
+  }
+})
 
 document.querySelectorAll('.theme-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -57,7 +103,7 @@ function isLightColor(color) {
 }
 
 function updateToggleSwitchColor() {
-  const currentAccentColor = localStorage.getItem('accent-color') || '#40E0D0'
+  const currentAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
   const accentIsLight = isLightColor(currentAccentColor)
   
   const style = document.createElement('style')
@@ -77,7 +123,7 @@ function updateToggleSwitchColor() {
 }
 
 function updateButtonTextColor(button) {
-  const currentAccentColor = localStorage.getItem('accent-color') || '#40E0D0'
+  const currentAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
   const accentIsLight = isLightColor(currentAccentColor)
   const textColor = accentIsLight ? '#000000' : '#ffffff'
   
@@ -109,6 +155,39 @@ function normalizeHex(hex) {
   return hex
 }
 
+function darkenTintColor(hexColor, theme) {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hexColor.slice(i, i + 2), 16))
+  const effectiveTheme = theme || document.body.getAttribute('data-theme') || 'dark'
+  const isDark = effectiveTheme === 'dark'
+  
+  const [blendedR, blendedG, blendedB] = isDark
+    ? [r, g, b].map(c => Math.floor(30 * 0.7 + (c * 0.25) * 0.3))
+    : [r, g, b].map(c => Math.floor(255 * 0.85 + (c + (255 - c) * 0.7) * 0.15))
+  
+  return `#${[blendedR, blendedG, blendedB].map(c => c.toString(16).padStart(2, '0')).join('')}`
+}
+
+function updateToolbarBackgroundColor() {
+  const styleEl = document.getElementById('toolbar-bg-override')
+  if (styleEl) styleEl.remove()
+  
+  const useAccentBg = localStorage.getItem('toolbar-accent-bg') === 'true'
+  if (useAccentBg) {
+    const tintedBg = darkenTintColor(
+      localStorage.getItem('accent-color') || '#3bbbf6',
+      getEffectiveTheme(localStorage.getItem('theme') || 'system')
+    )
+    const el = Object.assign(document.createElement('style'), {
+      id: 'toolbar-bg-override',
+      textContent: `:root, [data-theme="dark"], [data-theme="light"], body { --toolbar-bg: ${tintedBg} !important; }`
+    })
+    document.head.appendChild(el)
+    ipcRenderer.send('toolbar-bg-changed', { enabled: true, color: tintedBg })
+  } else {
+    ipcRenderer.send('toolbar-bg-changed', { enabled: false, color: null })
+  }
+}
+
 function updateAccentColor(color) {
   const normalizedColor = normalizeHex(color)
   document.documentElement.style.setProperty('--accent-color', normalizedColor)
@@ -123,7 +202,6 @@ function updateAccentColor(color) {
   document.documentElement.style.setProperty('--accent-active-bg', `rgba(${r}, ${g}, ${b}, 0.15)`)
   document.documentElement.style.setProperty('--accent-active-shadow', `rgba(${r}, ${g}, ${b}, 0.3)`)
   
-  // Set button text color based on accent color contrast for accessibility
   const accentIsLight = isLightColor(normalizedColor)
   const buttonTextColor = accentIsLight ? '#000000' : '#ffffff'
   document.documentElement.style.setProperty('--accent-btn-text-color', buttonTextColor)
@@ -133,17 +211,21 @@ function updateAccentColor(color) {
   updateLayoutButtonColors()
   updateThemeButtonColors()
   updateToggleSwitchColor()
+  updateResetAccentVisibility()
+  
+  updateToolbarBackgroundColor()
 
   ipcRenderer.send('accent-color-changed', normalizedColor)
 }
-
-const savedAccentColor = localStorage.getItem('accent-color') || '#40E0D0'
-updateAccentColor(savedAccentColor)
 
 const accentColorPicker = document.getElementById('accent-color-picker')
 const accentColorPreview = document.getElementById('accent-color-preview')
 const accentColorHex = document.getElementById('accent-color-hex')
 const resetAccentColorBtn = document.getElementById('reset-accent-color')
+const syncWindowsAccentBtn = document.getElementById('sync-windows-accent')
+
+const savedAccentColor = localStorage.getItem('accent-color') || '#40E0D0'
+updateAccentColor(savedAccentColor)
 
 function updateAccentColorPreview(color) {
   if (accentColorPreview) {
@@ -216,13 +298,129 @@ if (accentColorHex) {
   })
 }
 
+function updateSyncState(enabled) {
+  if (syncWindowsAccentBtn) {
+    if (enabled) {
+      syncWindowsAccentBtn.classList.add('active')
+    } else {
+      syncWindowsAccentBtn.classList.remove('active')
+    }
+  }
+  
+  if (accentColorHex) {
+    accentColorHex.disabled = enabled
+    if (enabled) {
+      accentColorHex.style.opacity = '0.5'
+      accentColorHex.style.cursor = 'not-allowed'
+    } else {
+      accentColorHex.style.opacity = ''
+      accentColorHex.style.cursor = ''
+    }
+  }
+  
+  updateResetAccentVisibility()
+  
+  if (accentColorPicker) {
+    accentColorPicker.disabled = enabled
+    if (enabled) {
+      accentColorPicker.style.pointerEvents = 'none'
+    } else {
+      accentColorPicker.style.pointerEvents = ''
+    }
+  }
+  
+  if (accentColorPreview) {
+    if (enabled) {
+      accentColorPreview.style.pointerEvents = 'none'
+      accentColorPreview.style.cursor = 'not-allowed'
+      accentColorPreview.style.opacity = '0.5'
+    } else {
+      accentColorPreview.style.removeProperty('pointer-events')
+      accentColorPreview.style.removeProperty('cursor')
+      accentColorPreview.style.removeProperty('opacity')
+    }
+  }
+}
+
+let syncWindowsEnabled = localStorage.getItem('sync-windows-accent') === 'true'
+ipcRenderer.invoke('get-sync-windows-accent-state').then(enabled => {
+  if (enabled !== null) {
+    syncWindowsEnabled = enabled
+    localStorage.setItem('sync-windows-accent', enabled ? 'true' : 'false')
+    updateSyncState(enabled)
+  }
+})
+
+if (syncWindowsAccentBtn) {
+  if (syncWindowsEnabled) {
+    updateSyncState(true)
+  } else {
+    updateSyncState(false)
+  }
+  
+  syncWindowsAccentBtn.addEventListener('click', async () => {
+    const isCurrentlyActive = syncWindowsAccentBtn.classList.contains('active')
+    
+    if (isCurrentlyActive) {
+      updateSyncState(false)
+      localStorage.setItem('sync-windows-accent', 'false')
+      ipcRenderer.send('toggle-windows-accent-sync', false)
+      updateResetAccentVisibility()
+    } else {
+      try {
+        const windowsColor = await ipcRenderer.invoke('get-windows-accent-color')
+        if (windowsColor) {
+          updateSyncState(true)
+          localStorage.setItem('sync-windows-accent', 'true')
+          ipcRenderer.send('toggle-windows-accent-sync', true)
+          
+          updateAccentColor(windowsColor)
+          updateAccentColorPreview(windowsColor)
+          if (accentColorPicker) accentColorPicker.value = windowsColor
+          if (accentColorHex) accentColorHex.value = windowsColor
+          updateResetAccentVisibility()
+        } else {
+          alert('Unable to get Windows accent colour. This feature is only available on Windows.')
+        }
+      } catch (error) {
+        console.error('Error syncing Windows accent colour:', error)
+        alert('Error syncing with Windows accent colour.')
+      }
+    }
+  })
+  
+  ipcRenderer.on('windows-accent-color-changed', (event, windowsColor) => {
+    const isSyncActive = syncWindowsAccentBtn.classList.contains('active') || localStorage.getItem('sync-windows-accent') === 'true'
+    if (isSyncActive) {
+      updateAccentColor(windowsColor)
+      updateAccentColorPreview(windowsColor)
+      if (accentColorPicker) accentColorPicker.value = windowsColor
+      if (accentColorHex) accentColorHex.value = windowsColor
+    }
+  })
+}
+
+function updateResetAccentVisibility() {
+  if (resetAccentColorBtn) {
+    const isSyncEnabled = syncWindowsAccentBtn && syncWindowsAccentBtn.classList.contains('active')
+    if (isSyncEnabled) {
+      resetAccentColorBtn.style.display = 'none'
+      return
+    }
+    
+    const currentColor = normalizeHex(localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR)
+    const defaultColor = normalizeHex(DEFAULT_ACCENT_COLOR)
+    const isDefault = currentColor.toLowerCase() === defaultColor.toLowerCase()
+    resetAccentColorBtn.style.display = isDefault ? 'none' : 'flex'
+  }
+}
+
 if (resetAccentColorBtn) {
   resetAccentColorBtn.addEventListener('click', () => {
-    const defaultColor = '#40E0D0'
-    updateAccentColor(defaultColor)
-    updateAccentColorPreview(defaultColor)
-    if (accentColorPicker) accentColorPicker.value = defaultColor
-    if (accentColorHex) accentColorHex.value = defaultColor
+    updateAccentColor(DEFAULT_ACCENT_COLOR)
+    updateAccentColorPreview(DEFAULT_ACCENT_COLOR)
+    if (accentColorPicker) accentColorPicker.value = DEFAULT_ACCENT_COLOR
+    if (accentColorHex) accentColorHex.value = DEFAULT_ACCENT_COLOR
   })
 }
 
@@ -232,21 +430,27 @@ function applyLayout(layout) {
   currentLayout = layout
   localStorage.setItem('toolbar-layout', layout)
   
+  const layoutToggle = document.querySelector('.layout-toggle')
+  if (layoutToggle) {
+    layoutToggle.setAttribute('data-active', layout)
+  }
+  
   document.querySelectorAll('.layout-btn').forEach(btn => {
     btn.classList.remove('active')
   })
   const activeBtn = document.querySelector(`[data-layout="${layout}"]`)
   if (activeBtn) {
     activeBtn.classList.add('active')
-    updateButtonTextColor(activeBtn)
   }
 
+  const effectiveTheme = getEffectiveTheme(localStorage.getItem('theme') || 'system')
+  const isDark = effectiveTheme === 'dark'
   document.querySelectorAll('.layout-btn:not(.active)').forEach(btn => {
+    btn.style.color = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.65)'
     const icon = btn.querySelector('.material-symbols-outlined')
     if (icon) {
-      icon.style.color = ''
+      icon.style.color = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.65)'
     }
-    btn.style.color = ''
   })
 
   ipcRenderer.send('layout-changed', layout)
@@ -275,7 +479,15 @@ function parseShortcut(str) {
 const shortcutInput = document.getElementById('shortcut-input')
 const resetShortcutBtn = document.getElementById('reset-shortcut')
 let isRecordingShortcut = false
-let currentShortcut = localStorage.getItem('shortcut') || 'Control+Shift+D'
+let currentShortcut = localStorage.getItem('shortcut') || DEFAULT_SHORTCUT
+
+function updateResetShortcutVisibility() {
+  if (resetShortcutBtn) {
+    const savedShortcut = localStorage.getItem('shortcut') || DEFAULT_SHORTCUT
+    const isDefault = savedShortcut === DEFAULT_SHORTCUT
+    resetShortcutBtn.style.display = isDefault ? 'none' : 'flex'
+  }
+}
 
 const initialKeys = parseShortcut(currentShortcut)
 if (shortcutInput) {
@@ -307,7 +519,36 @@ document.addEventListener('click', (e) => {
   }
 })
 
+function toggleSettingsSearch() {
+  if (sidebarSearchToggle && sidebarSearchContainer) {
+    const isVisible = sidebarSearchContainer.style.display !== 'none'
+    if (isVisible) {
+      sidebarSearchContainer.style.display = 'none'
+      sidebarSearchToggle.classList.remove('active')
+      if (settingsSearch) {
+        settingsSearch.value = ''
+        performSearch('')
+      }
+    } else {
+      sidebarSearchContainer.style.display = 'block'
+      sidebarSearchToggle.classList.add('active')
+      setTimeout(() => {
+        if (settingsSearch) {
+          settingsSearch.focus()
+        }
+      }, 100)
+    }
+  }
+}
+
 document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+    e.preventDefault()
+    e.stopPropagation()
+    toggleSettingsSearch()
+    return
+  }
+  
   if (!isRecordingShortcut) return
   
   e.preventDefault()
@@ -330,6 +571,7 @@ document.addEventListener('keydown', (e) => {
     }
     isRecordingShortcut = false
     localStorage.setItem('shortcut', shortcutStr)
+    updateResetShortcutVisibility()
     
     ipcRenderer.send('update-shortcut', shortcutStr)
   }
@@ -337,10 +579,11 @@ document.addEventListener('keydown', (e) => {
 
 if (resetShortcutBtn) {
   resetShortcutBtn.addEventListener('click', () => {
-    currentShortcut = 'Control+Shift+D'
+    currentShortcut = DEFAULT_SHORTCUT
     if (shortcutInput) shortcutInput.value = 'Ctrl+Shift+D'
-    localStorage.setItem('shortcut', 'Control+Shift+D')
-    ipcRenderer.send('update-shortcut', 'Control+Shift+D')
+    localStorage.setItem('shortcut', DEFAULT_SHORTCUT)
+    updateResetShortcutVisibility()
+    ipcRenderer.send('update-shortcut', DEFAULT_SHORTCUT)
   })
 }
 
@@ -382,6 +625,21 @@ if (showTrayIconCheckbox) {
     localStorage.setItem('show-tray-icon', e.target.checked)
     ipcRenderer.send('toggle-tray-icon', e.target.checked)
   })
+}
+
+const toolbarAccentBgCheckbox = document.getElementById('toolbar-accent-bg-enabled')
+if (toolbarAccentBgCheckbox) {
+  const toolbarAccentBg = localStorage.getItem('toolbar-accent-bg')
+  if (toolbarAccentBg !== null) {
+    toolbarAccentBgCheckbox.checked = toolbarAccentBg === 'true'
+  }
+  
+  toolbarAccentBgCheckbox.addEventListener('change', (e) => {
+    localStorage.setItem('toolbar-accent-bg', e.target.checked ? 'true' : 'false')
+    updateToolbarBackgroundColor()
+  })
+  
+  updateToolbarBackgroundColor()
 }
 
 const launchOnStartupCheckbox = document.getElementById('launch-on-startup')
@@ -437,7 +695,8 @@ if (autoSaveSnapshotsCheckbox) {
       const directoryWarning = document.getElementById('directory-warning')
       
       if (!exists && autoSaveEnabled) {
-        if (directoryWarning) {
+        const warningDismissed = sessionStorage.getItem('directory-warning-dismissed') === 'true'
+        if (directoryWarning && !warningDismissed) {
           directoryWarning.style.display = 'flex'
         }
         
@@ -451,6 +710,10 @@ if (autoSaveSnapshotsCheckbox) {
       } else {
         if (directoryWarning) {
           directoryWarning.style.display = 'none'
+        }
+        
+        if (exists) {
+          sessionStorage.removeItem('directory-warning-dismissed')
         }
         
       if (saveDirectoryPath) {
@@ -530,12 +793,24 @@ if (autoSaveSnapshotsCheckbox) {
   })
 }
 
+const closeDirectoryWarningBtn = document.getElementById('close-directory-warning')
+if (closeDirectoryWarningBtn) {
+  closeDirectoryWarningBtn.addEventListener('click', () => {
+    const directoryWarning = document.getElementById('directory-warning')
+    if (directoryWarning) {
+      directoryWarning.style.display = 'none'
+      sessionStorage.setItem('directory-warning-dismissed', 'true')
+    }
+  })
+}
+
 if (selectSaveDirectoryBtn) {
   selectSaveDirectoryBtn.addEventListener('click', async () => {
     const result = await ipcRenderer.invoke('select-save-directory')
     if (result && !result.canceled && result.filePaths && result.filePaths.length > 0) {
       const selectedPath = result.filePaths[0]
       localStorage.setItem('save-directory-path', selectedPath)
+      sessionStorage.removeItem('directory-warning-dismissed')
       if (saveDirectoryPath) {
         saveDirectoryPath.textContent = selectedPath
         saveDirectoryPath.style.color = ''
@@ -586,11 +861,11 @@ if (reduceClutterCheckbox) {
   if (reduceClutter !== null) {
     reduceClutterCheckbox.checked = reduceClutter === 'true'
   } else {
-    reduceClutterCheckbox.checked = false
+    reduceClutterCheckbox.checked = true
   }
   
   reduceClutterCheckbox.addEventListener('change', (e) => {
-    localStorage.setItem('reduce-clutter', e.target.checked)
+    localStorage.setItem('reduce-clutter', e.target.checked ? 'true' : 'false')
     ipcRenderer.send('reduce-clutter-changed', e.target.checked)
   })
 }
@@ -610,13 +885,14 @@ if (showOnboardingBtn) {
 
 const resetEverythingBtn = document.getElementById('reset-everything-btn')
 if (resetEverythingBtn) {
-  resetEverythingBtn.addEventListener('click', () => {
-    if (confirm('Are you sure you want to reset all settings? This cannot be undone.')) {
+  resetEverythingBtn.addEventListener('click', async () => {
+    const confirmed = await ipcRenderer.invoke('show-reset-confirmation')
+    if (confirmed) {
       
       localStorage.clear()
 
-      const defaultTheme = 'dark'
-      const defaultAccentColor = '#40E0D0'
+      const defaultTheme = 'system'
+      const defaultAccentColor = '#3bbbf6'
       const defaultLayout = 'vertical'
       const defaultShortcut = 'Control+Shift+D'
       const defaultSounds = true
@@ -663,6 +939,12 @@ if (resetEverythingBtn) {
       ipcRenderer.send('screenshot-notification-changed', true)
     }
     
+    if (reduceClutterCheckbox) {
+      reduceClutterCheckbox.checked = true
+      localStorage.setItem('reduce-clutter', 'true')
+      ipcRenderer.send('reduce-clutter-changed', true)
+    }
+    
     if (autoSaveSnapshotsCheckbox) {
       autoSaveSnapshotsCheckbox.checked = false
       localStorage.setItem('auto-save-snapshots', false)
@@ -692,13 +974,12 @@ const noResults = document.getElementById('no-results')
 const sidebarSearchToggle = document.getElementById('sidebar-search-toggle')
 const sidebarSearchContainer = document.querySelector('.sidebar-search-container')
 
-// Category navigation
 const categoryTitles = {
-  appearance: { title: 'Appearance', subtitle: 'Customize your app\'s look and feel' },
-  toolbar: { title: 'Toolbar', subtitle: 'Configure toolbar layout and behavior' },
+  appearance: { title: 'Appearance', subtitle: 'Customise your app\'s look and feel' },
+  toolbar: { title: 'Toolbar', subtitle: 'Configure toolbar layout and display options' },
   shortcuts: { title: 'Shortcuts', subtitle: 'Manage keyboard shortcuts' },
-  features: { title: 'Features', subtitle: 'Enable or disable app features' },
-  system: { title: 'System', subtitle: 'System settings and preferences' },
+  behavior: { title: 'Behavior', subtitle: 'Customize how the app behaves and responds' },
+  system: { title: 'System', subtitle: 'System integration and startup options' },
   reset: { title: 'Reset', subtitle: 'Reset settings or view onboarding' },
   about: { title: 'About', subtitle: 'Application information and support' }
 }
@@ -708,7 +989,6 @@ let currentCategory = 'appearance'
 function showCategory(category) {
   currentCategory = category
   
-  // Update nav items
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.remove('active')
     if (item.dataset.category === category) {
@@ -716,7 +996,6 @@ function showCategory(category) {
     }
   })
   
-  // Update title and subtitle
   const categoryTitle = document.getElementById('category-title')
   const categorySubtitle = document.getElementById('category-subtitle')
   if (categoryTitle && categorySubtitle && categoryTitles[category]) {
@@ -724,7 +1003,6 @@ function showCategory(category) {
     categorySubtitle.textContent = categoryTitles[category].subtitle
   }
   
-  // Show/hide sections
   document.querySelectorAll('.settings-section').forEach(section => {
     if (section.dataset.category === category) {
       section.classList.add('active')
@@ -733,14 +1011,12 @@ function showCategory(category) {
     }
   })
   
-  // Clear search when switching categories
   if (settingsSearch) {
     settingsSearch.value = ''
     performSearch('')
   }
 }
 
-// Initialize category navigation
 function initCategoryNavigation() {
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -751,11 +1027,9 @@ function initCategoryNavigation() {
     })
   })
   
-  // Show initial category
   showCategory(currentCategory)
 }
 
-// Initialize when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initCategoryNavigation)
 } else {
@@ -769,7 +1043,6 @@ function performSearch(query) {
   let hasResults = false
 
   if (searchTerm === '') {
-    // Show current category section
     sections.forEach(section => {
       if (section.dataset.category === currentCategory) {
         section.classList.add('active')
@@ -788,7 +1061,6 @@ function performSearch(query) {
 
   clearSearchBtn.style.display = 'flex'
 
-  // When searching, show all sections that match
   sections.forEach(section => {
     const sectionData = section.getAttribute('data-section') || ''
     const category = section.getAttribute('data-category') || ''
@@ -832,7 +1104,6 @@ function performSearch(query) {
   }
 }
 
-// Toggle sidebar search
 if (sidebarSearchToggle && sidebarSearchContainer) {
   sidebarSearchToggle.addEventListener('click', () => {
     const isVisible = sidebarSearchContainer.style.display !== 'none'
@@ -888,119 +1159,50 @@ if (clearSearchBtn) {
   })
 }
 
-// Update check functionality
-const checkUpdateBtn = document.getElementById('check-update-btn')
-const updateStatusText = document.getElementById('update-status-text')
-
-let updateDownloaded = false
-
-if (checkUpdateBtn && updateStatusText) {
-  checkUpdateBtn.addEventListener('click', async () => {
-    checkUpdateBtn.disabled = true
-    checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Checking...</span>'
-    updateStatusText.textContent = 'Checking for updates...'
+async function initReportIssueButton() {
+  try {
+    const systemInfo = await ipcRenderer.invoke('get-system-info')
+    const versionEl = document.getElementById('about-version')
+    const reportBtn = document.getElementById('report-issue-btn')
     
-    try {
-      const result = await ipcRenderer.invoke('check-for-updates')
-      if (!result.success) {
-        updateStatusText.textContent = `Error: ${result.error || 'Failed to check for updates'}`
-        checkUpdateBtn.disabled = false
-        checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
-      }
-    } catch (error) {
-      updateStatusText.textContent = `Error: ${error.message || 'Failed to check for updates'}`
-      checkUpdateBtn.disabled = false
-      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
+    if (versionEl) {
+      versionEl.textContent = `Version ${systemInfo.version}`
     }
-  })
+    
+    if (reportBtn) {
+      const subject = encodeURIComponent(`Bug Report - CYC Annotate v${systemInfo.version}`)
+      const body = encodeURIComponent(`Please describe the issue you're experiencing:
+
+
+
+
+---
+System Information:
+- App Version: ${systemInfo.version}
+${systemInfo.osVersion ? `- Operating System: ${systemInfo.osVersion}` : `- Platform: ${systemInfo.platform}`}
+- Architecture: ${systemInfo.arch}
+- Electron Version: ${systemInfo.electronVersion}
+- Chrome Version: ${systemInfo.chromeVersion}
+- Node Version: ${systemInfo.nodeVersion}`)
+      
+      reportBtn.href = `mailto:help@creatoryogames.com?subject=${subject}&body=${body}`
+    }
+  } catch (error) {
+    console.error('Error initializing report issue button:', error)
+  }
 }
 
-// Listen for update status from main process
-ipcRenderer.on('update-status', (event, { status, message, data }) => {
-  if (!updateStatusText || !checkUpdateBtn) return
-  
-  updateStatusText.textContent = message
-  
-  switch (status) {
-    case 'checking':
-      checkUpdateBtn.disabled = true
-      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Checking...</span>'
-      break
-      
-    case 'available':
-      checkUpdateBtn.disabled = false
-      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">download</span><span>Download Update</span>'
-      checkUpdateBtn.onclick = async () => {
-        checkUpdateBtn.disabled = true
-        checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Downloading...</span>'
-        updateStatusText.textContent = 'Downloading update...'
-        try {
-          await ipcRenderer.invoke('download-update')
-        } catch (error) {
-          updateStatusText.textContent = `Download failed: ${error.message}`
-          checkUpdateBtn.disabled = false
-          checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">download</span><span>Download Update</span>'
-        }
-      }
-      break
-      
-    case 'not-available':
-      checkUpdateBtn.disabled = false
-      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">check_circle</span><span>Up to Date</span>'
-      setTimeout(() => {
-        checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
-        checkUpdateBtn.onclick = async () => {
-          checkUpdateBtn.disabled = true
-          checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Checking...</span>'
-          updateStatusText.textContent = 'Checking for updates...'
-          try {
-            await ipcRenderer.invoke('check-for-updates')
-          } catch (error) {
-            updateStatusText.textContent = `Error: ${error.message || 'Failed to check for updates'}`
-            checkUpdateBtn.disabled = false
-            checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
-          }
-        }
-      }, 3000)
-      break
-      
-    case 'error':
-      checkUpdateBtn.disabled = false
-      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">error</span><span>Retry</span>'
-      checkUpdateBtn.onclick = async () => {
-        checkUpdateBtn.disabled = true
-        checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span><span>Checking...</span>'
-        updateStatusText.textContent = 'Checking for updates...'
-        try {
-          await ipcRenderer.invoke('check-for-updates')
-        } catch (error) {
-          updateStatusText.textContent = `Error: ${error.message || 'Failed to check for updates'}`
-          checkUpdateBtn.disabled = false
-          checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">system_update</span><span>Check for Update</span>'
-        }
-      }
-      break
-      
-    case 'download-progress':
-      if (data) {
-        const percent = Math.round(data.percent || 0)
-        updateStatusText.textContent = `Downloading: ${percent}%`
-      }
-      break
-      
-    case 'downloaded':
-      updateDownloaded = true
-      checkUpdateBtn.disabled = false
-      checkUpdateBtn.innerHTML = '<span class="material-symbols-outlined">restart_alt</span><span>Restart to Install</span>'
-      checkUpdateBtn.onclick = async () => {
-        if (confirm('The update will be installed when you restart the app. Restart now?')) {
-          try {
-            await ipcRenderer.invoke('install-update')
-          } catch (error) {
-            updateStatusText.textContent = `Installation failed: ${error.message}`
-          }
-        }
-      }
-      break
-  }
-})
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initReportIssueButton()
+    updateResetAccentVisibility()
+    updateResetShortcutVisibility()
+  })
+} else {
+  initReportIssueButton()
+  updateResetAccentVisibility()
+  updateResetShortcutVisibility()
+}
+
+const { initWindowControls } = require('../shared/window-controls.js')
+initWindowControls({ showMinimize: true, showMaximize: true, showClose: true })

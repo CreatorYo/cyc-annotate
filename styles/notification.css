@@ -62,7 +62,7 @@ html, body {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--accent-color, #40E0D0);
+  background: var(--accent-color, #3bbbf6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -115,7 +115,7 @@ html, body {
 }
 
 .view-btn {
-  color: var(--accent-color, #40E0D0);
+  color: var(--accent-color, #3bbbf6);
   background: rgba(64, 224, 208, 0.1);
 }
 
