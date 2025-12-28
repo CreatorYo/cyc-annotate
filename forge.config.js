@@ -3,6 +3,8 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 const fs = require('fs');
 const path = require('path');
 
+const isStoreBuild = process.env.STORE_BUILD === 'true';
+
 module.exports = {
   packagerConfig: {
     name: 'CYCAnnotate',
@@ -32,17 +34,24 @@ module.exports = {
       name: '@electron-forge/maker-msix',
       config: {
         packageAssets: path.join(__dirname, 'build', 'appx'),
+        sign: !isStoreBuild,
         manifestVariables: {
-          publisher: 'CN=CreatorYoCreations',
+          publisher: isStoreBuild 
+            ? 'CN=D8CE1B84-55BC-4649-B982-017495080FFB' 
+            : 'CN=CreatorYoCreations',
+          publisherDisplayName: 'CreatorYo Creations',
           packageDisplayName: 'CYC Annotate',
           packageDescription: 'CYC Annotate - Screen annotation tool',
-          packageName: 'creatoryocreations.cycannotate',
-          identityName: 'creatoryocreations.cycannotate'
+          packageName: 'CreatorYoCreations.CYCAnnotate',
+          packageIdentity: 'CreatorYoCreations.CYCAnnotate',
+          packageMinOSVersion: '10.0.26100.0'
         },
+        ...(isStoreBuild ? {} : {
         windowsSignOptions: {
           certificateFile: path.join(__dirname, 'devcert.pfx'),
           certificatePassword: 'devcert'
         }
+        })
       }
     }
   ],
