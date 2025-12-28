@@ -1153,7 +1153,7 @@ document.addEventListener('keydown', (e) => {
     case 'g':
       
       e.preventDefault()
-      const colorMap = { 'q': '#ef4444', 'w': '#3bbbf6', 'g': '#10b981' }
+      const colorMap = { 'q': '#ef4444', 'w': '#3b82f6', 'g': '#10b981' }
       const color = colorMap[e.key]
       if (color) {
         setColor(color)
@@ -1447,7 +1447,7 @@ function initColorPicker() {
     default: state.color,
     inline: false, 
     swatches: [
-      '#ef4444', '#3bbbf6', '#10b981', '#f59e0b',
+      '#ef4444', '#3b82f6', '#10b981', '#f59e0b',
       '#8b5cf6', '#ec4899', '#06b6d4', '#ffffff',
       '#000000', '#64748b', '#f97316', '#14b8a6'
     ],
