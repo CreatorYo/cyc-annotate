@@ -25,7 +25,7 @@ let toolbarBounds = null
 function restoreMouseEvents() {
   if (win && !win.isDestroyed()) {
     if (standbyModeEnabled) {
-      win.setIgnoreMouseEvents(true, { forward: true })
+      win.setIgnoreMouseEvents(true)
       startStandbyPolling()
     } else {
       win.setIgnoreMouseEvents(false)
@@ -46,7 +46,8 @@ function startStandbyPolling() {
     }
     
     if (!toolbarBounds) {
-      win.setIgnoreMouseEvents(true, { forward: true })
+      // No toolbar bounds yet, keep ignoring mouse events
+      win.setIgnoreMouseEvents(true)
       return
     }
     
@@ -65,7 +66,7 @@ function startStandbyPolling() {
         if (isOverToolbar) {
           win.setIgnoreMouseEvents(false)
         } else {
-          win.setIgnoreMouseEvents(true, { forward: true })
+          win.setIgnoreMouseEvents(true)
         }
       }
     } catch (e) {}
@@ -1002,7 +1003,7 @@ ipcMain.handle('show-relaunch-dialog', async (event, settingName) => {
     standbyModeEnabled = enabled
     if (win && !win.isDestroyed()) {
       if (enabled) {
-        win.setIgnoreMouseEvents(true, { forward: true })
+        win.setIgnoreMouseEvents(true)
         startStandbyPolling()
       } else {
         win.setIgnoreMouseEvents(false)
