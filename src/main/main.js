@@ -1,8 +1,15 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, nativeImage, Notification, nativeTheme, systemPreferences, clipboard } = require('electron')
+const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, nativeImage, Notification, nativeTheme, systemPreferences, clipboard } = require('electron')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const dialogs = require('./utils/dialogs')
+const { init: initSystemTray } = require('./utils/systemTray')
+const { init: initWindowUtils } = require('./utils/windowUtils')
+const { getWindowsVersion, getWindowsAccentColor, getOsVersion } = require('./utils/windowsCompat')
+const { init: initShortcuts } = require('./utils/shortcuts')
+const { init: initNotificationHandler } = require('./utils/notificationHandler')
+const startupFeature = require('./utils/startupfeature')
+const { init: initCaptureOverlay } = require('./utils/captureOverlay')
 
 const iconPathIco = path.join(__dirname, '../../icon.ico')
 const iconPathPng = path.join(__dirname, '../../icon.png')
@@ -11,143 +18,64 @@ const iconPath = fs.existsSync(iconPathIco) ? iconPathIco : iconPathPng
 let win
 let settingsWin
 let onboardingWin = null
-let captureOverlayWin = null
-let notificationWin = null
-let tray
+let systemTray = null
+let windowUtils = null
+let shortcuts = null
+let notificationHandler = null
+let captureOverlay = null
 let visible = false
 let shortcut = 'Control+Shift+D'
-let captureOverlayActive = false
 let standbyModeEnabled = false
-let standbyPollingInterval = null
-let lastMouseOverToolbar = false
-let toolbarBounds = null
 
-function restoreMouseEvents() {
-  if (win && !win.isDestroyed()) {
-    if (standbyModeEnabled) {
-      win.setIgnoreMouseEvents(true)
-      startStandbyPolling()
-    } else {
-      win.setIgnoreMouseEvents(false)
-      stopStandbyPolling()
-    }
-  }
-}
-
-function startStandbyPolling() {
-  if (standbyPollingInterval) return
-  
-  const { screen } = require('electron')
-  
-  standbyPollingInterval = setInterval(() => {
-    if (!win || win.isDestroyed() || !standbyModeEnabled) {
-      stopStandbyPolling()
-      return
-    }
-    
-    if (!toolbarBounds) {
-      // No toolbar bounds yet, keep ignoring mouse events
-      win.setIgnoreMouseEvents(true)
-      return
-    }
-    
-    try {
-      const cursorPoint = screen.getCursorScreenPoint()
-      
-      const padding = 15
-      const isOverToolbar = 
-        cursorPoint.x >= toolbarBounds.x - padding &&
-        cursorPoint.x <= toolbarBounds.x + toolbarBounds.width + padding &&
-        cursorPoint.y >= toolbarBounds.y - padding &&
-        cursorPoint.y <= toolbarBounds.y + toolbarBounds.height + padding
-      
-      if (isOverToolbar !== lastMouseOverToolbar) {
-        lastMouseOverToolbar = isOverToolbar
-        if (isOverToolbar) {
-          win.setIgnoreMouseEvents(false)
-        } else {
-          win.setIgnoreMouseEvents(true)
-        }
-      }
-    } catch (e) {}
-  }, 16)
-}
-
-function stopStandbyPolling() {
-  if (standbyPollingInterval) {
-    clearInterval(standbyPollingInterval)
-    standbyPollingInterval = null
-  }
-  lastMouseOverToolbar = false
-}
-
-function disableDefaultShortcuts(window) {
-  if (!window || window.isDestroyed()) return
-  
-  const isDev = !app.isPackaged
-  
-  window.webContents.on('before-input-event', (event, input) => {
-    if ((input.control || input.meta) && input.key.toLowerCase() === 'f') {
-      return
-    }
-    
-    if (isDev) {
-      return
-    }
-    
-    if (input.control || input.meta) {
-      if (input.key.toLowerCase() === 'r' && !input.shift) {
-        event.preventDefault()
-        return
-      }
-      if (input.key.toLowerCase() === 'r' && input.shift) {
-        event.preventDefault()
-        return
-      }
-      if (input.key.toLowerCase() === 'i' && input.shift) {
-        event.preventDefault()
-        return
-      }
-      if (input.key.toLowerCase() === 'j' && input.shift) {
-        event.preventDefault()
-        return
-      }
-      if (input.key.toLowerCase() === 'u') {
-        event.preventDefault()
-        return
-      }
-      if (input.key.toLowerCase() === 'c' && input.shift) {
-        event.preventDefault()
-        return
-      }
-    }
-    if (input.key === 'F5') {
-      event.preventDefault()
-      return
-    }
-    if (input.key === 'F5' && (input.control || input.meta)) {
-      event.preventDefault()
-      return
-    }
+function initWindowUtilsModule() {
+  windowUtils = initWindowUtils({
+    getWin: () => win,
+    getStandbyMode: () => standbyModeEnabled,
+    getCaptureOverlayActive: () => captureOverlay?.isActive() || false,
+    isDev: !app.isPackaged
   })
 }
 
-function ensureAlwaysOnTop() {
-  if (captureOverlayActive) {
-    return
-  }
-  if (win && !win.isDestroyed()) {
-    try {
-      if (!win.isAlwaysOnTop()) {
-        win.setAlwaysOnTop(true, 'screen-saver', 1)
-      }
-    } catch (e) {
-      try {
-        win.setAlwaysOnTop(true)
-      } catch (e2) {
-      }
+function initShortcutsModule() {
+  shortcuts = initShortcuts({
+    onShortcutPressed: () => {
+      if (win && !win.isDestroyed()) toggleOverlay()
     }
-  }
+  })
+  shortcuts.setShortcut(shortcut)
+}
+
+function initNotificationHandlerModule() {
+  notificationHandler = initNotificationHandler({
+    iconPath,
+    getSetting,
+    disableDefaultShortcuts
+  })
+}
+
+function initCaptureOverlayModule() {
+  captureOverlay = initCaptureOverlay({
+    getWin: () => win,
+    getVisible: () => visible,
+    restoreMouseEvents,
+    ensureAlwaysOnTop,
+    disableDefaultShortcuts
+  })
+}
+
+function restoreMouseEvents() {
+  if (!windowUtils) initWindowUtilsModule()
+  windowUtils.restoreMouseEvents()
+}
+
+function disableDefaultShortcuts(window) {
+  if (!windowUtils) initWindowUtilsModule()
+  windowUtils.disableDefaultShortcuts(window)
+}
+
+function ensureAlwaysOnTop() {
+  if (!windowUtils) initWindowUtilsModule()
+  windowUtils.ensureAlwaysOnTop()
 }
 
 function getSetting(key, defaultValue) {
@@ -181,122 +109,45 @@ function setSetting(key, value) {
   }
 }
 
-function manageStartupShortcut(enabled) {
-  if (process.platform !== 'win32') return
-  
-  setImmediate(() => {
+
+async function saveAnnotationsForRelaunch() {
+  if (win && !win.isDestroyed()) {
     try {
-      const os = require('os')
-      const { exec } = require('child_process')
-      const startupFolder = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
-      
-      if (!fs.existsSync(startupFolder)) {
-        fs.mkdirSync(startupFolder, { recursive: true })
+      const annotationsData = await win.webContents.executeJavaScript(`
+        (function() {
+          return JSON.stringify({
+            elements: state.elements,
+            nextElementId: state.nextElementId
+          });
+        })()
+      `)
+      if (annotationsData) {
+        const tempPath = path.join(app.getPath('userData'), 'relaunch-annotations.json')
+        fs.writeFileSync(tempPath, annotationsData, 'utf8')
       }
-      
-      const shortcutPath = path.join(startupFolder, `${app.getName()}.lnk`)
-      
-      if (enabled) {
-        const exePath = app.getPath('exe')
-        const workingDir = path.dirname(exePath)
-        
-        const escapedShortcutPath = shortcutPath.replace(/'/g, "''").replace(/\\/g, '\\')
-        const escapedExePath = exePath.replace(/'/g, "''").replace(/\\/g, '\\')
-        const escapedWorkingDir = workingDir.replace(/'/g, "''").replace(/\\/g, '\\')
-        
-        const psScript = `$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${escapedShortcutPath}'); $Shortcut.TargetPath = '${escapedExePath}'; $Shortcut.WorkingDirectory = '${escapedWorkingDir}'; $Shortcut.Save()`
-        
-        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`, { stdio: 'ignore' }, (error) => {
-          if (error) {
-            console.error('Error managing startup shortcut:', error)
-          }
-        })
-      } else {
-        if (fs.existsSync(shortcutPath)) {
-          fs.unlink(shortcutPath, (error) => {
-            if (error) {
-              console.error('Error removing startup shortcut:', error)
-            }
-          })
-        }
-      }
-    } catch (error) {
-      console.error('Error managing startup shortcut:', error)
+    } catch (e) {
+      console.error('Error saving annotations for relaunch:', e)
     }
+  }
+}
+
+function initTray() {
+  systemTray = initSystemTray({
+    app,
+    getWin: () => win,
+    getSettingsWin: () => settingsWin,
+    toggleOverlay,
+    saveAnnotationsForRelaunch
   })
 }
 
 function createTray() {
-  if (tray) {
-    try {
-      tray.destroy()
-    } catch (e) {
-    }
-    tray = null
-  }
-  
-  try {
-    const trayIconPathIco = path.join(__dirname, '../../icon.ico')
-    const trayIconPathPng = path.join(__dirname, '../../icon.png')
-    const trayIconPath = fs.existsSync(trayIconPathIco) ? trayIconPathIco : trayIconPathPng
-    if (fs.existsSync(trayIconPath)) {
-      tray = new Tray(trayIconPath)
-    } else {
-      const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
-      tray = new Tray(icon)
-    }
-    
-    tray.setToolTip('CYC Annotate')
-
-    tray.setContextMenu(Menu.buildFromTemplate([
-      { label: 'Settings', click: () => {
-        if (settingsWin && !settingsWin.isDestroyed()) {
-          if (settingsWin.isMinimized()) settingsWin.restore()
-          settingsWin.focus()
-        } else {
-          ipcMain.emit('open-settings')
-        }
-      }},
-      { label: 'Relaunch', click: async () => {
-        if (win && !win.isDestroyed()) {
-          try {
-            const annotationsData = await win.webContents.executeJavaScript(`
-              (function() {
-                return JSON.stringify({
-                  elements: state.elements,
-                  nextElementId: state.nextElementId
-                });
-              })()
-            `)
-            if (annotationsData) {
-              const tempPath = path.join(app.getPath('userData'), 'relaunch-annotations.json')
-              fs.writeFileSync(tempPath, annotationsData, 'utf8')
-            }
-          } catch (e) {
-            console.error('Error saving annotations for relaunch:', e)
-          }
-        }
-        app.relaunch({ args: process.argv.slice(1).concat(['--restore-annotations']) })
-        app.exit()
-      }},
-      { type: 'separator' },
-      { label: 'Quit CYC Annotate', click: () => app.quit() }
-    ]))
-
-    tray.on('click', toggleOverlay)
-  } catch (e) {
-    console.warn('Could not create system tray:', e)
-  }
+  if (!systemTray) initTray()
+  systemTray.create()
 }
 
 function destroyTray() {
-  if (tray) {
-    try {
-      tray.destroy()
-    } catch (e) {
-    }
-    tray = null
-  }
+  systemTray?.destroy()
 }
 
 function showOverlay() {
@@ -404,154 +255,14 @@ function toggleOverlay() {
 }
 
 function registerShortcut() {
-  if (!shortcut) return
-  
-  try {
-    if (globalShortcut.isRegistered(shortcut)) {
-      globalShortcut.unregister(shortcut)
-    } else {
-      globalShortcut.unregisterAll()
-    }
-  } catch (e) {
-    globalShortcut.unregisterAll()
-  }
-
-  const attemptRegister = (attempt = 0, maxAttempts = 10) => {
-    if (attempt >= maxAttempts) {
-      return false
-    }
-
-    try {
-      const registered = globalShortcut.register(shortcut, () => {
-        if (win && !win.isDestroyed()) {
-          toggleOverlay()
-        }
-      })
-
-      if (registered) {
-        return true
-      }
-
-      setTimeout(() => attemptRegister(attempt + 1, maxAttempts), 100 * (attempt + 1))
-      return false
-    } catch (error) {
-      setTimeout(() => attemptRegister(attempt + 1, maxAttempts), 100 * (attempt + 1))
-      return false
-    }
-  }
-
-  setTimeout(() => attemptRegister(), 50)
+  if (!shortcuts) initShortcutsModule()
+  shortcuts.setShortcut(shortcut)
+  shortcuts.register()
 }
 
 function showDesktopNotification(title, body, filePath) {
-  if (notificationWin && !notificationWin.isDestroyed()) {
-    notificationWin.close()
-    notificationWin = null
-  }
-
-  const { screen } = require('electron')
-  const primaryDisplay = screen.getPrimaryDisplay()
-  const { width, height } = primaryDisplay.workAreaSize
-  const { x, y } = primaryDisplay.workArea
-
-  notificationWin = new BrowserWindow({
-    width: 380,
-    height: 80,
-    x: x + width - 400,
-    y: y + height - 100,
-    frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    movable: false,
-    focusable: true,
-    show: false,
-    opacity: 0,
-    icon: iconPath,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    }
-  })
-
-  const thisNotificationWin = notificationWin
-
-  thisNotificationWin.setIgnoreMouseEvents(false, { forward: false })
-  thisNotificationWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  thisNotificationWin.setAlwaysOnTop(true, 'screen-saver', 1)
-  
-  thisNotificationWin.loadFile('src/notification/notification.html')
-  
-  disableDefaultShortcuts(thisNotificationWin)
-  
-  thisNotificationWin.webContents.once('did-finish-load', () => {
-    if (thisNotificationWin && !thisNotificationWin.isDestroyed()) {
-      const accentColor = getSetting('accent-color', '#3bbbf6')
-      const currentTheme = getSetting('theme', 'system')
-      if (currentTheme === 'system') {
-        const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-        thisNotificationWin.webContents.send('os-theme-changed', effectiveTheme)
-      } else {
-        thisNotificationWin.webContents.send('theme-changed', currentTheme)
-      }
-      thisNotificationWin.webContents.send('set-notification-data', {
-        title: title,
-        body: body,
-        accentColor: accentColor,
-        filePath: filePath
-      })
-      
-      thisNotificationWin.show()
-      
-      let opacity = 0
-      const fadeInInterval = setInterval(() => {
-        if (!thisNotificationWin || thisNotificationWin.isDestroyed()) {
-          clearInterval(fadeInInterval)
-          return
-        }
-        opacity += 0.1
-        if (opacity >= 1) {
-          thisNotificationWin.setOpacity(1)
-          clearInterval(fadeInInterval)
-          
-          setTimeout(() => {
-            if (thisNotificationWin && !thisNotificationWin.isDestroyed()) {
-              let fadeOpacity = 1
-              const startTime = Date.now()
-              const duration = 150
-              
-              const fadeOut = () => {
-                if (!thisNotificationWin || thisNotificationWin.isDestroyed()) {
-                  return
-                }
-                const elapsed = Date.now() - startTime
-                fadeOpacity = Math.max(0, 1 - (elapsed / duration))
-                
-                if (fadeOpacity <= 0) {
-                  thisNotificationWin.setOpacity(0)
-                  thisNotificationWin.close()
-                } else {
-                  thisNotificationWin.setOpacity(fadeOpacity)
-                  setTimeout(fadeOut, 5)
-                }
-              }
-              fadeOut()
-            }
-          }, 3000)
-        } else {
-          thisNotificationWin.setOpacity(opacity)
-        }
-      }, 16)
-    }
-  })
-
-  thisNotificationWin.on('closed', () => {
-    if (notificationWin === thisNotificationWin) {
-      notificationWin = null
-    }
-  })
+  if (!notificationHandler) initNotificationHandlerModule()
+  notificationHandler.show(title, body, filePath)
 }
 
 function createOnboardingWindow() {
@@ -741,7 +452,7 @@ function createMainWindow() {
   setInterval(() => {
     if (win && !win.isDestroyed()) {
       ensureAlwaysOnTop()
-      if (shortcut && !globalShortcut.isRegistered(shortcut)) {
+      if (shortcuts && !shortcuts.isRegistered()) {
         registerShortcut()
       }
     }
@@ -868,8 +579,9 @@ function createMainWindow() {
     if (settingsWin && !settingsWin.isDestroyed()) {
       settingsWin.webContents.send('theme-changed', theme)
     }
-    if (notificationWin && !notificationWin.isDestroyed()) {
-      notificationWin.webContents.send('theme-changed', theme)
+    const nWin = notificationHandler?.getWin()
+    if (nWin && !nWin.isDestroyed()) {
+      nWin.webContents.send('theme-changed', theme)
     }
   })
 
@@ -890,8 +602,9 @@ function createMainWindow() {
       if (onboardingWin && !onboardingWin.isDestroyed()) {
         onboardingWin.webContents.send('os-theme-changed', effectiveTheme)
       }
-      if (notificationWin && !notificationWin.isDestroyed()) {
-        notificationWin.webContents.send('os-theme-changed', effectiveTheme)
+      const nWin = notificationHandler?.getWin()
+      if (nWin && !nWin.isDestroyed()) {
+        nWin.webContents.send('os-theme-changed', effectiveTheme)
       }
     }
   })
@@ -931,7 +644,7 @@ function createMainWindow() {
 
   ipcMain.on('toggle-tray-icon', (event, show) => {
     if (show) {
-      if (!tray) {
+      if (!systemTray?.get()) {
         createTray()
       }
     } else {
@@ -941,15 +654,7 @@ function createMainWindow() {
   })
 
   ipcMain.on('set-auto-launch', (event, enabled) => {
-    if (process.platform === 'win32') {
-      manageStartupShortcut(enabled)
-    } else if (process.platform === 'darwin') {
-      const settings = {
-        openAtLogin: enabled,
-        openAsHidden: true
-      }
-      app.setLoginItemSettings(settings)
-    }
+    startupFeature.setEnabled(enabled)
     setSetting('launch-on-startup', enabled)
   })
 
@@ -1003,18 +708,11 @@ ipcMain.handle('show-relaunch-dialog', async (event, settingName) => {
     standbyModeEnabled = enabled
     if (win && !win.isDestroyed()) {
       if (enabled) {
-        win.setIgnoreMouseEvents(true)
-        startStandbyPolling()
+        win.setIgnoreMouseEvents(true, { forward: true })
       } else {
         win.setIgnoreMouseEvents(false)
-        stopStandbyPolling()
-        toolbarBounds = null
       }
     }
-  })
-
-  ipcMain.on('update-toolbar-bounds', (event, bounds) => {
-    toolbarBounds = bounds
   })
 
   ipcMain.on('toolbar-bg-changed', (event, data) => {
@@ -1028,111 +726,15 @@ ipcMain.handle('show-relaunch-dialog', async (event, settingName) => {
   return app.getVersion()
 })
 
-function getWindowsVersion() {
-  if (process.platform !== 'win32') {
-    return null
-  }
-  
-  try {
-    const { execSync } = require('child_process')
-    
-    let buildNumber = 0
-    try {
-      const regQueryBuild = 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v CurrentBuild'
-      const resultBuild = execSync(regQueryBuild, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
-      const matchBuild = resultBuild.match(/CurrentBuild\s+REG_SZ\s+(\d+)/)
-      if (matchBuild) {
-        buildNumber = parseInt(matchBuild[1])
-      }
-    } catch (e) {
-      try {
-        const regQueryBuildAlt = 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v CurrentBuildNumber'
-        const resultBuildAlt = execSync(regQueryBuildAlt, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
-        const matchBuildAlt = resultBuildAlt.match(/CurrentBuildNumber\s+REG_SZ\s+(\d+)/)
-        if (matchBuildAlt) {
-          buildNumber = parseInt(matchBuildAlt[1])
-        }
-      } catch (e2) {
-        const release = os.release()
-        const parts = release.split('.')
-        if (parts.length >= 2) {
-          buildNumber = parseInt(parts[2]) || 0
-        }
-      }
-    }
-    
-    let versionName = 'Windows'
-    if (buildNumber >= 22000) {
-      versionName = 'Windows 11'
-    } else if (buildNumber >= 10240) {
-      versionName = 'Windows 10'
-    } else if (buildNumber >= 9200) {
-      versionName = 'Windows 8.1'
-    } else if (buildNumber >= 7600) {
-      versionName = 'Windows 7'
-    }
-    
-    let buildVersion = ''
-    try {
-      const regQuery = 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v DisplayVersion'
-      const result = execSync(regQuery, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
-      const match = result.match(/DisplayVersion\s+REG_SZ\s+(.+)/)
-      if (match) {
-        buildVersion = match[1].trim()
-      }
-    } catch (e) {
-      try {
-        const regQueryRelease = 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v ReleaseId'
-        const resultRelease = execSync(regQueryRelease, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
-        const matchRelease = resultRelease.match(/ReleaseId\s+REG_SZ\s+(.+)/)
-        if (matchRelease) {
-          buildVersion = matchRelease[1].trim()
-        }
-      } catch (e2) {
-      }
-    }
-    
-    if (buildVersion) {
-      return `${versionName} (${buildVersion})`
-    } else {
-      return versionName
-    }
-  } catch (error) {
-    console.error('Error getting Windows version:', error)
-    const release = os.release()
-    const parts = release.split('.')
-    if (parts.length >= 2) {
-      const buildNum = parseInt(parts[2]) || 0
-      if (buildNum >= 22000) {
-        return 'Windows 11'
-      } else if (buildNum >= 10240) {
-        return 'Windows 10'
-      }
-    }
-    return 'Windows'
-  }
-}
-
-ipcMain.handle('get-system-info', () => {
-  const systemInfo = {
-    version: app.getVersion(),
-    platform: process.platform,
-    arch: process.arch,
-    electronVersion: process.versions.electron,
-    chromeVersion: process.versions.chrome,
-    nodeVersion: process.versions.node
-  }
-  
-  if (process.platform === 'win32') {
-    systemInfo.osVersion = getWindowsVersion()
-  } else if (process.platform === 'darwin') {
-    systemInfo.osVersion = `macOS ${os.release()}`
-  } else {
-    systemInfo.osVersion = `${process.platform} ${os.release()}`
-  }
-  
-  return systemInfo
-})
+ipcMain.handle('get-system-info', () => ({
+  version: app.getVersion(),
+  platform: process.platform,
+  arch: process.arch,
+  electronVersion: process.versions.electron,
+  chromeVersion: process.versions.chrome,
+  nodeVersion: process.versions.node,
+  osVersion: getOsVersion()
+}))
 
 ipcMain.handle('show-system-details-dialog', async () => {
   const systemInfo = {
@@ -1141,9 +743,7 @@ ipcMain.handle('show-system-details-dialog', async () => {
     electronVersion: process.versions.electron,
     chromeVersion: process.versions.chrome,
     nodeVersion: process.versions.node,
-    osVersion: process.platform === 'win32' ? getWindowsVersion() : 
-               process.platform === 'darwin' ? `macOS ${os.release()}` : 
-               `${process.platform} ${os.release()}`
+    osVersion: getOsVersion()
   }
   await dialogs.showSystemDetailsDialog(settingsWin, systemInfo)
 })
@@ -1228,10 +828,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
   })
 
   ipcMain.on('close-notification', () => {
-    if (notificationWin && !notificationWin.isDestroyed()) {
-      notificationWin.close()
-      notificationWin = null
-    }
+    notificationHandler?.close()
   })
 
   ipcMain.on('open-screenshot-file', async (event, filePath) => {
@@ -1277,294 +874,17 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
   })
 
   ipcMain.handle('open-capture-overlay', () => {
-    try {
-      if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-        captureOverlayWin.focus()
-        return
-      }
-
-      if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-        captureOverlayWin.destroy()
-      }
-      captureOverlayWin = null
-
-      captureOverlayActive = true
-      
-      if (win && !win.isDestroyed()) {
-        win.setIgnoreMouseEvents(true, { forward: false })
-        win.setAlwaysOnTop(false)
-        setTimeout(() => {
-          if (win && !win.isDestroyed() && captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-            captureOverlayWin.moveTop()
-            try {
-              captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
-            } catch (e) {
-              captureOverlayWin.setAlwaysOnTop(true)
-            }
-          }
-        }, 50)
-      }
-
-      const { screen } = require('electron')
-      
-      let targetDisplay = screen.getPrimaryDisplay()
-      
-      if (win && !win.isDestroyed()) {
-        const winBounds = win.getBounds()
-        const displays = screen.getAllDisplays()
-        
-        for (const display of displays) {
-          const bounds = display.bounds
-          if (winBounds.x >= bounds.x && winBounds.x < bounds.x + bounds.width &&
-              winBounds.y >= bounds.y && winBounds.y < bounds.y + bounds.height) {
-            targetDisplay = display
-            break
-          }
-        }
-      }
-
-      const bounds = targetDisplay.bounds
-      const size = targetDisplay.size
-
-      captureOverlayWin = new BrowserWindow({
-        x: bounds.x,
-        y: bounds.y,
-        width: size.width,
-        height: size.height,
-        frame: false,
-        transparent: true,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        resizable: false,
-        movable: false,
-        focusable: true,
-        show: false,
-        webPreferences: {
-          nodeIntegration: true,
-          contextIsolation: false,
-          backgroundThrottling: false
-        }
-      })
-
-      try {
-        captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
-      } catch (e) {
-        captureOverlayWin.setAlwaysOnTop(true)
-      }
-
-      captureOverlayWin.setIgnoreMouseEvents(false)
-      
-      captureOverlayWin.webContents.once('did-finish-load', () => {
-        let accentColor = '#3bbbf6'
-        if (win && !win.isDestroyed()) {
-          win.webContents.executeJavaScript('localStorage.getItem("accent-color")')
-            .then((color) => { if (color) accentColor = color })
-            .catch(() => {})
-        }
-        if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-          captureOverlayWin.webContents.send('set-accent-color', accentColor)
-        }
-      })
-      
-      captureOverlayWin.loadFile('src/capture/capture-overlay.html')
-      
-      disableDefaultShortcuts(captureOverlayWin)
-      
-      captureOverlayWin.once('ready-to-show', () => {
-        const currentDisplay = screen.getDisplayMatching(captureOverlayWin.getBounds())
-        captureOverlayWin.setBounds({
-          x: currentDisplay.bounds.x,
-          y: currentDisplay.bounds.y,
-          width: currentDisplay.size.width,
-          height: currentDisplay.size.height
-        })
-        captureOverlayWin.show()
-        captureOverlayWin.focus()
-        captureOverlayWin.moveTop()
-        try {
-          captureOverlayWin.setAlwaysOnTop(true, 'screen-saver', 1)
-        } catch (e) {
-          captureOverlayWin.setAlwaysOnTop(true)
-        }
-      })
-      
-      captureOverlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-
-      const captureContextMenu = Menu.buildFromTemplate([
-        { 
-          label: 'Select All', 
-          click: () => {
-            if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-              captureOverlayWin.webContents.send('select-all-screen')
-            }
-          }
-        },
-        { type: 'separator' },
-        { 
-          label: 'Cancel', 
-          click: () => {
-            if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-              captureOverlayWin.destroy()
-              captureOverlayWin = null
-            }
-            captureOverlayActive = false
-            if (win && !win.isDestroyed()) {
-              restoreMouseEvents()
-              ensureAlwaysOnTop()
-              if (!visible) {
-                win.show()
-              }
-              win.webContents.send('capture-cancelled')
-            }
-          }
-        }
-      ])
-
-      captureOverlayWin.webContents.on('context-menu', (e, params) => {
-        captureContextMenu.popup()
-      })
-
-      captureOverlayWin.on('closed', () => {
-        captureOverlayActive = false
-        if (win && !win.isDestroyed()) {
-          restoreMouseEvents()
-          ensureAlwaysOnTop()
-          if (!visible) {
-            win.show()
-          }
-        }
-        captureOverlayWin = null
-      })
-    } catch (error) {
-      console.error('Error opening capture overlay:', error)
-      captureOverlayActive = false
-      if (win && !win.isDestroyed()) {
-        restoreMouseEvents()
-        ensureAlwaysOnTop()
-      }
-    }
+    if (!captureOverlay) initCaptureOverlayModule()
+    captureOverlay.open()
   })
 
   ipcMain.on('capture-selection', async (event, bounds) => {
-    let overlayBounds = null
-    
-    try {
-      if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-        overlayBounds = captureOverlayWin.getBounds()
-        captureOverlayWin.destroy()
-        captureOverlayWin = null
-      }
-
-      captureOverlayActive = false
-      if (win && !win.isDestroyed()) {
-        restoreMouseEvents()
-        ensureAlwaysOnTop()
-        if (!visible) {
-          win.show()
-        }
-      }
-
-      if (!overlayBounds || !bounds || bounds.width < 10 || bounds.height < 10) {
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('capture-selection-result', null)
-        }
-        return
-      }
-      
-      const { screen } = require('electron')
-      
-      let targetDisplay = screen.getPrimaryDisplay()
-      
-      if (win && !win.isDestroyed()) {
-        const winBounds = win.getBounds()
-        const displays = screen.getAllDisplays()
-        
-        for (const display of displays) {
-          const displayBounds = display.bounds
-          if (winBounds.x >= displayBounds.x && winBounds.x < displayBounds.x + displayBounds.width &&
-              winBounds.y >= displayBounds.y && winBounds.y < displayBounds.y + displayBounds.height) {
-            targetDisplay = display
-            break
-          }
-        }
-      }
-
-      const displayBounds = targetDisplay.bounds
-      const { width, height } = targetDisplay.size
-      
-      const sources = await desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width, height }
-      })
-      
-      if (sources.length === 0) {
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('capture-selection-result', null)
-        }
-        return
-      }
-
-      let targetSource = null
-      const displayId = targetDisplay.id
-      
-      for (const source of sources) {
-        if (source.display_id === displayId || 
-            (displayId === screen.getPrimaryDisplay().id && source.id.includes('screen:0'))) {
-          targetSource = source
-          break
-        }
-      }
-      
-      if (!targetSource) {
-        targetSource = sources[0]
-      }
-      
-      const img = targetSource.thumbnail
-      
-      const relativeX = bounds.x - overlayBounds.x
-      const relativeY = bounds.y - overlayBounds.y
-      
-      const cropped = img.crop({
-        x: Math.max(0, Math.min(relativeX, width - 1)),
-        y: Math.max(0, Math.min(relativeY, height - 1)),
-        width: Math.min(bounds.width, width - Math.max(0, relativeX)),
-        height: Math.min(bounds.height, height - Math.max(0, relativeY))
-      })
-      
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('capture-selection-result', cropped.toDataURL(), bounds)
-      }
-    } catch (error) {
-      console.error('Error capturing selection:', error)
-      if (win && !win.isDestroyed()) {
-        restoreMouseEvents()
-        win.webContents.send('capture-selection-result', null)
-      }
-      if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-        captureOverlayWin.destroy()
-        captureOverlayWin = null
-      }
-      captureOverlayActive = false
-      if (win && !win.isDestroyed()) {
-        ensureAlwaysOnTop()
-      }
-    }
+    if (!captureOverlay) initCaptureOverlayModule()
+    await captureOverlay.captureSelection(bounds)
   })
 
   ipcMain.on('cancel-capture', () => {
-    if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-      captureOverlayWin.destroy()
-      captureOverlayWin = null
-    }
-      captureOverlayActive = false
-      if (win && !win.isDestroyed()) {
-        restoreMouseEvents()
-        ensureAlwaysOnTop()
-        if (!visible) {
-          win.show()
-        }
-        win.webContents.send('capture-cancelled')
-      }
+    captureOverlay?.close()
   })
 
   ipcMain.on('save-screenshot', async (event, dataURL, defaultFilename) => {
@@ -1662,15 +982,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
   }
     
   const launchOnStartup = getSetting('launch-on-startup', false)
-  if (process.platform === 'win32') {
-    manageStartupShortcut(launchOnStartup)
-  } else if (process.platform === 'darwin') {
-    const settings = {
-      openAtLogin: launchOnStartup,
-      openAsHidden: true
-    }
-    app.setLoginItemSettings(settings)
-  }
+  startupFeature.applyStartupSetting(launchOnStartup)
 
   registerShortcut()
   
@@ -1678,43 +990,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
   setTimeout(() => registerShortcut(), 1000)
 }
 
-function getWindowsAccentColor() {
-  if (process.platform === 'win32') {
-    try {
-      if (systemPreferences.getAccentColor) {
-        const accentColor = systemPreferences.getAccentColor()
-        return `#${accentColor}`
-      }
-    } catch (error) {
-      console.error('Error getting Windows accent color via systemPreferences:', error)
-    }
-    
-    try {
-      const { execSync } = require('child_process')
-      const regQuery = 'reg query "HKCU\\Software\\Microsoft\\Windows\\DWM" /v ColorizationColor'
-      const result = execSync(regQuery, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
-      
-      const match = result.match(/0x([0-9a-fA-F]{8})/i)
-      if (match) {
-        const dwordValue = parseInt(match[1], 16)
-        const b = (dwordValue >> 16) & 0xFF
-        const g = (dwordValue >> 8) & 0xFF
-        const r = dwordValue & 0xFF
-        const hexColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
-        return hexColor
-      }
-    } catch (regError) {
-      console.error('Error reading accent color from registry:', regError)
-    }
-    
-    return null
-  }
-  return null
-}
-
-ipcMain.handle('get-windows-accent-color', () => {
-  return getWindowsAccentColor()
-})
+ipcMain.handle('get-windows-accent-color', () => getWindowsAccentColor())
 
 let windowsAccentSyncEnabled = false
 
@@ -1878,13 +1154,7 @@ app.on('activate', () => {
 })
 
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll()
-  if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-    captureOverlayWin.destroy()
-    captureOverlayWin = null
-  }
-  if (notificationWin && !notificationWin.isDestroyed()) {
-    notificationWin.destroy()
-    notificationWin = null
-  }
+  if (shortcuts) shortcuts.unregisterAll()
+  captureOverlay?.destroy()
+  notificationHandler?.close()
 })

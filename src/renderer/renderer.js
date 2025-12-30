@@ -3098,7 +3098,7 @@ if (closeBtn) {
     e.stopPropagation()
     e.preventDefault()
     
-    standbyManager.disable()
+    standbyManager.disable(false)
     
     ipcRenderer.send('hide-window')
   })
