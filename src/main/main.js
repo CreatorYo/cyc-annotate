@@ -1,7 +1,8 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, nativeImage, dialog, Notification, nativeTheme, systemPreferences } = require('electron')
+const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, nativeImage, Notification, nativeTheme, systemPreferences, clipboard } = require('electron')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
+const dialogs = require('./utils/dialogs')
 
 const iconPathIco = path.join(__dirname, '../../icon.ico')
 const iconPathPng = path.join(__dirname, '../../icon.png')
@@ -16,6 +17,68 @@ let tray
 let visible = false
 let shortcut = 'Control+Shift+D'
 let captureOverlayActive = false
+let standbyModeEnabled = false
+let standbyPollingInterval = null
+let lastMouseOverToolbar = false
+let toolbarBounds = null
+
+function restoreMouseEvents() {
+  if (win && !win.isDestroyed()) {
+    if (standbyModeEnabled) {
+      win.setIgnoreMouseEvents(true, { forward: true })
+      startStandbyPolling()
+    } else {
+      win.setIgnoreMouseEvents(false)
+      stopStandbyPolling()
+    }
+  }
+}
+
+function startStandbyPolling() {
+  if (standbyPollingInterval) return
+  
+  const { screen } = require('electron')
+  
+  standbyPollingInterval = setInterval(() => {
+    if (!win || win.isDestroyed() || !standbyModeEnabled) {
+      stopStandbyPolling()
+      return
+    }
+    
+    if (!toolbarBounds) {
+      win.setIgnoreMouseEvents(true, { forward: true })
+      return
+    }
+    
+    try {
+      const cursorPoint = screen.getCursorScreenPoint()
+      
+      const padding = 15
+      const isOverToolbar = 
+        cursorPoint.x >= toolbarBounds.x - padding &&
+        cursorPoint.x <= toolbarBounds.x + toolbarBounds.width + padding &&
+        cursorPoint.y >= toolbarBounds.y - padding &&
+        cursorPoint.y <= toolbarBounds.y + toolbarBounds.height + padding
+      
+      if (isOverToolbar !== lastMouseOverToolbar) {
+        lastMouseOverToolbar = isOverToolbar
+        if (isOverToolbar) {
+          win.setIgnoreMouseEvents(false)
+        } else {
+          win.setIgnoreMouseEvents(true, { forward: true })
+        }
+      }
+    } catch (e) {}
+  }, 16)
+}
+
+function stopStandbyPolling() {
+  if (standbyPollingInterval) {
+    clearInterval(standbyPollingInterval)
+    standbyPollingInterval = null
+  }
+  lastMouseOverToolbar = false
+}
 
 function disableDefaultShortcuts(window) {
   if (!window || window.isDestroyed()) return
@@ -107,7 +170,11 @@ function setSetting(key, value) {
       const data = fs.readFileSync(settingsPath, 'utf8')
       settings = JSON.parse(data)
     }
-    settings[key] = value
+    if (value === null || value === undefined || value === '') {
+      delete settings[key]
+    } else {
+      settings[key] = value
+    }
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
   } catch (e) {
   }
@@ -116,36 +183,46 @@ function setSetting(key, value) {
 function manageStartupShortcut(enabled) {
   if (process.platform !== 'win32') return
   
-  try {
-    const os = require('os')
-    const { execSync } = require('child_process')
-    const startupFolder = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
-    
-    if (!fs.existsSync(startupFolder)) {
-      fs.mkdirSync(startupFolder, { recursive: true })
-    }
-    
-    const shortcutPath = path.join(startupFolder, `${app.getName()}.lnk`)
-    
-    if (enabled) {
-      const exePath = app.getPath('exe')
-      const workingDir = path.dirname(exePath)
+  setImmediate(() => {
+    try {
+      const os = require('os')
+      const { exec } = require('child_process')
+      const startupFolder = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
       
-      const escapedShortcutPath = shortcutPath.replace(/'/g, "''").replace(/\\/g, '\\')
-      const escapedExePath = exePath.replace(/'/g, "''").replace(/\\/g, '\\')
-      const escapedWorkingDir = workingDir.replace(/'/g, "''").replace(/\\/g, '\\')
-      
-      const psScript = `$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${escapedShortcutPath}'); $Shortcut.TargetPath = '${escapedExePath}'; $Shortcut.WorkingDirectory = '${escapedWorkingDir}'; $Shortcut.Save()`
-      
-      execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`, { stdio: 'ignore' })
-    } else {
-      if (fs.existsSync(shortcutPath)) {
-        fs.unlinkSync(shortcutPath)
+      if (!fs.existsSync(startupFolder)) {
+        fs.mkdirSync(startupFolder, { recursive: true })
       }
+      
+      const shortcutPath = path.join(startupFolder, `${app.getName()}.lnk`)
+      
+      if (enabled) {
+        const exePath = app.getPath('exe')
+        const workingDir = path.dirname(exePath)
+        
+        const escapedShortcutPath = shortcutPath.replace(/'/g, "''").replace(/\\/g, '\\')
+        const escapedExePath = exePath.replace(/'/g, "''").replace(/\\/g, '\\')
+        const escapedWorkingDir = workingDir.replace(/'/g, "''").replace(/\\/g, '\\')
+        
+        const psScript = `$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${escapedShortcutPath}'); $Shortcut.TargetPath = '${escapedExePath}'; $Shortcut.WorkingDirectory = '${escapedWorkingDir}'; $Shortcut.Save()`
+        
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`, { stdio: 'ignore' }, (error) => {
+          if (error) {
+            console.error('Error managing startup shortcut:', error)
+          }
+        })
+      } else {
+        if (fs.existsSync(shortcutPath)) {
+          fs.unlink(shortcutPath, (error) => {
+            if (error) {
+              console.error('Error removing startup shortcut:', error)
+            }
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error managing startup shortcut:', error)
     }
-  } catch (error) {
-    console.error('Error managing startup shortcut:', error)
-  }
+  })
 }
 
 function createTray() {
@@ -171,20 +248,34 @@ function createTray() {
     tray.setToolTip('CYC Annotate')
 
     tray.setContextMenu(Menu.buildFromTemplate([
-      { label: 'Clear Canvas', click: () => {
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('clear')
-        }
-      }},
       { label: 'Settings', click: () => {
-        if (settingsWin) {
+        if (settingsWin && !settingsWin.isDestroyed()) {
+          if (settingsWin.isMinimized()) settingsWin.restore()
           settingsWin.focus()
         } else {
           ipcMain.emit('open-settings')
         }
       }},
-      { label: 'Relaunch', click: () => {
-        app.relaunch()
+      { label: 'Relaunch', click: async () => {
+        if (win && !win.isDestroyed()) {
+          try {
+            const annotationsData = await win.webContents.executeJavaScript(`
+              (function() {
+                return JSON.stringify({
+                  elements: state.elements,
+                  nextElementId: state.nextElementId
+                });
+              })()
+            `)
+            if (annotationsData) {
+              const tempPath = path.join(app.getPath('userData'), 'relaunch-annotations.json')
+              fs.writeFileSync(tempPath, annotationsData, 'utf8')
+            }
+          } catch (e) {
+            console.error('Error saving annotations for relaunch:', e)
+          }
+        }
+        app.relaunch({ args: process.argv.slice(1).concat(['--restore-annotations']) })
         app.exit()
       }},
       { type: 'separator' },
@@ -233,6 +324,7 @@ function showOverlay() {
     ensureAlwaysOnTop()
     win.setOpacity(0) 
     win.show()
+    standbyModeEnabled = false
     win.setIgnoreMouseEvents(false)
     
     let opacity = 0
@@ -257,6 +349,7 @@ function showOverlay() {
 
   if (win && !win.isDestroyed()) {
     win.webContents.send('draw-mode', true)
+    win.webContents.send('disable-standby-mode')
   }
 }
 
@@ -382,56 +475,64 @@ function showDesktopNotification(title, body, filePath) {
     }
   })
 
-  notificationWin.setIgnoreMouseEvents(false, { forward: false })
-  notificationWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  notificationWin.setAlwaysOnTop(true, 'screen-saver', 1)
+  const thisNotificationWin = notificationWin
+
+  thisNotificationWin.setIgnoreMouseEvents(false, { forward: false })
+  thisNotificationWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  thisNotificationWin.setAlwaysOnTop(true, 'screen-saver', 1)
   
-  notificationWin.loadFile('src/notification/notification.html')
+  thisNotificationWin.loadFile('src/notification/notification.html')
   
-  disableDefaultShortcuts(notificationWin)
+  disableDefaultShortcuts(thisNotificationWin)
   
-  notificationWin.webContents.once('did-finish-load', () => {
-    if (notificationWin && !notificationWin.isDestroyed()) {
+  thisNotificationWin.webContents.once('did-finish-load', () => {
+    if (thisNotificationWin && !thisNotificationWin.isDestroyed()) {
       const accentColor = getSetting('accent-color', '#3bbbf6')
-      notificationWin.webContents.send('set-notification-data', {
+      const currentTheme = getSetting('theme', 'system')
+      if (currentTheme === 'system') {
+        const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+        thisNotificationWin.webContents.send('os-theme-changed', effectiveTheme)
+      } else {
+        thisNotificationWin.webContents.send('theme-changed', currentTheme)
+      }
+      thisNotificationWin.webContents.send('set-notification-data', {
         title: title,
         body: body,
         accentColor: accentColor,
         filePath: filePath
       })
       
-      notificationWin.show()
+      thisNotificationWin.show()
       
       let opacity = 0
       const fadeInInterval = setInterval(() => {
-        if (!notificationWin || notificationWin.isDestroyed()) {
+        if (!thisNotificationWin || thisNotificationWin.isDestroyed()) {
           clearInterval(fadeInInterval)
           return
         }
         opacity += 0.1
         if (opacity >= 1) {
-          notificationWin.setOpacity(1)
+          thisNotificationWin.setOpacity(1)
           clearInterval(fadeInInterval)
           
           setTimeout(() => {
-            if (notificationWin && !notificationWin.isDestroyed()) {
+            if (thisNotificationWin && !thisNotificationWin.isDestroyed()) {
               let fadeOpacity = 1
               const startTime = Date.now()
               const duration = 150
               
               const fadeOut = () => {
-                if (!notificationWin || notificationWin.isDestroyed()) {
+                if (!thisNotificationWin || thisNotificationWin.isDestroyed()) {
                   return
                 }
                 const elapsed = Date.now() - startTime
                 fadeOpacity = Math.max(0, 1 - (elapsed / duration))
                 
                 if (fadeOpacity <= 0) {
-                  notificationWin.setOpacity(0)
-                  notificationWin.close()
-                  notificationWin = null
+                  thisNotificationWin.setOpacity(0)
+                  thisNotificationWin.close()
                 } else {
-                  notificationWin.setOpacity(fadeOpacity)
+                  thisNotificationWin.setOpacity(fadeOpacity)
                   setTimeout(fadeOut, 5)
                 }
               }
@@ -439,14 +540,16 @@ function showDesktopNotification(title, body, filePath) {
             }
           }, 3000)
         } else {
-          notificationWin.setOpacity(opacity)
+          thisNotificationWin.setOpacity(opacity)
         }
       }, 16)
     }
   })
 
-  notificationWin.on('closed', () => {
-    notificationWin = null
+  thisNotificationWin.on('closed', () => {
+    if (notificationWin === thisNotificationWin) {
+      notificationWin = null
+    }
   })
 }
 
@@ -488,6 +591,9 @@ function createOnboardingWindow() {
       } else {
         onboardingWin.webContents.send('theme-changed', currentTheme)
       }
+      
+      const currentAccentColor = getSetting('accent-color', '#3bbbf6')
+      onboardingWin.webContents.send('accent-color-changed', currentAccentColor)
     }
   })
 
@@ -520,6 +626,8 @@ function createMainWindow() {
 
   win.loadFile('src/renderer/index.html')
 
+  standbyModeEnabled = false
+
   disableDefaultShortcuts(win)
 
   win.webContents.once('did-finish-load', () => {
@@ -529,6 +637,26 @@ function createMainWindow() {
       win.webContents.send('os-theme-changed', effectiveTheme)
     } else {
       win.webContents.send('theme-changed', currentTheme)
+    }
+    
+    if (process.argv.includes('--restore-annotations')) {
+      const tempPath = path.join(app.getPath('userData'), 'relaunch-annotations.json')
+      try {
+        if (fs.existsSync(tempPath)) {
+          const annotationsData = fs.readFileSync(tempPath, 'utf8')
+          const parsed = JSON.parse(annotationsData)
+          if (parsed && parsed.elements && parsed.elements.length > 0) {
+            win.webContents.send('restore-annotations', parsed)
+          }
+          fs.unlinkSync(tempPath)
+        }
+      } catch (e) {
+        console.error('Error restoring annotations:', e)
+        try { fs.unlinkSync(tempPath) } catch (unlinkErr) {}
+      }
+      setTimeout(() => {
+        showOverlay()
+      }, 100)
     }
   })
 
@@ -565,6 +693,12 @@ function createMainWindow() {
       if (win && !win.isDestroyed()) {
       win.webContents.send('draw-mode', false)
       }
+    }
+  })
+
+  ipcMain.on('focus-window', () => {
+    if (win && !win.isDestroyed()) {
+      win.focus()
     }
   })
 
@@ -629,7 +763,8 @@ function createMainWindow() {
       }
     }
     
-    if (settingsWin) {
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      if (settingsWin.isMinimized()) settingsWin.restore()
       settingsWin.focus()
       return
     }
@@ -680,6 +815,11 @@ function createMainWindow() {
 
     settingsWin.on('closed', () => {
       settingsWin = null
+      if (win && !win.isDestroyed()) {
+        const standbyInToolbar = getSetting('standby-in-toolbar', true)
+        const reduceClutter = getSetting('reduce-clutter', true)
+        win.webContents.send('sync-toolbar-settings', { standbyInToolbar, reduceClutter })
+      }
     })
   })
 
@@ -727,6 +867,9 @@ function createMainWindow() {
     if (settingsWin && !settingsWin.isDestroyed()) {
       settingsWin.webContents.send('theme-changed', theme)
     }
+    if (notificationWin && !notificationWin.isDestroyed()) {
+      notificationWin.webContents.send('theme-changed', theme)
+    }
   })
 
   ipcMain.handle('get-os-theme', () => {
@@ -746,6 +889,9 @@ function createMainWindow() {
       if (onboardingWin && !onboardingWin.isDestroyed()) {
         onboardingWin.webContents.send('os-theme-changed', effectiveTheme)
       }
+      if (notificationWin && !notificationWin.isDestroyed()) {
+        notificationWin.webContents.send('os-theme-changed', effectiveTheme)
+      }
     }
   })
 
@@ -753,6 +899,9 @@ function createMainWindow() {
     setSetting('accent-color', color)
     if (win && !win.isDestroyed()) {
       win.webContents.send('accent-color-changed', color)
+    }
+    if (onboardingWin && !onboardingWin.isDestroyed()) {
+      onboardingWin.webContents.send('accent-color-changed', color)
     }
   })
 
@@ -807,11 +956,64 @@ function createMainWindow() {
     setSetting('screenshot-notification', enabled)
   })
 
+  ipcMain.on('copy-snapshot-clipboard-changed', (event, enabled) => {
+    setSetting('copy-snapshot-clipboard', enabled)
+  })
+
+ipcMain.on('optimized-rendering-changed', (event, enabled) => {
+  setSetting('optimized-rendering', enabled)
+})
+
+ipcMain.on('hardware-acceleration-changed', (event, enabled) => {
+  setSetting('hardware-acceleration', enabled)
+})
+
+ipcMain.handle('show-relaunch-dialog', async (event, settingName) => {
+  return await dialogs.showRelaunchDialog(settingsWin, settingName)
+})
+
   ipcMain.on('reduce-clutter-changed', (event, enabled) => {
     setSetting('reduce-clutter', enabled)
     if (win && !win.isDestroyed()) {
       win.webContents.send('reduce-clutter-changed', enabled)
     }
+  })
+
+  ipcMain.on('disable-toolbar-moving-changed', (event, enabled) => {
+    setSetting('disable-toolbar-moving', enabled)
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('disable-toolbar-moving-changed', enabled)
+    }
+  })
+
+  ipcMain.on('standby-in-toolbar-changed', (event, enabled) => {
+    setSetting('standby-in-toolbar', enabled)
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('standby-in-toolbar-changed', enabled)
+      setTimeout(() => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('standby-in-toolbar-changed', enabled)
+        }
+      }, 100)
+    }
+  })
+
+  ipcMain.on('set-standby-mode', (event, enabled) => {
+    standbyModeEnabled = enabled
+    if (win && !win.isDestroyed()) {
+      if (enabled) {
+        win.setIgnoreMouseEvents(true, { forward: true })
+        startStandbyPolling()
+      } else {
+        win.setIgnoreMouseEvents(false)
+        stopStandbyPolling()
+        toolbarBounds = null
+      }
+    }
+  })
+
+  ipcMain.on('update-toolbar-bounds', (event, bounds) => {
+    toolbarBounds = bounds
   })
 
   ipcMain.on('toolbar-bg-changed', (event, data) => {
@@ -931,19 +1133,65 @@ ipcMain.handle('get-system-info', () => {
   return systemInfo
 })
 
+ipcMain.handle('show-system-details-dialog', async () => {
+  const systemInfo = {
+    version: app.getVersion(),
+    arch: process.arch,
+    electronVersion: process.versions.electron,
+    chromeVersion: process.versions.chrome,
+    nodeVersion: process.versions.node,
+    osVersion: process.platform === 'win32' ? getWindowsVersion() : 
+               process.platform === 'darwin' ? `macOS ${os.release()}` : 
+               `${process.platform} ${os.release()}`
+  }
+  await dialogs.showSystemDetailsDialog(settingsWin, systemInfo)
+})
+
 ipcMain.handle('show-reset-confirmation', async (event) => {
-  const result = await dialog.showMessageBox(settingsWin || null, {
-    type: 'warning',
-    title: 'Reset All Settings',
-    message: 'Are you sure you want to reset all settings?',
-    detail: 'This action cannot be undone. All your settings will be restored to their default values.',
-    buttons: ['Cancel', 'Reset'],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true
-  })
+  return await dialogs.showResetConfirmation(settingsWin)
+})
+
+ipcMain.handle('show-settings-reset-dialog', async () => {
+  await dialogs.showSettingsResetDialog(settingsWin)
+})
+
+ipcMain.handle('show-duplicate-warning', async (event, elementCount) => {
+  const dismissedDialogs = getSetting('dismissed-dialogs', {})
+  if (dismissedDialogs['duplicate-warning']) {
+    return true
+  }
   
-  return result.response === 1
+  const result = await dialogs.showDuplicateWarning(win, elementCount)
+  
+  if (result.dontShowAgain && result.confirmed) {
+    dismissedDialogs['duplicate-warning'] = true
+    setSetting('dismissed-dialogs', dismissedDialogs)
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      settingsWin.webContents.send('dismissed-dialogs-updated')
+    }
+  }
+  
+  return result.confirmed
+})
+
+ipcMain.handle('get-dismissed-dialogs', () => {
+  return getSetting('dismissed-dialogs', {})
+})
+
+ipcMain.on('reset-dismissed-dialog', (event, dialogId) => {
+  const dismissedDialogs = getSetting('dismissed-dialogs', {})
+  delete dismissedDialogs[dialogId]
+  setSetting('dismissed-dialogs', dismissedDialogs)
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send('dismissed-dialogs-updated')
+  }
+})
+
+ipcMain.on('reset-all-dismissed-dialogs', () => {
+  setSetting('dismissed-dialogs', {})
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send('dismissed-dialogs-updated')
+  }
 })
 
 ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
@@ -954,18 +1202,15 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
   })
 
   ipcMain.on('save-directory-changed', (event, directoryPath) => {
-    setSetting('save-directory-path', directoryPath)
+    if (!directoryPath || directoryPath.trim() === '') {
+      setSetting('save-directory-path', null)
+    } else {
+      setSetting('save-directory-path', directoryPath)
+    }
   })
 
   ipcMain.handle('select-save-directory', async () => {
-    if (!win || win.isDestroyed()) return { canceled: true }
-    
-    const result = await dialog.showOpenDialog(win, {
-      title: 'Select Save Directory',
-      properties: ['openDirectory']
-    })
-    
-    return result
+    return await dialogs.selectSaveDirectory(win)
   })
 
   ipcMain.handle('check-directory-exists', async (event, directoryPath) => {
@@ -1001,6 +1246,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
 
   ipcMain.on('get-system-settings', (event) => {
     event.returnValue = {
+      standbyInToolbar: getSetting('standby-in-toolbar', true),
       showTrayIcon: getSetting('show-tray-icon', true),
       launchOnStartup: getSetting('launch-on-startup', false)
     }
@@ -1044,8 +1290,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
       captureOverlayActive = true
       
       if (win && !win.isDestroyed()) {
-        win.hide()
-        win.setIgnoreMouseEvents(true, { forward: true })
+        win.setIgnoreMouseEvents(true, { forward: false })
         win.setAlwaysOnTop(false)
         setTimeout(() => {
           if (win && !win.isDestroyed() && captureOverlayWin && !captureOverlayWin.isDestroyed()) {
@@ -1078,12 +1323,13 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
       }
 
       const bounds = targetDisplay.bounds
+      const size = targetDisplay.size
 
       captureOverlayWin = new BrowserWindow({
         x: bounds.x,
         y: bounds.y,
-        width: bounds.width,
-        height: bounds.height,
+        width: size.width,
+        height: size.height,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -1109,24 +1355,13 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
       
       captureOverlayWin.webContents.once('did-finish-load', () => {
         let accentColor = '#3bbbf6'
-        
         if (win && !win.isDestroyed()) {
-          win.webContents.executeJavaScript('localStorage.getItem("accent-color")').then((color) => {
-            if (color) {
-              accentColor = color
-            }
-            if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-              captureOverlayWin.webContents.send('set-accent-color', accentColor)
-            }
-          }).catch(() => {
-            if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-              captureOverlayWin.webContents.send('set-accent-color', accentColor)
-            }
-          })
-        } else {
-          if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-            captureOverlayWin.webContents.send('set-accent-color', accentColor)
-          }
+          win.webContents.executeJavaScript('localStorage.getItem("accent-color")')
+            .then((color) => { if (color) accentColor = color })
+            .catch(() => {})
+        }
+        if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
+          captureOverlayWin.webContents.send('set-accent-color', accentColor)
         }
       })
       
@@ -1135,6 +1370,13 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
       disableDefaultShortcuts(captureOverlayWin)
       
       captureOverlayWin.once('ready-to-show', () => {
+        const currentDisplay = screen.getDisplayMatching(captureOverlayWin.getBounds())
+        captureOverlayWin.setBounds({
+          x: currentDisplay.bounds.x,
+          y: currentDisplay.bounds.y,
+          width: currentDisplay.size.width,
+          height: currentDisplay.size.height
+        })
         captureOverlayWin.show()
         captureOverlayWin.focus()
         captureOverlayWin.moveTop()
@@ -1166,7 +1408,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
             }
             captureOverlayActive = false
             if (win && !win.isDestroyed()) {
-              win.setIgnoreMouseEvents(false)
+              restoreMouseEvents()
               ensureAlwaysOnTop()
               if (!visible) {
                 win.show()
@@ -1184,7 +1426,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
       captureOverlayWin.on('closed', () => {
         captureOverlayActive = false
         if (win && !win.isDestroyed()) {
-          win.setIgnoreMouseEvents(false)
+          restoreMouseEvents()
           ensureAlwaysOnTop()
           if (!visible) {
             win.show()
@@ -1196,7 +1438,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
       console.error('Error opening capture overlay:', error)
       captureOverlayActive = false
       if (win && !win.isDestroyed()) {
-        win.setIgnoreMouseEvents(false)
+        restoreMouseEvents()
         ensureAlwaysOnTop()
       }
     }
@@ -1214,8 +1456,11 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
 
       captureOverlayActive = false
       if (win && !win.isDestroyed()) {
-        win.setIgnoreMouseEvents(false)
+        restoreMouseEvents()
         ensureAlwaysOnTop()
+        if (!visible) {
+          win.show()
+        }
       }
 
       if (!overlayBounds || !bounds || bounds.width < 10 || bounds.height < 10) {
@@ -1291,7 +1536,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
     } catch (error) {
       console.error('Error capturing selection:', error)
       if (win && !win.isDestroyed()) {
-        win.setIgnoreMouseEvents(false)
+        restoreMouseEvents()
         win.webContents.send('capture-selection-result', null)
       }
       if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
@@ -1312,7 +1557,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
     }
       captureOverlayActive = false
       if (win && !win.isDestroyed()) {
-        win.setIgnoreMouseEvents(false)
+        restoreMouseEvents()
         ensureAlwaysOnTop()
         if (!visible) {
           win.show()
@@ -1325,32 +1570,64 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
     try {
       if (!win || win.isDestroyed()) return
 
-      const result = await dialog.showSaveDialog(win, {
-        title: 'Save Screenshot',
-        defaultPath: defaultFilename,
-        filters: [
-          { name: 'PNG Images', extensions: ['png'] },
-          { name: 'All Files', extensions: ['*'] }
-        ]
-      })
-
-      if (!result.canceled && result.filePath) {
+      const copyToClipboard = getSetting('copy-snapshot-clipboard', false)
+      const autoSaveEnabled = getSetting('auto-save-snapshots', false)
+      const saveDirectory = getSetting('save-directory-path', null)
+      const hasValidDirectory = saveDirectory?.trim() && fs.existsSync(saveDirectory)
+      
+      let savedFilePath = null
+      let clipboardCopied = false
+      const img = nativeImage.createFromDataURL(dataURL)
+      
+      if (copyToClipboard) {
         try {
-          const img = nativeImage.createFromDataURL(dataURL)
-          const buffer = img.toPNG()
-          fs.writeFileSync(result.filePath, buffer)
-          
-          const showNotification = getSetting('screenshot-notification', true)
-          if (showNotification && result.filePath) {
-            setTimeout(() => {
-              showDesktopNotification('Screenshot Saved', 'Screenshot saved successfully', result.filePath)
-            }, 100)
-          }
+          clipboard.writeImage(img)
+          clipboardCopied = true
         } catch (error) {
-          console.error('Error saving screenshot:', error)
-          dialog.showErrorBox('Save Error', 'Failed to save screenshot. Please try again.')
+          console.error('Error copying to clipboard:', error)
         }
       }
+
+      if (autoSaveEnabled && hasValidDirectory) {
+        try {
+          const buffer = img.toPNG()
+          savedFilePath = path.join(saveDirectory, `annotation-${Date.now()}.png`)
+          fs.writeFileSync(savedFilePath, buffer)
+        } catch (error) {
+          console.error('Error auto-saving screenshot:', error)
+          dialogs.showErrorBox('Auto-Save Error', 'Failed to auto-save screenshot. Please check your save directory settings.')
+        }
+      }
+
+      if (!savedFilePath && (autoSaveEnabled ? !hasValidDirectory : !copyToClipboard)) {
+        const result = await dialogs.showSaveScreenshotDialog(win, defaultFilename)
+
+        if (!result.canceled && result.filePath) {
+          try {
+            fs.writeFileSync(result.filePath, img.toPNG())
+            savedFilePath = result.filePath
+          } catch (error) {
+            console.error('Error saving screenshot:', error)
+            dialogs.showErrorBox('Save Error', 'Failed to save screenshot. Please try again.')
+          }
+        }
+      }
+      
+      const showNotification = getSetting('screenshot-notification', true)
+      
+      setTimeout(() => {
+        if (clipboardCopied && savedFilePath) {
+          showDesktopNotification('Screenshot Saved & Copied', 'Saved and copied to clipboard', savedFilePath)
+        } else if (clipboardCopied) {
+          if (showNotification) {
+            showDesktopNotification('Screenshot Copied', 'Copied to clipboard', null)
+          }
+        } else if (savedFilePath) {
+          if (showNotification) {
+            showDesktopNotification('Screenshot Saved', 'Screenshot saved successfully', savedFilePath)
+          }
+        }
+      }, 100)
       
       if (win && !win.isDestroyed()) {
         win.webContents.send('screenshot-saved')
@@ -1468,6 +1745,10 @@ app.whenReady().then(() => {
               settingsWin.webContents.send('accent-color-changed', newColor)
               settingsWin.webContents.send('windows-accent-color-changed', newColor)
             }
+            if (onboardingWin && !onboardingWin.isDestroyed()) {
+              onboardingWin.webContents.send('accent-color-changed', newColor)
+              onboardingWin.webContents.send('windows-accent-color-changed', newColor)
+            }
           }
         }
       })
@@ -1524,15 +1805,7 @@ if (!gotTheLock) {
       .map(k => k.charAt(0).toUpperCase() + k.slice(1).toLowerCase())
       .join('+')
     
-    dialog.showMessageBox(null, {
-      type: 'warning',
-      title: 'CYC Annotate',
-      message: 'CYC Annotate is already running',
-      detail: `Press ${formattedShortcut} to toggle the annotation overlay.`,
-      buttons: ['OK'],
-      defaultId: 0,
-      noLink: true
-    })
+    dialogs.showSecondInstanceWarning(formattedShortcut)
     
     if (win && !win.isDestroyed()) {
       if (win.isMinimized()) win.restore()
@@ -1567,6 +1840,16 @@ if (!gotTheLock) {
       nativeTheme.themeSource = 'dark'
     } else {
       nativeTheme.themeSource = 'system'
+    }
+    
+    if (!process.argv.includes('--restore-annotations')) {
+      const tempPath = path.join(app.getPath('userData'), 'relaunch-annotations.json')
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath)
+        }
+      } catch (e) {
+      }
     }
     
     const onboardingCompleted = getSetting('onboarding-completed', false)

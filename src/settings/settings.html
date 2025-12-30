@@ -59,6 +59,10 @@
           <span class="material-symbols-outlined">settings</span>
           <span>System</span>
         </button>
+        <button class="nav-item" data-category="labs">
+          <span class="material-symbols-outlined">science</span>
+          <span>Labs</span>
+        </button>
         <button class="nav-item" data-category="reset">
           <span class="material-symbols-outlined">restart_alt</span>
           <span>Reset</span>
@@ -166,6 +170,18 @@
                 <label for="reduce-clutter-enabled" class="toggle-label"></label>
               </div>
             </div>
+            <div class="setting-sub-item" id="standby-in-toolbar-wrapper" data-keywords="standby pause toolbar reduce clutter visible">
+              <div class="setting-row">
+                <div class="setting-label-wrapper" data-toggle-for="standby-in-toolbar">
+                  <label>Show Standby in Toolbar</label>
+                  <span class="setting-description">Keep the standby button visible in the main toolbar when Reduce Clutter is enabled. Standby mode pauses drawing and lets you interact with windows behind the overlay.</span>
+                </div>
+                <div class="toggle-switch">
+                  <input type="checkbox" id="standby-in-toolbar" checked>
+                  <label for="standby-in-toolbar" class="toggle-label"></label>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div class="setting-item" data-keywords="toolbar background accent color tint">
@@ -180,6 +196,20 @@
               </div>
             </div>
           </div>
+          
+          <div class="setting-item" data-keywords="toolbar move drag disable lock position">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="disable-toolbar-moving">
+                <label>Disable Toolbar Moving</label>
+                <span class="setting-description">Prevent the toolbar from being moved by dragging</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="disable-toolbar-moving">
+                <label for="disable-toolbar-moving" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
         </div>
       </div>
       
@@ -202,6 +232,7 @@
       
       <div class="settings-section" data-section="behavior" data-category="behavior">
         <div class="section-content">
+          <h3 class="setting-subsection-title">Notifications & Feedback</h3>
           <div class="setting-item" data-keywords="sound effects audio play sounds">
             <div class="setting-row">
               <div class="setting-label-wrapper" data-toggle-for="sounds-enabled">
@@ -215,19 +246,6 @@
             </div>
           </div>
           
-          <div class="setting-item" data-keywords="text solve math expression calculate automatic">
-            <div class="setting-row">
-              <div class="setting-label-wrapper" data-toggle-for="text-solve-enabled">
-                <label>Text and Solve</label>
-                <span class="setting-description">Automatically solve math expressions in text (e.g., 1+1 = 2)</span>
-              </div>
-              <div class="toggle-switch">
-                <input type="checkbox" id="text-solve-enabled">
-                <label for="text-solve-enabled" class="toggle-label"></label>
-              </div>
-            </div>
-          </div>
-          
           <div class="setting-item" data-keywords="screenshot notification alert capture">
             <div class="setting-row">
               <div class="setting-label-wrapper" data-toggle-for="screenshot-notification">
@@ -237,6 +255,20 @@
               <div class="toggle-switch">
                 <input type="checkbox" id="screenshot-notification" checked>
                 <label for="screenshot-notification" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
+          <h3 class="setting-subsection-title">Snapshots</h3>
+          <div class="setting-item" data-keywords="copy snapshot clipboard clipboard copy">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="copy-snapshot-clipboard">
+                <label>Copy Snapshot to Clipboard</label>
+                <span class="setting-description">Copy snapshots to clipboard and skip the save dialog</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="copy-snapshot-clipboard">
+                <label for="copy-snapshot-clipboard" class="toggle-label"></label>
               </div>
             </div>
           </div>
@@ -259,6 +291,20 @@
                   <span class="material-symbols-outlined">folder</span>
                   <span>Choose Folder</span>
                 </button>
+              </div>
+            </div>
+          </div>
+          
+          <h3 class="setting-subsection-title">Text & Tools</h3>
+          <div class="setting-item" data-keywords="text solve math expression calculate automatic">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="text-solve-enabled">
+                <label>Text and Solve</label>
+                <span class="setting-description">Automatically solve math expressions in text (e.g., 1+1 = 2)</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="text-solve-enabled">
+                <label for="text-solve-enabled" class="toggle-label"></label>
               </div>
             </div>
           </div>
@@ -295,6 +341,48 @@
         </div>
       </div>
       
+      <div class="settings-section" data-section="labs" data-category="labs">
+        <div class="section-content">
+          <div class="labs-warning" style="margin-bottom: 24px; padding: 16px; background: var(--section-bg, rgba(255, 255, 255, 0.05)); border-radius: 8px; border-left: 3px solid #ffa500;">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <span class="material-symbols-outlined" style="color: #ffa500; flex-shrink: 0; margin-top: 2px;">science</span>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">Experimental Features</div>
+                <div style="font-size: 13px; color: var(--text-primary); opacity: 0.7; line-height: 1.4;">
+                  These features are experimental and may be unstable or change in future updates. Use at your own risk.
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-item" data-keywords="performance optimisation rendering canvas">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="optimized-rendering">
+                <label>Optimised Rendering</label>
+                <span class="setting-description">Use optimised canvas rendering for better performance (may cause visual glitches)</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="optimized-rendering">
+                <label for="optimized-rendering" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-item" data-keywords="hardware acceleration gpu rendering">
+            <div class="setting-row">
+              <div class="setting-label-wrapper" data-toggle-for="hardware-acceleration">
+                <label>Hardware Acceleration</label>
+                <span class="setting-description">Enable GPU-accelerated rendering (may improve performance on some systems)</span>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="hardware-acceleration">
+                <label for="hardware-acceleration" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <div class="settings-section" data-section="reset" data-category="reset">
         <div class="section-content">
           <div class="reset-buttons-group">
@@ -313,6 +401,23 @@
               <p class="reset-description">View the welcome tutorial and setup guide again</p>
             </div>
           </div>
+          
+          <div class="dismissed-dialogs-section" data-keywords="dialogs dismissed don't show again hidden">
+            <button class="collapsible-header" id="dismissed-dialogs-toggle">
+              <span class="material-symbols-outlined expand-icon">expand_more</span>
+              <span>Reset "Don't Show Again" Dialogs</span>
+              <span class="dismissed-count" id="dismissed-count"></span>
+            </button>
+            <div class="collapsible-content" id="dismissed-dialogs-content">
+              <p class="dismissed-description">Dialogs you've hidden with "Don't show again" can be re-enabled here</p>
+              <div id="dismissed-dialogs-list" class="dismissed-dialogs-list">
+                <div class="no-dismissed-dialogs">
+                  <span class="material-symbols-outlined">check_circle</span>
+                  <span>All dialogs are enabled</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -320,11 +425,15 @@
         <div class="section-content">
           <div class="about-content">
             <span class="about-version" id="about-version">Loading...</span>
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <a href="mailto:help@creatoryogames.com" id="report-issue-btn" class="report-issue-btn">
+            <div class="about-buttons">
+              <a href="mailto:help@creatoryogames.com" id="report-issue-btn" class="about-btn">
                 <span class="material-symbols-outlined">bug_report</span>
                 <span>Report Issue</span>
               </a>
+              <button id="view-details-btn" class="about-btn">
+                <span class="material-symbols-outlined">info</span>
+                <span>View Details</span>
+              </button>
             </div>
           </div>
         </div>

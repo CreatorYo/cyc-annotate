@@ -155,6 +155,11 @@ function normalizeHex(hex) {
   return hex
 }
 
+function getColorForPicker(color) {
+  let normalized = normalizeHex(color)
+  return normalized.length === 9 ? normalized.substring(0, 7) : normalized
+}
+
 function darkenTintColor(hexColor, theme) {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hexColor.slice(i, i + 2), 16))
   const effectiveTheme = theme || document.body.getAttribute('data-theme') || 'dark'
@@ -208,6 +213,10 @@ function updateAccentColor(color) {
   
   localStorage.setItem('accent-color', normalizedColor)
 
+  if (accentColorPicker) {
+    accentColorPicker.value = getColorForPicker(normalizedColor)
+  }
+
   updateLayoutButtonColors()
   updateThemeButtonColors()
   updateToggleSwitchColor()
@@ -244,13 +253,19 @@ if (accentColorPicker) {
 }
 
 if (accentColorPreview && accentColorPicker) {
+  const syncPickerValue = () => {
+    const currentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
+    const pickerColor = getColorForPicker(currentColor)
+    accentColorPicker.value = pickerColor
+  }
+  
   accentColorPreview.addEventListener('click', () => {
-    accentColorPicker.focus()
-    accentColorPicker.click()
+    syncPickerValue()
+    setTimeout(() => accentColorPicker.click(), 10)
   })
   
   accentColorPicker.addEventListener('focus', () => {
-    accentColorPicker.click()
+    syncPickerValue()
   })
 }
 
@@ -642,6 +657,34 @@ if (toolbarAccentBgCheckbox) {
   updateToolbarBackgroundColor()
 }
 
+const disableToolbarMovingCheckbox = document.getElementById('disable-toolbar-moving')
+if (disableToolbarMovingCheckbox) {
+  const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving')
+  if (disableToolbarMoving !== null) {
+    disableToolbarMovingCheckbox.checked = disableToolbarMoving === 'true'
+  }
+  
+  disableToolbarMovingCheckbox.addEventListener('change', (e) => {
+    localStorage.setItem('disable-toolbar-moving', e.target.checked ? 'true' : 'false')
+    ipcRenderer.send('disable-toolbar-moving-changed', e.target.checked)
+  })
+}
+
+const standbyInToolbarCheckbox = document.getElementById('standby-in-toolbar')
+if (standbyInToolbarCheckbox) {
+  const standbyInToolbar = localStorage.getItem('standby-in-toolbar')
+  if (standbyInToolbar !== null) {
+    standbyInToolbarCheckbox.checked = standbyInToolbar === 'true'
+  } else {
+    standbyInToolbarCheckbox.checked = true
+  }
+  
+  standbyInToolbarCheckbox.addEventListener('change', (e) => {
+    localStorage.setItem('standby-in-toolbar', e.target.checked ? 'true' : 'false')
+    ipcRenderer.send('standby-in-toolbar-changed', e.target.checked)
+  })
+}
+
 const launchOnStartupCheckbox = document.getElementById('launch-on-startup')
 if (launchOnStartupCheckbox) {
   const launchOnStartup = localStorage.getItem('launch-on-startup')
@@ -667,6 +710,21 @@ if (screenshotNotificationCheckbox) {
   screenshotNotificationCheckbox.addEventListener('change', (e) => {
     localStorage.setItem('screenshot-notification', e.target.checked)
     ipcRenderer.send('screenshot-notification-changed', e.target.checked)
+  })
+}
+
+const copySnapshotClipboardCheckbox = document.getElementById('copy-snapshot-clipboard')
+if (copySnapshotClipboardCheckbox) {
+  const copySnapshotClipboard = localStorage.getItem('copy-snapshot-clipboard')
+  if (copySnapshotClipboard !== null) {
+    copySnapshotClipboardCheckbox.checked = copySnapshotClipboard === 'true'
+  } else {
+    copySnapshotClipboardCheckbox.checked = false
+  }
+  
+  copySnapshotClipboardCheckbox.addEventListener('change', (e) => {
+    localStorage.setItem('copy-snapshot-clipboard', e.target.checked)
+    ipcRenderer.send('copy-snapshot-clipboard-changed', e.target.checked)
   })
 }
 
@@ -856,6 +914,14 @@ function initToggleLabelClick() {
 }
 
 const reduceClutterCheckbox = document.getElementById('reduce-clutter-enabled')
+const standbyInToolbarWrapper = document.getElementById('standby-in-toolbar-wrapper')
+
+function updateStandbySubSettingVisibility() {
+  if (standbyInToolbarWrapper && reduceClutterCheckbox) {
+    standbyInToolbarWrapper.style.display = reduceClutterCheckbox.checked ? 'block' : 'none'
+  }
+}
+
 if (reduceClutterCheckbox) {
   const reduceClutter = localStorage.getItem('reduce-clutter')
   if (reduceClutter !== null) {
@@ -864,9 +930,12 @@ if (reduceClutterCheckbox) {
     reduceClutterCheckbox.checked = true
   }
   
+  updateStandbySubSettingVisibility()
+  
   reduceClutterCheckbox.addEventListener('change', (e) => {
     localStorage.setItem('reduce-clutter', e.target.checked ? 'true' : 'false')
     ipcRenderer.send('reduce-clutter-changed', e.target.checked)
+    updateStandbySubSettingVisibility()
   })
 }
 
@@ -939,6 +1008,12 @@ if (resetEverythingBtn) {
       ipcRenderer.send('screenshot-notification-changed', true)
     }
     
+    if (copySnapshotClipboardCheckbox) {
+      copySnapshotClipboardCheckbox.checked = false
+      localStorage.setItem('copy-snapshot-clipboard', false)
+      ipcRenderer.send('copy-snapshot-clipboard-changed', false)
+    }
+    
     if (reduceClutterCheckbox) {
       reduceClutterCheckbox.checked = true
       localStorage.setItem('reduce-clutter', 'true')
@@ -953,9 +1028,46 @@ if (resetEverythingBtn) {
         saveDirectoryWrapper.style.display = 'none'
       }
       localStorage.removeItem('save-directory-path')
+      ipcRenderer.send('save-directory-changed', null)
       if (saveDirectoryPath) {
         saveDirectoryPath.textContent = 'No directory selected'
       }
+    }
+
+    if (toolbarAccentBgCheckbox) {
+      toolbarAccentBgCheckbox.checked = false
+      localStorage.setItem('toolbar-accent-bg', 'false')
+      updateToolbarBackgroundColor()
+    }
+    
+    if (disableToolbarMovingCheckbox) {
+      disableToolbarMovingCheckbox.checked = false
+      localStorage.setItem('disable-toolbar-moving', 'false')
+      ipcRenderer.send('disable-toolbar-moving-changed', false)
+    }
+    
+    if (standbyInToolbarCheckbox) {
+      standbyInToolbarCheckbox.checked = true
+      localStorage.setItem('standby-in-toolbar', 'true')
+      ipcRenderer.send('standby-in-toolbar-changed', true)
+    }
+
+    if (syncWindowsAccentBtn) {
+      syncWindowsAccentBtn.classList.remove('active')
+      localStorage.setItem('sync-windows-accent', 'false')
+      ipcRenderer.send('toggle-windows-accent-sync', false)
+    }
+
+    if (optimizedRenderingCheckbox) {
+      optimizedRenderingCheckbox.checked = false
+      localStorage.setItem('optimized-rendering', 'false')
+      ipcRenderer.send('optimized-rendering-changed', false)
+    }
+
+    if (hardwareAccelerationCheckbox) {
+      hardwareAccelerationCheckbox.checked = false
+      localStorage.setItem('hardware-acceleration', 'false')
+      ipcRenderer.send('hardware-acceleration-changed', false)
     }
 
     localStorage.removeItem('toolbar-x')
@@ -963,10 +1075,89 @@ if (resetEverythingBtn) {
 
     ipcRenderer.send('reset-everything')
     
-    alert('All settings have been reset to defaults!')
+    ipcRenderer.send('reset-all-dismissed-dialogs')
+    loadDismissedDialogs()
+    
+    await ipcRenderer.invoke('show-settings-reset-dialog')
   }
 })
 }
+
+const DIALOG_INFO = {
+  'duplicate-warning': {
+    name: 'Duplicate Many Elements',
+    description: 'Warning when duplicating a large number of elements',
+    icon: 'content_copy'
+  }
+}
+
+const dismissedDialogsToggle = document.getElementById('dismissed-dialogs-toggle')
+const dismissedDialogsContent = document.getElementById('dismissed-dialogs-content')
+const dismissedDialogsList = document.getElementById('dismissed-dialogs-list')
+const dismissedCount = document.getElementById('dismissed-count')
+
+if (dismissedDialogsToggle) {
+  dismissedDialogsToggle.addEventListener('click', () => {
+    dismissedDialogsToggle.classList.toggle('expanded')
+    dismissedDialogsContent.classList.toggle('expanded')
+  })
+}
+
+async function loadDismissedDialogs() {
+  try {
+    const dismissedDialogs = await ipcRenderer.invoke('get-dismissed-dialogs')
+    const dialogIds = Object.keys(dismissedDialogs || {}).filter(id => dismissedDialogs[id])
+    
+    if (dismissedCount) {
+      dismissedCount.textContent = dialogIds.length > 0 ? dialogIds.length : ''
+    }
+    
+    if (dismissedDialogsList) {
+      if (dialogIds.length === 0) {
+        dismissedDialogsList.innerHTML = `
+          <div class="no-dismissed-dialogs">
+            <span class="material-symbols-outlined">check_circle</span>
+            <span>All dialogs are enabled</span>
+          </div>
+        `
+      } else {
+        dismissedDialogsList.innerHTML = dialogIds.map(id => {
+          const info = DIALOG_INFO[id] || { name: id, description: '', icon: 'info' }
+          return `
+            <div class="dismissed-dialog-item" data-dialog-id="${id}">
+              <div class="dismissed-dialog-icon">
+                <span class="material-symbols-outlined">${info.icon}</span>
+              </div>
+              <div class="dismissed-dialog-info">
+                <span class="dismissed-dialog-name">${info.name}</span>
+                <span class="dismissed-dialog-desc">${info.description}</span>
+              </div>
+              <button class="restore-dialog-btn" data-dialog-id="${id}" title="Re-enable this dialog">
+                <span class="material-symbols-outlined">visibility</span>
+              </button>
+            </div>
+          `
+        }).join('')
+        
+        dismissedDialogsList.querySelectorAll('.restore-dialog-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const dialogId = btn.dataset.dialogId
+            ipcRenderer.send('reset-dismissed-dialog', dialogId)
+            await loadDismissedDialogs()
+          })
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('Could not load dismissed dialogs:', e)
+  }
+}
+
+ipcRenderer.on('dismissed-dialogs-updated', () => {
+  loadDismissedDialogs()
+})
+
+setTimeout(() => loadDismissedDialogs(), 100)
 
 const settingsSearch = document.getElementById('settings-search')
 const clearSearchBtn = document.getElementById('clear-search')
@@ -978,16 +1169,18 @@ const categoryTitles = {
   appearance: { title: 'Appearance', subtitle: 'Customise your app\'s look and feel' },
   toolbar: { title: 'Toolbar', subtitle: 'Configure toolbar layout and display options' },
   shortcuts: { title: 'Shortcuts', subtitle: 'Manage keyboard shortcuts' },
-  behavior: { title: 'Behavior', subtitle: 'Customize how the app behaves and responds' },
+  behavior: { title: 'Behavior', subtitle: 'Customise how the app behaves and responds' },
   system: { title: 'System', subtitle: 'System integration and startup options' },
+  labs: { title: 'Labs', subtitle: 'Experimental features and advanced options' },
   reset: { title: 'Reset', subtitle: 'Reset settings or view onboarding' },
   about: { title: 'About', subtitle: 'Application information and support' }
 }
 
-let currentCategory = 'appearance'
+let currentCategory = localStorage.getItem('settings-category') || 'appearance'
 
 function showCategory(category) {
   currentCategory = category
+  localStorage.setItem('settings-category', category)
   
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.remove('active')
@@ -1162,6 +1355,7 @@ if (clearSearchBtn) {
 async function initReportIssueButton() {
   try {
     const systemInfo = await ipcRenderer.invoke('get-system-info')
+    cachedSystemInfo = systemInfo
     const versionEl = document.getElementById('about-version')
     const reportBtn = document.getElementById('report-issue-btn')
     
@@ -1192,14 +1386,78 @@ ${systemInfo.osVersion ? `- Operating System: ${systemInfo.osVersion}` : `- Plat
   }
 }
 
+function initViewDetailsButton() {
+  const viewDetailsBtn = document.getElementById('view-details-btn')
+  
+  if (viewDetailsBtn) {
+    viewDetailsBtn.addEventListener('click', () => {
+      ipcRenderer.invoke('show-system-details-dialog')
+    })
+  }
+}
+
+const optimizedRenderingCheckbox = document.getElementById('optimized-rendering')
+if (optimizedRenderingCheckbox) {
+  const optimizedRendering = localStorage.getItem('optimized-rendering')
+  const initialOptimizedRendering = optimizedRendering === 'true'
+  if (optimizedRendering !== null) {
+    optimizedRenderingCheckbox.checked = initialOptimizedRendering
+  }
+  
+  optimizedRenderingCheckbox.addEventListener('change', async (e) => {
+    const newValue = e.target.checked
+    
+    if (newValue !== initialOptimizedRendering) {
+      localStorage.setItem('optimized-rendering', newValue)
+      localStorage.setItem('settings-category', 'labs')
+      ipcRenderer.send('optimized-rendering-changed', newValue)
+      
+      const shouldRelaunch = await ipcRenderer.invoke('show-relaunch-dialog', 'optimized-rendering')
+      if (shouldRelaunch) {
+      }
+    } else {
+      localStorage.setItem('optimized-rendering', newValue)
+      ipcRenderer.send('optimized-rendering-changed', newValue)
+    }
+  })
+}
+
+const hardwareAccelerationCheckbox = document.getElementById('hardware-acceleration')
+if (hardwareAccelerationCheckbox) {
+  const hardwareAcceleration = localStorage.getItem('hardware-acceleration')
+  const initialHardwareAcceleration = hardwareAcceleration === 'true'
+  if (hardwareAcceleration !== null) {
+    hardwareAccelerationCheckbox.checked = initialHardwareAcceleration
+  }
+  
+  hardwareAccelerationCheckbox.addEventListener('change', async (e) => {
+    const newValue = e.target.checked
+    
+    if (newValue !== initialHardwareAcceleration) {
+      localStorage.setItem('hardware-acceleration', newValue)
+      localStorage.setItem('settings-category', 'labs')
+      ipcRenderer.send('hardware-acceleration-changed', newValue)
+      
+      const shouldRelaunch = await ipcRenderer.invoke('show-relaunch-dialog', 'hardware-acceleration')
+      if (shouldRelaunch) {
+      }
+    } else {
+      localStorage.setItem('hardware-acceleration', newValue)
+      ipcRenderer.send('hardware-acceleration-changed', newValue)
+    }
+  })
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initReportIssueButton()
+    initViewDetailsButton()
     updateResetAccentVisibility()
     updateResetShortcutVisibility()
   })
 } else {
   initReportIssueButton()
+  initViewDetailsButton()
   updateResetAccentVisibility()
   updateResetShortcutVisibility()
 }

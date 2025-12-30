@@ -1,230 +1,58 @@
 const { ipcRenderer, nativeTheme } = require('electron')
+const { initSelectTool } = require('./selectTool.js')
+const { initThemeManager, updateToolbarBackgroundColor, getEffectiveTheme } = require('./utils/themeManager.js')
+const { initTooltips, hideAllTooltips } = require('./utils/tooltipManager.js')
+const { initAudioContext, playSound } = require('./utils/soundEffects.js')
+const { initStandbyManager } = require('./utils/standbyManager.js')
 
 const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+
+const optimizedRendering = localStorage.getItem('optimized-rendering') === 'true'
+const hardwareAcceleration = localStorage.getItem('hardware-acceleration') === 'true'
+if (hardwareAcceleration) {
+  canvas.style.willChange = 'contents'
+  canvas.style.transform = 'translateZ(0)'
+  canvas.style.backfaceVisibility = 'hidden'
+}
+
+const ctx = canvas.getContext('2d', {
+  willReadFrequently: !optimizedRendering && !hardwareAcceleration,
+  alpha: true
+})
+
+if (optimizedRendering) {
+  ctx.imageSmoothingEnabled = false
+  ctx.imageSmoothingQuality = 'low'
+}
+
+let previewCanvas = null
+let previewCtx = null
+let selectionCanvas = null
+let selectionCtx = null
 
 function resizeCanvas() {
-canvas.width = window.innerWidth
-canvas.height = window.innerHeight
+  canvas.width = window.innerWidth
+  canvas.height = window.innerHeight
+  if (selectionCanvas) {
+    selectionCanvas.width = canvas.width
+    selectionCanvas.height = canvas.height
+  }
+  if (previewCanvas) {
+    previewCanvas.width = canvas.width
+    previewCanvas.height = canvas.height
+  }
 }
 resizeCanvas()
 window.addEventListener('resize', resizeCanvas)
 
-let audioContext = null
-function initAudioContext() {
-  if (!audioContext) {
-    try {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)()
-    } catch (e) {
-      console.warn('AudioContext not available:', e)
-    }
-  }
-  if (audioContext && audioContext.state === 'suspended') {
-    audioContext.resume()
-  }
-}
-
 document.addEventListener('click', initAudioContext, { once: true })
 document.addEventListener('mousedown', initAudioContext, { once: true })
 
-function playSound(type) {
-  const soundsEnabled = document.getElementById('sounds-enabled')?.checked !== false
-  if (!soundsEnabled) return
-  
-  initAudioContext()
-  if (!audioContext) return
-  
-  try {
-    if (audioContext.state === 'suspended') {
-      audioContext.resume()
-    }
-    
-  if (type === 'trash') {
-    
-    const duration = 0.4
-    const sampleRate = audioContext.sampleRate
-    const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate)
-    const data = buffer.getChannelData(0)
-
-    for (let i = 0; i < buffer.length; i++) {
-      const t = i / sampleRate
-
-      const decay = Math.exp(-t * 6)
-
-      const impact = Math.exp(-t * 30) * 0.4
-
-      const rumble = Math.sin(2 * Math.PI * 80 * t) * 0.25 * decay
-
-      const ring = Math.sin(2 * Math.PI * 200 * t) * 0.15 * decay
-
-      const shimmer = Math.sin(2 * Math.PI * 800 * t) * 0.1 * Math.exp(-t * 15)
-
-      const noise = (Math.random() * 2 - 1) * 0.15 * decay
-
-      data[i] = (impact + rumble + ring + shimmer + noise) * decay
-    }
-    
-    const source = audioContext.createBufferSource()
-    const gainNode = audioContext.createGain()
-    
-    source.buffer = buffer
-    source.connect(gainNode)
-    gainNode.connect(audioContext.destination)
-
-    gainNode.gain.setValueAtTime(0.6, audioContext.currentTime)
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
-    
-    source.start(audioContext.currentTime)
-    source.stop(audioContext.currentTime + duration)
-    } else if (type === 'pop') {
-      
-      const duration = 0.15
-      const sampleRate = audioContext.sampleRate
-      const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate)
-      const data = buffer.getChannelData(0)
-
-      for (let i = 0; i < buffer.length; i++) {
-        const t = i / sampleRate
-
-        const decay = Math.exp(-t * 25)
-
-        const attack = Math.exp(-t * 50) * 0.6
-
-        const popFreq = Math.sin(2 * Math.PI * 400 * t) * 0.4 * decay
-
-        const crack = Math.sin(2 * Math.PI * 1200 * t) * 0.3 * Math.exp(-t * 40)
-
-        const whoosh = Math.sin(2 * Math.PI * 150 * t) * 0.2 * decay
-
-        const noise = (Math.random() * 2 - 1) * 0.15 * Math.exp(-t * 30)
-
-        data[i] = (attack + popFreq + crack + whoosh + noise) * decay
-      }
-      
-      const source = audioContext.createBufferSource()
-      const gainNode = audioContext.createGain()
-      
-      source.buffer = buffer
-      source.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-
-      gainNode.gain.setValueAtTime(0.7, audioContext.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
-      
-      source.start(audioContext.currentTime)
-      source.stop(audioContext.currentTime + duration)
-    } else if (type === 'undo' || type === 'redo') {
-      const duration = 0.2
-      const sampleRate = audioContext.sampleRate
-      const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate)
-      const data = buffer.getChannelData(0)
-
-      for (let i = 0; i < buffer.length; i++) {
-        const t = i / sampleRate
-
-        const decay = Math.exp(-t * 20)
-
-        const sweep = Math.sin(2 * Math.PI * (type === 'undo' ? 300 : 400) * t) * 0.5 * decay
-
-        const whoosh = Math.sin(2 * Math.PI * 100 * t) * 0.3 * decay
-
-        const highFreq = Math.sin(2 * Math.PI * 800 * t) * 0.2 * Math.exp(-t * 30)
-
-        const noise = (Math.random() * 2 - 1) * 0.1 * decay
-
-        data[i] = (sweep + whoosh + highFreq + noise) * decay
-      }
-      
-      const source = audioContext.createBufferSource()
-      const gainNode = audioContext.createGain()
-      
-      source.buffer = buffer
-      source.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-
-      gainNode.gain.setValueAtTime(0.5, audioContext.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
-      
-      source.start(audioContext.currentTime)
-      source.stop(audioContext.currentTime + duration)
-    } else if (type === 'capture') {
-      const duration = 0.25
-      const sampleRate = audioContext.sampleRate
-      const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate)
-      const data = buffer.getChannelData(0)
-
-      for (let i = 0; i < buffer.length; i++) {
-        const t = i / sampleRate
-
-        const decay = Math.exp(-t * 15)
-
-        const click = Math.sin(2 * Math.PI * 600 * t) * 0.5 * Math.exp(-t * 40)
-
-        const snap = Math.sin(2 * Math.PI * 1200 * t) * 0.4 * Math.exp(-t * 50)
-
-        const lowFreq = Math.sin(2 * Math.PI * 200 * t) * 0.3 * decay
-
-        const highFreq = Math.sin(2 * Math.PI * 1800 * t) * 0.2 * Math.exp(-t * 60)
-
-        const noise = (Math.random() * 2 - 1) * 0.1 * Math.exp(-t * 35)
-
-        data[i] = (click + snap + lowFreq + highFreq + noise) * decay
-      }
-      
-      const source = audioContext.createBufferSource()
-      const gainNode = audioContext.createGain()
-      
-      source.buffer = buffer
-      source.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-
-      gainNode.gain.setValueAtTime(0.6, audioContext.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
-      
-      source.start(audioContext.currentTime)
-      source.stop(audioContext.currentTime + duration)
-    } else if (type === 'color') {
-      const duration = 0.12
-      const sampleRate = audioContext.sampleRate
-      const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate)
-      const data = buffer.getChannelData(0)
-
-      for (let i = 0; i < buffer.length; i++) {
-        const t = i / sampleRate
-
-        const decay = Math.exp(-t * 30)
-
-        const chime1 = Math.sin(2 * Math.PI * 600 * t) * 0.5 * decay
-        const chime2 = Math.sin(2 * Math.PI * 900 * t) * 0.3 * decay
-
-        const sparkle = Math.sin(2 * Math.PI * 1500 * t) * 0.2 * Math.exp(-t * 50)
-
-        const warmth = Math.sin(2 * Math.PI * 300 * t) * 0.15 * decay
-
-        data[i] = (chime1 + chime2 + sparkle + warmth) * decay
-      }
-      
-      const source = audioContext.createBufferSource()
-      const gainNode = audioContext.createGain()
-      
-      source.buffer = buffer
-      source.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-
-      gainNode.gain.setValueAtTime(0.5, audioContext.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
-      
-      source.start(audioContext.currentTime)
-      source.stop(audioContext.currentTime + duration)
-    }
-  } catch (e) {
-    console.warn('Error playing sound:', e)
-  }
-}
-
 let state = {
   drawing: false,
-  enabled: true, 
+  enabled: true,
+  standbyMode: false,
+  toolBeforeStandby: null,
   tool: 'pencil',
   shapeType: 'rectangle',
   color: '#ef4444', 
@@ -235,15 +63,28 @@ let state = {
   hasDrawn: false,
   textInput: null,
   shapeStart: null,
-  shapeEnd: null
+  shapeEnd: null,
+  shapeFillEnabled: false,
+  elements: [],
+  selectedElements: [],
+  nextElementId: 1,
+  isSelecting: false,
+  selectionStart: null,
+  selectionEnd: null,
+  isDraggingSelection: false,
+  dragOffset: null,
+  isResizing: false,
+  resizeHandle: null,
+  resizeStartBounds: null,
+  hoveredElementId: null,
+  copiedElements: null,
+  editingElementId: null
 }
 
 canvas.style.pointerEvents = 'auto'
 
 let lastX = 0
 let lastY = 0
-let previewCanvas = null
-let previewCtx = null
 
 function createPreviewCanvas() {
   if (!previewCanvas) {
@@ -255,21 +96,409 @@ function createPreviewCanvas() {
     previewCanvas.style.left = '0'
     previewCanvas.style.pointerEvents = 'none'
     previewCanvas.style.zIndex = '999'
+    
+    if (hardwareAcceleration) {
+      previewCanvas.style.willChange = 'contents'
+      previewCanvas.style.transform = 'translateZ(0)'
+      previewCanvas.style.backfaceVisibility = 'hidden'
+    }
+    
     document.body.appendChild(previewCanvas)
-    previewCtx = previewCanvas.getContext('2d')
+    previewCtx = previewCanvas.getContext('2d', {
+      willReadFrequently: !optimizedRendering && !hardwareAcceleration,
+      alpha: true
+    })
+    
+    if (optimizedRendering) {
+      previewCtx.imageSmoothingEnabled = false
+      previewCtx.imageSmoothingQuality = 'low'
+    }
+  }
+}
+
+function createSelectionCanvas() {
+  if (!selectionCanvas) {
+    selectionCanvas = document.createElement('canvas')
+    selectionCanvas.width = canvas.width
+    selectionCanvas.height = canvas.height
+    selectionCanvas.style.position = 'absolute'
+    selectionCanvas.style.top = '0'
+    selectionCanvas.style.left = '0'
+    selectionCanvas.style.pointerEvents = 'none'
+    selectionCanvas.style.zIndex = '999'
+    
+    if (hardwareAcceleration) {
+      selectionCanvas.style.willChange = 'contents'
+      selectionCanvas.style.transform = 'translateZ(0)'
+      selectionCanvas.style.backfaceVisibility = 'hidden'
+    }
+    
+    document.body.appendChild(selectionCanvas)
+    selectionCtx = selectionCanvas.getContext('2d', {
+      willReadFrequently: !optimizedRendering && !hardwareAcceleration,
+      alpha: true
+    })
+    
+    if (optimizedRendering) {
+      selectionCtx.imageSmoothingEnabled = false
+      selectionCtx.imageSmoothingQuality = 'low'
+    }
+  } else {
+    selectionCanvas.width = canvas.width
+    selectionCanvas.height = canvas.height
   }
 }
 
 ctx.lineCap = 'round'
 ctx.lineJoin = 'round'
 
+let currentStroke = null
+let currentStrokePoints = []
+
+function createElement(type, data) {
+  const element = {
+    id: state.nextElementId++,
+    type: type,
+    ...data,
+    createdAt: Date.now()
+  }
+  state.elements.push(element)
+  return element
+}
+
+function redrawCanvas() {
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.globalAlpha = 1.0
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.restore()
+  
+  if (optimizedRendering) {
+    for (let i = 0; i < state.elements.length; i++) {
+      const element = state.elements[i]
+      if (element) {
+        drawElement(element)
+      }
+    }
+  } else {
+    state.elements.forEach(element => {
+      if (element) {
+        drawElement(element)
+      }
+    })
+  }
+  
+  updateSelectionOverlay()
+}
+
+function drawElement(element) {
+  if (!element) return
+  
+  ctx.save()
+  
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.setLineDash([])
+  
+  if (optimizedRendering && (element.type === 'stroke' || element.type === 'shape')) {
+    ctx.imageSmoothingEnabled = false
+  }
+  
+  if (element.type === 'stroke') {
+    ctx.strokeStyle = element.color || '#000000'
+    ctx.lineWidth = element.strokeSize || 4
+    ctx.globalAlpha = element.alpha !== undefined ? element.alpha : 1.0
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.globalCompositeOperation = element.compositeOperation || 'source-over'
+    
+    ctx.beginPath()
+    if (element.points && element.points.length > 0) {
+      ctx.moveTo(element.points[0].x, element.points[0].y)
+      for (let i = 1; i < element.points.length; i++) {
+        ctx.lineTo(element.points[i].x, element.points[i].y)
+      }
+      ctx.stroke()
+    }
+  } else if (element.type === 'shape') {
+    ctx.strokeStyle = element.color || '#000000'
+    ctx.fillStyle = element.color || '#000000'
+    ctx.lineWidth = element.strokeSize || 4
+    ctx.globalAlpha = 1.0
+    ctx.globalCompositeOperation = 'source-over'
+    
+    const x = Math.min(element.start.x, element.end.x)
+    const y = Math.min(element.start.y, element.end.y)
+    const w = Math.abs(element.end.x - element.start.x)
+    const h = Math.abs(element.end.y - element.start.y)
+    
+    if (element.shapeType === 'rectangle') {
+      if (element.filled) {
+        ctx.fillRect(x, y, w, h)
+      } else {
+        ctx.strokeRect(x, y, w, h)
+      }
+    } else if (element.shapeType === 'circle') {
+      const centerX = (element.start.x + element.end.x) / 2
+      const centerY = (element.start.y + element.end.y) / 2
+      const radius = Math.sqrt(w * w + h * h) / 2
+      ctx.beginPath()
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
+      if (element.filled) {
+        ctx.fill()
+      } else {
+        ctx.stroke()
+      }
+    } else if (element.shapeType === 'line') {
+      ctx.beginPath()
+      ctx.moveTo(element.start.x, element.start.y)
+      ctx.lineTo(element.end.x, element.end.y)
+      ctx.stroke()
+    } else if (element.shapeType === 'arrow') {
+      drawArrow(ctx, element.start.x, element.start.y, element.end.x, element.end.y)
+    } else if (element.shapeType === 'diamond') {
+      drawDiamond(ctx, element.start.x, element.start.y, element.end.x, element.end.y, element.filled)
+    } else if (element.shapeType === 'heart') {
+      drawHeart(ctx, element.start.x, element.start.y, element.end.x, element.end.y, element.filled)
+    }
+  } else if (element.type === 'text') {
+    ctx.fillStyle = element.color || '#000000'
+    ctx.globalAlpha = 1.0
+    ctx.globalCompositeOperation = 'source-over'
+    
+    const fontSize = element.fontSize || Math.max(12, (element.strokeSize || 4) * 4)
+    ctx.textBaseline = 'top'
+    
+    if (element.segments && element.segments.length > 0) {
+      const lineHeight = fontSize * 1.2
+      const maxTextWidth = canvas.width - element.x - 50
+      
+      let currentY = element.y
+      
+      element.segments.forEach((segment) => {
+        const fontStyle = segment.formatting?.italic ? 'italic' : 'normal'
+        const fontWeight = segment.formatting?.bold ? 'bold' : 'normal'
+        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+        
+        const wrappedLines = wrapText(ctx, segment.text || '', maxTextWidth)
+        
+        wrappedLines.forEach((line) => {
+          ctx.fillText(line, element.x, currentY)
+          
+          if (segment.formatting?.underline) {
+            const textWidth = ctx.measureText(line).width
+            ctx.strokeStyle = element.color || '#000000'
+            ctx.lineWidth = Math.max(1, fontSize / 15)
+            ctx.beginPath()
+            ctx.moveTo(element.x, currentY + fontSize + 2)
+            ctx.lineTo(element.x + textWidth, currentY + fontSize + 2)
+            ctx.stroke()
+          }
+          
+          currentY += lineHeight
+        })
+      })
+    }
+  }
+  
+  ctx.restore()
+}
+
+function getElementBounds(element) {
+  if (element.type === 'stroke' && element.points && element.points.length > 0) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    element.points.forEach(p => {
+      minX = Math.min(minX, p.x)
+      minY = Math.min(minY, p.y)
+      maxX = Math.max(maxX, p.x)
+      maxY = Math.max(maxY, p.y)
+    })
+    const padding = element.strokeSize / 2 + 2
+    return {
+      x: minX - padding,
+      y: minY - padding,
+      width: maxX - minX + padding * 2,
+      height: maxY - minY + padding * 2
+    }
+  } else if (element.type === 'shape') {
+    const x = Math.min(element.start.x, element.end.x)
+    const y = Math.min(element.start.y, element.end.y)
+    const w = Math.abs(element.end.x - element.start.x)
+    const h = Math.abs(element.end.y - element.start.y)
+    
+    if (element.shapeType === 'arrow') {
+      const headlen = 15
+      const padding = (element.strokeSize || 4) / 2 + 2
+      return {
+        x: x - padding,
+        y: y - padding,
+        width: w + padding * 2 + headlen,
+        height: h + padding * 2 + headlen
+      }
+    }
+    
+    const padding = (element.strokeSize || 4) / 2 + 2
+    return { 
+      x: x - padding, 
+      y: y - padding, 
+      width: w + padding * 2, 
+      height: h + padding * 2 
+    }
+  } else if (element.type === 'text') {
+    const fontSize = element.fontSize || Math.max(12, element.strokeSize * 4)
+    const lineHeight = fontSize * 1.2
+    const maxTextWidth = canvas.width - element.x - 50
+    
+    let maxWidth = 0
+    let totalLines = 0
+    
+    if (element.segments) {
+      ctx.save()
+      
+      element.segments.forEach(seg => {
+        const fontStyle = seg.formatting?.italic ? 'italic' : 'normal'
+        const fontWeight = seg.formatting?.bold ? 'bold' : 'normal'
+        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+        
+        const wrappedLines = wrapText(ctx, seg.text || '', maxTextWidth)
+        totalLines += wrappedLines.length
+        
+        wrappedLines.forEach(line => {
+          const width = ctx.measureText(line).width
+          maxWidth = Math.max(maxWidth, width)
+        })
+      })
+      
+      ctx.restore()
+    }
+    
+    return {
+      x: element.x,
+      y: element.y,
+      width: maxWidth || 100,
+      height: (totalLines || 1) * lineHeight
+    }
+  }
+  return null
+}
+
+function hitTest(x, y, element) {
+  if (element.type === 'shape' && element.shapeType === 'circle') {
+    const w = Math.abs(element.end.x - element.start.x)
+    const h = Math.abs(element.end.y - element.start.y)
+    const centerX = (element.start.x + element.end.x) / 2
+    const centerY = (element.start.y + element.end.y) / 2
+    const radius = Math.sqrt(w * w + h * h) / 2
+    
+    const dx = x - centerX
+    const dy = y - centerY
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    
+    return distance <= radius
+  }
+  
+  if (element.type === 'shape' && (element.shapeType === 'line' || element.shapeType === 'arrow')) {
+    const strokeSize = element.strokeSize || 4
+    const threshold = strokeSize / 2 + 5
+    
+    const x1 = element.start.x
+    const y1 = element.start.y
+    const x2 = element.end.x
+    const y2 = element.end.y
+    
+    const A = x - x1
+    const B = y - y1
+    const C = x2 - x1
+    const D = y2 - y1
+    
+    const dot = A * C + B * D
+    const lenSq = C * C + D * D
+    let param = -1
+    
+    if (lenSq !== 0) {
+      param = dot / lenSq
+    }
+    
+    let xx, yy
+    
+    if (param < 0) {
+      xx = x1
+      yy = y1
+    } else if (param > 1) {
+      xx = x2
+      yy = y2
+    } else {
+      xx = x1 + param * C
+      yy = y1 + param * D
+    }
+    
+    const dx = x - xx
+    const dy = y - yy
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    
+    return distance <= threshold
+  }
+  
+  const bounds = getElementBounds(element)
+  if (!bounds) return false
+  
+  return x >= bounds.x && x <= bounds.x + bounds.width &&
+         y >= bounds.y && y <= bounds.y + bounds.height
+}
+
+function findElementAt(x, y) {
+  for (let i = state.elements.length - 1; i >= 0; i--) {
+    const element = state.elements[i]
+    if (hitTest(x, y, element)) {
+      return element
+    }
+  }
+  return null
+}
+
+function updateSelectionOverlay() {
+  createSelectionCanvas()
+  if (!selectionCtx) return
+  
+  selectionCtx.save()
+  selectionCtx.setTransform(1, 0, 0, 1, 0, 0)
+  selectionCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height)
+  selectionCtx.restore()
+  
+  selectTool.drawSelectionIndicators(selectionCtx)
+  
+  if (state.tool === 'select' && state.isSelecting) {
+    selectTool.drawSelectionBox(selectionCtx)
+  }
+  
+  updateShapeFillToggleState()
+}
+
+function updateSelectionOnly() {
+  updateSelectionOverlay()
+}
+
+const selectTool = initSelectTool(state, ctx, canvas, {
+  getElementBounds,
+  hitTest,
+  findElementAt,
+  redrawCanvas: () => redrawCanvas(),
+  updateSelectionOnly: () => updateSelectionOnly(),
+  saveState: () => saveState(),
+  playSound: (type) => playSound(type)
+})
+
+
 function saveState() {
   if (state.historyIndex < state.history.length - 1) {
     state.history = state.history.slice(0, state.historyIndex + 1)
   }
-  
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  state.history.push(imageData)
+
+  const elementState = {
+    elements: JSON.parse(JSON.stringify(state.elements)),
+    nextElementId: state.nextElementId
+  }
+  state.history.push(elementState)
   state.historyIndex++
 
   if (state.history.length > state.maxHistorySize) {
@@ -329,8 +558,15 @@ function undo() {
   }
   
   state.historyIndex--
-  const imageData = state.history[state.historyIndex]
-  ctx.putImageData(imageData, 0, 0)
+  const elementState = state.history[state.historyIndex]
+  if (elementState) {
+    state.elements = JSON.parse(JSON.stringify(elementState.elements))
+    state.nextElementId = elementState.nextElementId || state.nextElementId
+    selectTool.clearSelection()
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    redrawCanvas()
+  }
   checkIfHasDrawn()
   setTimeout(() => playSound('undo'), 10)
   updateUndoRedoButtons()
@@ -339,8 +575,15 @@ function undo() {
 function redo() {
   if (state.historyIndex < state.history.length - 1) {
     state.historyIndex++
-    const imageData = state.history[state.historyIndex]
-    ctx.putImageData(imageData, 0, 0)
+    const elementState = state.history[state.historyIndex]
+    if (elementState) {
+      state.elements = JSON.parse(JSON.stringify(elementState.elements))
+      state.nextElementId = elementState.nextElementId || state.nextElementId
+      selectTool.clearSelection()
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      redrawCanvas()
+    }
     checkIfHasDrawn()
     setTimeout(() => playSound('redo'), 10)
   }
@@ -370,9 +613,16 @@ function getCanvasCoordinates(e) {
 }
 
 function startDrawing(e) {
-  if (!state.enabled) return
+  if (!state.enabled || state.standbyMode) return
 
   e.preventDefault()
+  
+  if (state.tool === 'select') {
+    const coords = getCanvasCoordinates(e)
+    if (selectTool.handleSelectStart(e, coords)) {
+      return
+    }
+  }
   
   if (state.tool === 'text') {
     const coords = getCanvasCoordinates(e)
@@ -398,50 +648,113 @@ function startDrawing(e) {
   lastX = coords.x
   lastY = coords.y
   
-  if (state.tool === 'eraser') {
-    ctx.globalCompositeOperation = 'destination-out'
-  } else {
-    ctx.globalCompositeOperation = 'source-over'
+  if (state.tool === 'pencil' || state.tool === 'marker') {
+    currentStroke = {
+      type: 'stroke',
+      tool: state.tool,
+      color: state.color,
+      strokeSize: state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize,
+      alpha: 1.0,
+      compositeOperation: 'source-over',
+      points: [{ x: coords.x, y: coords.y }]
+    }
+    currentStrokePoints = [{ x: coords.x, y: coords.y }]
   }
   
-  ctx.beginPath()
-  ctx.moveTo(coords.x, coords.y)
+  if (state.tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.beginPath()
+    ctx.moveTo(coords.x, coords.y)
+  } else {
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.beginPath()
+    ctx.moveTo(coords.x, coords.y)
+  }
 }
 
 let isDrawing = false
 let drawFrame = null
 
+function constrainToStraightLine(startX, startY, endX, endY) {
+  const dx = Math.abs(endX - startX)
+  const dy = Math.abs(endY - startY)
+  if (dx < 5 && dy < 5) return { x: endX, y: endY }
+  
+  const ratio = dx > dy ? dy / dx : dx / dy
+  if (ratio > 0.414) {
+    const len = Math.max(dx, dy)
+    return { x: startX + Math.sign(endX - startX) * len, y: startY + Math.sign(endY - startY) * len }
+  }
+  return dx > dy ? { x: endX, y: startY } : { x: startX, y: endY }
+}
+
 function draw(e) {
-  if (!state.drawing || !state.enabled) return
+  if (!state.enabled || state.standbyMode) return
+  
+  let coords = getCanvasCoordinates(e)
+  
+  if (state.tool === 'select') {
+    const cursor = selectTool.getCursorForSelect(coords)
+    if (cursor) canvas.style.cursor = cursor
+    
+    if (selectTool.handleSelectDraw(coords)) {
+      return
+    }
+  }
+  
+  if (!state.drawing) return
   
   if (state.tool === 'shapes') {
-    const coords = getCanvasCoordinates(e)
-    state.shapeEnd = coords
+    if (e.shiftKey && state.shapeStart) {
+      const isSquare = state.shapeType === 'rectangle' || state.shapeType === 'circle'
+      if (isSquare) {
+        const size = Math.max(Math.abs(coords.x - state.shapeStart.x), Math.abs(coords.y - state.shapeStart.y))
+        state.shapeEnd = { x: state.shapeStart.x + Math.sign(coords.x - state.shapeStart.x) * size, y: state.shapeStart.y + Math.sign(coords.y - state.shapeStart.y) * size }
+      } else {
+        state.shapeEnd = constrainToStraightLine(state.shapeStart.x, state.shapeStart.y, coords.x, coords.y)
+      }
+    } else {
+      state.shapeEnd = coords
+    }
     if (drawFrame) cancelAnimationFrame(drawFrame)
     drawFrame = requestAnimationFrame(() => drawShapePreview())
     return
   }
   
-  const coords = getCanvasCoordinates(e)
 
   if (!isDrawing) {
     isDrawing = true
     drawFrame = requestAnimationFrame(() => {
-      if (state.tool === 'pencil') {
-        ctx.strokeStyle = state.color
-        ctx.lineWidth = state.strokeSize
-        ctx.globalAlpha = 1.0
-      } else if (state.tool === 'marker') {
-        ctx.strokeStyle = state.color
-        ctx.lineWidth = state.strokeSize * 1.5
-        ctx.globalAlpha = 0.6
+      if (state.tool === 'pencil' || state.tool === 'marker') {
+        currentStrokePoints.push({ x: coords.x, y: coords.y })
+        
+        createPreviewCanvas()
+        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
+        previewCtx.strokeStyle = state.color
+        previewCtx.lineWidth = state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize
+        previewCtx.globalAlpha = 1.0
+        previewCtx.lineCap = 'round'
+        previewCtx.lineJoin = 'round'
+        previewCtx.beginPath()
+        if (currentStrokePoints.length > 0) {
+          previewCtx.moveTo(currentStrokePoints[0].x, currentStrokePoints[0].y)
+          for (let i = 1; i < currentStrokePoints.length; i++) {
+            previewCtx.lineTo(currentStrokePoints[i].x, currentStrokePoints[i].y)
+          }
+          previewCtx.stroke()
+        }
       } else if (state.tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out'
         ctx.lineWidth = state.strokeSize * 2
         ctx.globalAlpha = 1.0
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.beginPath()
+        ctx.moveTo(lastX, lastY)
+        ctx.lineTo(coords.x, coords.y)
+        ctx.stroke()
+        ctx.globalCompositeOperation = 'source-over'
       }
-      
-      ctx.lineTo(coords.x, coords.y)
-      ctx.stroke()
       
       lastX = coords.x
       lastY = coords.y
@@ -452,6 +765,13 @@ function draw(e) {
 }
 
 function stopDrawing() {
+  if (state.tool === 'select') {
+    selectTool.handleSelectStop()
+    state.shapeStart = null
+    state.shapeEnd = null
+    return
+  }
+  
   if (state.drawing) {
     if (drawFrame) {
       cancelAnimationFrame(drawFrame)
@@ -464,10 +784,32 @@ function stopDrawing() {
     }
     
     if (state.tool === 'shapes' && state.shapeStart && state.shapeEnd) {
-      drawShapeFinal()
+      const canFill = state.shapeType === 'rectangle' || state.shapeType === 'circle'
+      const shapeElement = createElement('shape', {
+        shapeType: state.shapeType,
+        start: { ...state.shapeStart },
+        end: { ...state.shapeEnd },
+        color: state.color,
+        strokeSize: state.strokeSize,
+        filled: canFill && state.shapeFillEnabled
+      })
       clearPreview()
+      redrawCanvas()
       saveState()
       state.hasDrawn = true
+    } else if (state.tool === 'pencil' || state.tool === 'marker') {
+      if (currentStroke && currentStrokePoints.length > 1) {
+        currentStroke.points = [...currentStrokePoints]
+        createElement('stroke', currentStroke)
+        clearPreview()
+        redrawCanvas()
+        saveState()
+        state.hasDrawn = true
+      } else {
+        clearPreview()
+      }
+      currentStroke = null
+      currentStrokePoints = []
     } else if (state.tool !== 'text') {
       saveState()
     }
@@ -491,15 +833,26 @@ function drawShapePreview() {
   const w = Math.abs(state.shapeEnd.x - state.shapeStart.x)
   const h = Math.abs(state.shapeEnd.y - state.shapeStart.y)
   
+  const canFill = state.shapeType === 'rectangle' || state.shapeType === 'circle'
+  const shouldFill = canFill && state.shapeFillEnabled
+  
   if (state.shapeType === 'rectangle') {
-    previewCtx.strokeRect(x, y, w, h)
+    if (shouldFill) {
+      previewCtx.fillRect(x, y, w, h)
+    } else {
+      previewCtx.strokeRect(x, y, w, h)
+    }
   } else if (state.shapeType === 'circle') {
     const centerX = (state.shapeStart.x + state.shapeEnd.x) / 2
     const centerY = (state.shapeStart.y + state.shapeEnd.y) / 2
     const radius = Math.sqrt(w * w + h * h) / 2
     previewCtx.beginPath()
     previewCtx.arc(centerX, centerY, radius, 0, Math.PI * 2)
-    previewCtx.stroke()
+    if (shouldFill) {
+      previewCtx.fill()
+    } else {
+      previewCtx.stroke()
+    }
   } else if (state.shapeType === 'line') {
     previewCtx.beginPath()
     previewCtx.moveTo(state.shapeStart.x, state.shapeStart.y)
@@ -507,38 +860,6 @@ function drawShapePreview() {
     previewCtx.stroke()
   } else if (state.shapeType === 'arrow') {
     drawArrow(previewCtx, state.shapeStart.x, state.shapeStart.y, state.shapeEnd.x, state.shapeEnd.y)
-  }
-}
-
-function drawShapeFinal() {
-  if (!state.shapeStart || !state.shapeEnd) return
-  
-  ctx.strokeStyle = state.color
-  ctx.fillStyle = state.color
-  ctx.lineWidth = state.strokeSize
-  ctx.globalAlpha = 1.0
-  
-  const x = Math.min(state.shapeStart.x, state.shapeEnd.x)
-  const y = Math.min(state.shapeStart.y, state.shapeEnd.y)
-  const w = Math.abs(state.shapeEnd.x - state.shapeStart.x)
-  const h = Math.abs(state.shapeEnd.y - state.shapeStart.y)
-  
-  if (state.shapeType === 'rectangle') {
-    ctx.strokeRect(x, y, w, h)
-  } else if (state.shapeType === 'circle') {
-    const centerX = (state.shapeStart.x + state.shapeEnd.x) / 2
-    const centerY = (state.shapeStart.y + state.shapeEnd.y) / 2
-    const radius = Math.sqrt(w * w + h * h) / 2
-    ctx.beginPath()
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
-  ctx.stroke()
-  } else if (state.shapeType === 'line') {
-    ctx.beginPath()
-    ctx.moveTo(state.shapeStart.x, state.shapeStart.y)
-    ctx.lineTo(state.shapeEnd.x, state.shapeEnd.y)
-    ctx.stroke()
-  } else if (state.shapeType === 'arrow') {
-    drawArrow(ctx, state.shapeStart.x, state.shapeStart.y, state.shapeEnd.x, state.shapeEnd.y)
   }
 }
 
@@ -553,6 +874,61 @@ function drawArrow(ctx, x1, y1, x2, y2) {
   ctx.moveTo(x2, y2)
   ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6))
   ctx.stroke()
+}
+
+function drawDiamond(ctx, x1, y1, x2, y2, filled) {
+  const minX = Math.min(x1, x2)
+  const maxX = Math.max(x1, x2)
+  const minY = Math.min(y1, y2)
+  const maxY = Math.max(y1, y2)
+  const centerX = (minX + maxX) / 2
+  const centerY = (minY + maxY) / 2
+  const w = (maxX - minX) / 2
+  const h = (maxY - minY) / 2
+  
+  ctx.beginPath()
+  ctx.moveTo(centerX, minY)
+  ctx.lineTo(maxX, centerY)
+  ctx.lineTo(centerX, maxY)
+  ctx.lineTo(minX, centerY)
+  ctx.closePath()
+  
+  if (filled) {
+    ctx.fill()
+  } else {
+    ctx.stroke()
+  }
+}
+
+function drawHeart(ctx, x1, y1, x2, y2, filled) {
+  const minX = Math.min(x1, x2)
+  const maxX = Math.max(x1, x2)
+  const minY = Math.min(y1, y2)
+  const maxY = Math.max(y1, y2)
+  const centerX = (minX + maxX) / 2
+  const centerY = (minY + maxY) / 2
+  const w = (maxX - minX) / 2
+  const h = (maxY - minY) / 2
+  const size = Math.min(w, h)
+  
+  const topY = centerY - size * 0.3
+  const bottomY = centerY + size * 0.7
+  const leftX = centerX - size * 0.5
+  const rightX = centerX + size * 0.5
+  
+  ctx.beginPath()
+  ctx.moveTo(centerX, bottomY)
+  ctx.bezierCurveTo(centerX, centerY + size * 0.2, leftX, centerY, leftX, topY)
+  ctx.bezierCurveTo(leftX, topY - size * 0.2, leftX + size * 0.2, topY - size * 0.2, centerX, topY)
+  ctx.bezierCurveTo(centerX + size * 0.3, topY - size * 0.2, rightX, topY - size * 0.2, rightX, topY)
+  ctx.bezierCurveTo(rightX, centerY, centerX, centerY + size * 0.2, centerX, bottomY)
+  ctx.closePath()
+  
+  if (filled) {
+    ctx.fill()
+  } else {
+    ctx.stroke()
+  }
 }
 
 function clearPreview() {
@@ -587,21 +963,43 @@ function startTextInput(x, y) {
 }
 
 function wrapText(ctx, text, maxWidth) {
+  if (!text || !text.trim()) {
+    return ['']
+  }
+
   const words = text.split(' ')
   const lines = []
+  
+  if (words.length === 0) {
+    return ['']
+  }
+
   let currentLine = words[0]
 
   for (let i = 1; i < words.length; i++) {
     const word = words[i]
-    const width = ctx.measureText(currentLine + ' ' + word).width
+    const testLine = currentLine + ' ' + word
+    const width = ctx.measureText(testLine).width
+    
     if (width < maxWidth) {
-      currentLine += ' ' + word
+      currentLine = testLine
     } else {
-      lines.push(currentLine)
+      if (currentLine) {
+        lines.push(currentLine)
+      }
       currentLine = word
+      
+      if (ctx.measureText(word).width > maxWidth) {
+        lines.push(word)
+        currentLine = ''
+      }
     }
   }
-  lines.push(currentLine)
+  
+  if (currentLine) {
+    lines.push(currentLine)
+  }
+  
   return lines
 }
 
@@ -696,12 +1094,50 @@ function finishTextInput() {
   const textInput = document.getElementById('text-input')
   const textContent = textInput.textContent.trim()
   
+  if (state.editingElementId) {
+    const element = state.elements.find(e => e.id === state.editingElementId)
+    if (element && element.type === 'text') {
+      if (textContent) {
+        updateTextFormatting()
+        const textSolveEnabled = localStorage.getItem('text-solve-enabled') === 'true'
+        let segments = parseFormattedText(textInput)
+          
+        if (textSolveEnabled && segments.length > 0) {
+          const fullText = segments.map(s => s.text).join('')
+          const result = evaluateMathExpression(fullText)
+          if (result !== null) {
+            const trimmedText = fullText.trim()
+            if (trimmedText.endsWith('=')) {
+              segments[segments.length - 1].text = `${trimmedText} ${result}`
+            } else {
+              segments.push({ text: ` = ${result}`, formatting: { bold: false, italic: false, underline: false } })
+            }
+          }
+        }
+        
+        element.segments = segments
+        redrawCanvas()
+        saveState()
+      } else {
+        state.elements = state.elements.filter(e => e.id !== state.editingElementId)
+        state.selectedElements = state.selectedElements.filter(id => id !== state.editingElementId)
+        redrawCanvas()
+        saveState()
+      }
+      state.editingElementId = null
+      textInput.style.display = 'none'
+      state.textInput = null
+      if (state.textFormatting) {
+        state.textFormatting = { bold: false, italic: false, underline: false }
+      }
+      return
+    }
+  }
+  
   if (textContent && state.textInput) {
-    
     updateTextFormatting()
     
     const textSolveEnabled = localStorage.getItem('text-solve-enabled') === 'true'
-    
     let segments = parseFormattedText(textInput)
       
     if (textSolveEnabled && segments.length > 0) {
@@ -717,9 +1153,19 @@ function finishTextInput() {
       }
     }
     
+    const fontSize = Math.max(12, state.strokeSize * 4)
+    
+    const textElement = createElement('text', {
+      x: state.textInput.x,
+      y: state.textInput.y,
+      color: state.color,
+      strokeSize: state.strokeSize,
+      fontSize: fontSize,
+      segments: segments
+    })
+    
     ctx.save()
     ctx.fillStyle = state.color
-    const fontSize = Math.max(12, state.strokeSize * 4)
     ctx.textBaseline = 'top'
     ctx.globalAlpha = 1.0
 
@@ -730,7 +1176,6 @@ function finishTextInput() {
     
     const lines = []
     let currentLine = []
-    let currentLineWidth = 0
 
     segments.forEach(segment => {
       const fontStyle = segment.formatting.italic ? 'italic' : 'normal'
@@ -740,7 +1185,6 @@ function finishTextInput() {
       const words = segment.text.trim().split(/\s+/).filter(w => w.length > 0)
       
       words.forEach(word => {
-        const spaceBefore = currentLine.length > 0 ? ' ' : ''
         const testText = currentLine.length > 0 
           ? (currentLine.map(p => p.text).join(' ') + ' ' + word)
           : word
@@ -774,34 +1218,147 @@ function finishTextInput() {
         
         if (part.formatting.underline) {
           const textWidth = ctx.measureText(text).width
-        ctx.strokeStyle = state.color
-        ctx.lineWidth = Math.max(1, fontSize / 15)
-        ctx.beginPath()
+          ctx.strokeStyle = state.color
+          ctx.lineWidth = Math.max(1, fontSize / 15)
+          ctx.beginPath()
           ctx.moveTo(x, y + fontSize + 2)
           ctx.lineTo(x + textWidth, y + fontSize + 2)
-        ctx.stroke()
-      }
+          ctx.stroke()
+        }
         
         x += ctx.measureText(text).width
       })
     })
     
     ctx.restore()
+    redrawCanvas()
     saveState()
     state.hasDrawn = true
   }
   
   textInput.style.display = 'none'
   state.textInput = null
+  state.editingElementId = null
   if (state.textFormatting) {
     state.textFormatting = { bold: false, italic: false, underline: false }
   }
+}
+
+function editTextElement(element) {
+  const textInput = document.getElementById('text-input')
+  if (!textInput) return
+  
+  const textContent = element.segments ? element.segments.map(s => s.text).join(' ') : ''
+  
+  const canvasRect = canvas.getBoundingClientRect()
+  textInput.style.display = 'block'
+  textInput.style.position = 'fixed'
+  textInput.style.left = (canvasRect.left + element.x) + 'px'
+  textInput.style.top = (canvasRect.top + element.y) + 'px'
+  textInput.style.zIndex = '2000'
+  textInput.textContent = textContent
+  textInput.innerHTML = textContent
+  
+  state.editingElementId = element.id
+  state.textInput = { x: element.x, y: element.y }
+  
+  if (element.segments && element.segments.length > 0) {
+    const firstSegment = element.segments[0]
+    state.textFormatting = {
+      bold: firstSegment.formatting?.bold || false,
+      italic: firstSegment.formatting?.italic || false,
+      underline: firstSegment.formatting?.underline || false
+    }
+  } else {
+    state.textFormatting = { bold: false, italic: false, underline: false }
+  }
+  
+  setTimeout(() => {
+    textInput.focus()
+    const range = document.createRange()
+    range.selectNodeContents(textInput)
+    const selection = window.getSelection()
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }, 10)
+}
+
+function copySelectedElements() {
+  if (state.selectedElements.length === 0) return
+  
+  const elementsToCopy = state.elements.filter(e => state.selectedElements.includes(e.id))
+  if (elementsToCopy.length > 0) {
+    state.copiedElements = JSON.parse(JSON.stringify(elementsToCopy))
+    playSound('copy')
+  }
+}
+
+const DUPLICATE_WARNING_THRESHOLD = 10
+
+async function pasteElements() {
+  if (!state.copiedElements || state.copiedElements.length === 0) return
+  
+  if (state.copiedElements.length >= DUPLICATE_WARNING_THRESHOLD) {
+    const confirmed = await ipcRenderer.invoke('show-duplicate-warning', state.copiedElements.length)
+    if (!confirmed) return
+  }
+  
+  const offsetX = 50
+  const offsetY = 50
+  
+  state.selectedElements = []
+  
+  state.copiedElements.forEach(copiedElement => {
+    const newElement = JSON.parse(JSON.stringify(copiedElement))
+    newElement.id = state.nextElementId++
+    
+    if (newElement.type === 'stroke' && newElement.points) {
+      newElement.points.forEach(p => {
+        p.x += offsetX
+        p.y += offsetY
+      })
+    } else if (newElement.type === 'shape') {
+      newElement.start.x += offsetX
+      newElement.start.y += offsetY
+      newElement.end.x += offsetX
+      newElement.end.y += offsetY
+    } else if (newElement.type === 'text') {
+      newElement.x += offsetX
+      newElement.y += offsetY
+    }
+    
+    state.elements.push(newElement)
+    state.selectedElements.push(newElement.id)
+  })
+  
+  redrawCanvas()
+  saveState()
+  playSound('paste')
 }
 
 canvas.addEventListener('mousedown', startDrawing)
 canvas.addEventListener('mousemove', draw)
 canvas.addEventListener('mouseup', stopDrawing)
 canvas.addEventListener('mouseout', stopDrawing)
+
+function handleDoubleClick(e) {
+  if (state.tool !== 'select') return
+  
+  const coords = getCanvasCoordinates(e)
+  const clickedElement = findElementAt(coords.x, coords.y)
+  
+  if (clickedElement && clickedElement.type === 'text') {
+    if (!state.selectedElements.includes(clickedElement.id)) {
+      selectTool.clearSelection()
+      selectTool.selectElement(clickedElement.id)
+    }
+    
+    editTextElement(clickedElement)
+  }
+}
+
+canvas.addEventListener('dblclick', handleDoubleClick)
+
 
 canvas.addEventListener('touchstart', (e) => {
   e.preventDefault()
@@ -879,17 +1436,29 @@ function updateTextFormatting() {
 function setTool(tool) {
   state.tool = tool
 
-  if (tool !== 'text') {
+  if (tool !== 'text' && tool !== 'select') {
     const textInput = document.getElementById('text-input')
     if (textInput && textInput.style.display === 'block') {
       finishTextInput()
     }
   }
   
+  if (tool !== 'select') {
+    selectTool.clearSelection()
+  }
+  
+  if (tool !== 'shapes') {
+    state.shapeStart = null
+    state.shapeEnd = null
+    state.drawing = false
+  }
+  
   document.querySelectorAll('[data-tool]').forEach(btn => {
     btn.classList.remove('active')
   })
   document.querySelector(`[data-tool="${tool}"]`)?.classList.add('active')
+  
+  updateShapeFillToggleState()
 
   document.querySelectorAll('.drawing-tool-option').forEach(btn => {
     btn.classList.remove('active')
@@ -898,7 +1467,9 @@ function setTool(tool) {
       
       const icon = pencilBtn?.querySelector('.material-symbols-outlined')
       if (icon) {
-        if (tool === 'pencil') {
+        if (tool === 'select') {
+          icon.textContent = 'arrow_selector_tool'
+        } else if (tool === 'pencil') {
           icon.textContent = 'edit'
         } else if (tool === 'marker') {
           icon.textContent = 'brush'
@@ -907,7 +1478,7 @@ function setTool(tool) {
     }
   })
 
-  if (tool === 'pencil' || tool === 'marker') {
+  if (tool === 'select' || tool === 'pencil' || tool === 'marker') {
     if (pencilBtn) {
       pencilBtn.classList.add('active')
     }
@@ -920,6 +1491,14 @@ function setTool(tool) {
     }
   }
   
+  if (tool === 'select') {
+  }
+  
+  updateCursor()
+}
+
+function updateCursor() {
+  const tool = state.tool
   if (tool === 'pencil') {
     const pencilCursor = 'data:image/svg+xml;base64,' + btoa(`
       <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
@@ -943,11 +1522,14 @@ function setTool(tool) {
     canvas.style.cursor = `url("${eraseCursor}") 12 12, auto`
   } else if (tool === 'text') {
     canvas.style.cursor = 'text'
+  } else if (tool === 'select') {
+    canvas.style.cursor = 'default'
   } else {
     canvas.style.cursor = 'crosshair'
   }
-
 }
+
+window.addEventListener('focus', updateCursor)
 
 const drawingToolsPopup = document.getElementById('drawing-tools-popup')
 const pencilBtn = document.getElementById('pencil-btn')
@@ -1010,11 +1592,36 @@ document.addEventListener('keydown', (e) => {
     return
   }
 
+  if (standbyManager.isActive()) {
+    const key = e.key.toLowerCase()
+    const isAllowed = 
+      key === ' ' || 
+      key === 'escape' || 
+      key === 'h' ||
+      (e.shiftKey && key === 'c')
+    
+    if (!isAllowed) {
+      return
+    }
+  }
+
   if (e.ctrlKey || e.metaKey) {
     switch (e.key.toLowerCase()) {
       case 'f':
         e.preventDefault()
         toggleSearch()
+        break
+      case 'c':
+        if (state.selectedElements.length > 0) {
+          e.preventDefault()
+          copySelectedElements()
+        }
+        break
+      case 'v':
+        if (state.copiedElements && state.copiedElements.length > 0) {
+          e.preventDefault()
+          pasteElements()
+        }
         break
       case 'z':
         if (e.shiftKey) {
@@ -1028,6 +1635,12 @@ document.addEventListener('keydown', (e) => {
       case 'y':
         e.preventDefault()
         redo()
+        break
+      case 'a':
+        if (state.tool === 'select') {
+          e.preventDefault()
+          selectTool.selectAllElements()
+        }
         break
       case ',':
       case ';':
@@ -1050,6 +1663,15 @@ document.addEventListener('keydown', (e) => {
     case 't':
       e.preventDefault()
       setTool('text')
+      break
+    case 'v':
+      if (!e.ctrlKey && !e.metaKey) {
+        const textInput = document.getElementById('text-input')
+        if (!textInput || textInput.style.display === 'none') {
+          e.preventDefault()
+          setTool('select')
+        }
+      }
       break
     case 's':
       e.preventDefault()
@@ -1087,6 +1709,9 @@ document.addEventListener('keydown', (e) => {
       if (e.shiftKey) {
         e.preventDefault()
         clearCanvas()
+      } else if (state.tool === 'select' && state.selectedElements.length > 0) {
+        e.preventDefault()
+        selectTool.deleteSelectedElements()
       }
       break
     case 'h':
@@ -1097,6 +1722,9 @@ document.addEventListener('keydown', (e) => {
       if (e.shiftKey) {
         e.preventDefault()
         document.getElementById('capture-btn').click()
+      } else if (state.selectedElements.length > 0) {
+        e.preventDefault()
+        copySelectedElements()
       }
       break
     case 'escape':
@@ -1139,6 +1767,9 @@ document.addEventListener('keydown', (e) => {
       const size = sizes[e.key]
       if (size) {
         state.strokeSize = size
+        if (state.tool === 'select' && state.selectedElements.length > 0) {
+          selectTool.updateSelectedStrokeSize(size)
+        }
         document.querySelectorAll('.stroke-option').forEach(btn => {
           btn.classList.remove('active')
           if (parseInt(btn.dataset.size) === size) {
@@ -1160,6 +1791,10 @@ document.addEventListener('keydown', (e) => {
         playSound('color')
       }
       break
+    case ' ':
+      e.preventDefault()
+      standbyManager.toggle()
+      break
   }
 })
 
@@ -1176,16 +1811,106 @@ shapesBtn.addEventListener('click', (e) => {
   }
 })
 
-document.querySelectorAll('.shape-option').forEach(btn => {
+document.querySelectorAll('.shape-option[data-shape]').forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation()
+    const tooltip = btn.querySelector('.custom-tooltip')
+    if (tooltip) {
+      tooltip.classList.remove('show')
+    }
     state.shapeType = btn.dataset.shape
     setTool('shapes')
-    document.querySelectorAll('.shape-option').forEach(b => b.classList.remove('active'))
-    btn.classList.add('active')
+    setActiveShape(state.shapeType)
     shapesPopup.classList.remove('show')
   })
 })
+
+function setActiveShape(shapeType) {
+  document.querySelectorAll('.shape-option[data-shape]').forEach(btn => {
+    btn.classList.remove('active')
+    if (btn.dataset.shape === shapeType) {
+      btn.classList.add('active')
+    }
+  })
+}
+
+function updateSelectedShapeFill(fillState) {
+  if (state.selectedElements.length === 0) return
+  
+  const fillableShapes = ['rectangle', 'circle']
+  let hasChanges = false
+  
+  for (const elementId of state.selectedElements) {
+    const element = state.elements.find(e => e.id === elementId)
+    if (element && element.type === 'shape' && fillableShapes.includes(element.shapeType)) {
+      element.filled = fillState
+      hasChanges = true
+    }
+  }
+  
+  if (hasChanges) {
+    redrawCanvas()
+    saveState()
+  }
+}
+
+function updateShapeFillToggleState() {
+  const shapeFillToggle = document.getElementById('shape-fill-toggle')
+  if (!shapeFillToggle) return
+  
+  if (state.tool === 'select' && state.selectedElements.length > 0) {
+    const fillableShapes = ['rectangle', 'circle']
+    const selectedShapes = state.selectedElements
+      .map(id => state.elements.find(e => e.id === id))
+      .filter(e => e && e.type === 'shape' && fillableShapes.includes(e.shapeType))
+    
+    if (selectedShapes.length > 0) {
+      const allFilled = selectedShapes.every(s => s.filled === true)
+      const allUnfilled = selectedShapes.every(s => s.filled === false)
+      
+      if (allFilled) {
+        shapeFillToggle.classList.add('active')
+      } else if (allUnfilled) {
+        shapeFillToggle.classList.remove('active')
+      } else {
+      }
+      return
+    }
+  }
+  
+  shapeFillToggle.classList.toggle('active', state.shapeFillEnabled)
+}
+
+const shapeFillToggle = document.getElementById('shape-fill-toggle')
+if (shapeFillToggle) {
+  const savedFillState = localStorage.getItem('shape-fill-enabled')
+  if (savedFillState !== null) {
+    state.shapeFillEnabled = savedFillState === 'true'
+    shapeFillToggle.classList.toggle('active', state.shapeFillEnabled)
+  }
+  
+  shapeFillToggle.addEventListener('click', (e) => {
+    e.stopPropagation()
+    
+    if (state.tool === 'select' && state.selectedElements.length > 0) {
+      const fillableShapes = ['rectangle', 'circle']
+      const selectedShapes = state.selectedElements
+        .map(id => state.elements.find(e => e.id === id))
+        .filter(e => e && e.type === 'shape' && fillableShapes.includes(e.shapeType))
+      
+      if (selectedShapes.length > 0) {
+        const currentFillState = selectedShapes[0].filled
+        updateSelectedShapeFill(!currentFillState)
+        updateShapeFillToggleState()
+        return
+      }
+    }
+    
+    state.shapeFillEnabled = !state.shapeFillEnabled
+    shapeFillToggle.classList.toggle('active', state.shapeFillEnabled)
+    localStorage.setItem('shape-fill-enabled', state.shapeFillEnabled.toString())
+  })
+}
 
 document.addEventListener('click', (e) => {
   const shapesWrapper = document.querySelector('.shapes-wrapper')
@@ -1236,6 +1961,10 @@ function closeAllPopups() {
 
 function setStrokeSize(size) {
   state.strokeSize = size
+  
+  if (state.selectedElements.length > 0) {
+    selectTool.updateSelectedStrokeSize(size)
+  }
   
   document.querySelectorAll('.stroke-option').forEach(btn => {
     btn.classList.remove('active')
@@ -1318,6 +2047,10 @@ let customColorValue = null
 
 function setColor(color, isCustom = false) {
   state.color = color
+
+  if (state.tool === 'select' && state.selectedElements.length > 0) {
+    selectTool.updateSelectedColor(color)
+  }
 
   document.documentElement.style.setProperty('--selected-color', color)
   
@@ -1426,88 +2159,34 @@ if (document.readyState === 'loading') {
   setInitialColorBorder()
 }
 
-let pickrInstance = null
-
 function initColorPicker() {
-  
-  if (typeof Pickr === 'undefined') {
-    setTimeout(initColorPicker, 100)
-    return
-  }
-  
   const colorPickerInput = document.getElementById('color-picker-input')
   if (!colorPickerInput) {
     setTimeout(initColorPicker, 100)
     return
   }
 
-  pickrInstance = Pickr.create({
-    el: colorPickerInput,
-    theme: 'nano',
-    default: state.color,
-    inline: false, 
-    swatches: [
-      '#ef4444', '#3b82f6', '#10b981', '#f59e0b',
-      '#8b5cf6', '#ec4899', '#06b6d4', '#ffffff',
-      '#000000', '#64748b', '#f97316', '#14b8a6'
-    ],
-    components: {
-      preview: false, 
-      opacity: false,
-      hue: true,
-      interaction: {
-        hex: true,
-        rgba: true,
-        hsla: true,
-        hsva: true,
-        cmyk: false,
-        input: true,
-        clear: false,
-        save: true
-      }
-    },
-    i18n: {
-      'btn:save': 'Apply',
-      'btn:cancel': 'Cancel'
-    }
-  })
+  const colorToShow = (isCustomColorActive && customColorValue) ? customColorValue : state.color
+  colorPickerInput.value = colorToShow
 
-  if (pickrInstance && pickrInstance.root) {
-    pickrInstance.root.style.display = 'none'
-  }
-
-  let originalColorBeforePicker = null
-
-  pickrInstance.on('change', (color) => {
-    state.color = color.toHEXA().toString()
+  colorPickerInput.addEventListener('change', (e) => {
+    const hexColor = e.target.value
+    localStorage.setItem('custom-color', hexColor)
+    localStorage.setItem('is-custom-color-active', 'true')
+    updateCustomColorButton(hexColor)
+    setTimeout(() => updateCustomColorButton(hexColor), 10)
+    setColor(hexColor, true)
+    setTimeout(() => updateCustomColorButton(hexColor), 50)
     
-  })
+    playSound('color')
 
-  pickrInstance.on('save', (color) => {
-    if (color) {
-      const hexColor = color.toHEXA().toString()
-      localStorage.setItem('custom-color', hexColor)
-      localStorage.setItem('is-custom-color-active', 'true')
-      updateCustomColorButton(hexColor)
-      setTimeout(() => updateCustomColorButton(hexColor), 10)
-      setColor(hexColor, true)
-      setTimeout(() => updateCustomColorButton(hexColor), 50)
-
-      const accentColor = localStorage.getItem('accent-color') || '#3bbbf6'
-      const isLight = isLightColor(accentColor)
-      const textColor = isLight ? '#000000' : '#ffffff'
-      document.documentElement.style.setProperty('--picker-btn-text-color', textColor)
-      const pickerBtn = document.getElementById('open-color-picker-btn')
-      if (pickerBtn) {
-        pickerBtn.style.color = textColor
-      }
-      pickrInstance.hide()
-    }
-  })
-
-  pickrInstance.on('cancel', () => {
-    if (originalColorBeforePicker !== null) {
-      state.color = originalColorBeforePicker
+    const accentColor = localStorage.getItem('accent-color') || '#3bbbf6'
+    const isLight = isLightColor(accentColor)
+    const textColor = isLight ? '#000000' : '#ffffff'
+    document.documentElement.style.setProperty('--picker-btn-text-color', textColor)
+    const pickerBtn = document.getElementById('open-color-picker-btn')
+    if (pickerBtn) {
+      pickerBtn.style.color = textColor
     }
   })
 
@@ -1535,18 +2214,10 @@ function initColorPicker() {
         
         customColorPopup.classList.remove('show')
         
-        if (pickrInstance) {
-          
-          originalColorBeforePicker = state.color;
-          
-          const colorToShow = (isCustomColorActive && customColorValue) ? customColorValue : state.color
-          pickrInstance.setColor(colorToShow)
-          
-          if (pickrInstance.root) {
-            pickrInstance.root.style.display = 'block'
-          }
-          pickrInstance.show()
-        }
+        const colorToShow = (isCustomColorActive && customColorValue) ? customColorValue : state.color
+        colorPickerInput.value = colorToShow
+        
+        colorPickerInput.click()
       })
     }
   }
@@ -1586,14 +2257,6 @@ function initColorPicker() {
       })
     })
   }, 100)
-
-  if (pickrInstance) {
-    pickrInstance.on('hide', () => {
-      if (pickrInstance && pickrInstance.root) {
-        pickrInstance.root.style.display = 'none'
-      }
-    })
-  }
 }
 
 if (document.readyState === 'loading') {
@@ -1606,9 +2269,13 @@ if (document.readyState === 'loading') {
 
 function clearCanvas() {
   ctx.clearRect(0, 0, canvas.width, canvas.height)
+  state.elements = []
+  state.selectedElements = []
+  state.nextElementId = 1
   state.hasDrawn = false
   saveState()
   updateUndoRedoButtons()
+  redrawCanvas()
   
   setTimeout(() => {
     playSound('trash')
@@ -1625,15 +2292,26 @@ document.getElementById('redo-btn').addEventListener('click', redo)
 
 updateUndoRedoButtons()
 
-function hideAllTooltips() {
-  document.querySelectorAll('.custom-tooltip').forEach(tooltip => {
-    tooltip.classList.remove('show')
-  })
-}
-
 const mainToolbar = document.getElementById('main-toolbar')
 let isDragging = false
 let currentLayout = localStorage.getItem('toolbar-layout') || 'vertical'
+
+if (mainToolbar) {
+  mainToolbar.addEventListener('mousedown', () => {
+    ipcRenderer.send('focus-window')
+  })
+}
+
+function updateToolbarMovingState() {
+  const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving') === 'true'
+  if (disableToolbarMoving) {
+    mainToolbar.classList.add('toolbar-moving-disabled')
+  } else {
+    mainToolbar.classList.remove('toolbar-moving-disabled')
+  }
+}
+
+updateToolbarMovingState()
 
 function applyLayout(layout) {
   currentLayout = layout
@@ -1724,6 +2402,10 @@ let dragStartPos = { x: 0, y: 0 }
 let toolbarStartPos = { x: 0, y: 0 }
 
 mainToolbar.addEventListener('mousedown', (e) => {
+  const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving') === 'true'
+  if (disableToolbarMoving) {
+    return
+  }
   
   const clickedButton = e.target.closest('button')
   const clickedColor = e.target.closest('.color-swatch')
@@ -1965,9 +2647,14 @@ setInterval(() => {
 function updateReduceClutter() {
   const reduceClutterValue = localStorage.getItem('reduce-clutter')
   const reduceClutter = reduceClutterValue === null ? true : reduceClutterValue === 'true'
+  const standbyInToolbarValue = localStorage.getItem('standby-in-toolbar')
+  const standbyInToolbar = standbyInToolbarValue === null ? true : standbyInToolbarValue === 'true'
+  
   const undoBtn = document.getElementById('undo-btn')
   const redoBtn = document.getElementById('redo-btn')
   const hideBtn = document.getElementById('hide-btn')
+  const standbyBtnEl = document.getElementById('standby-btn')
+  const moreStandbyBtnEl = document.getElementById('more-standby-btn')
   const menuBtn = document.getElementById('menu-btn')
   const moreMenuBtn = document.getElementById('more-menu-btn')
   const moreMenuDropdown = document.getElementById('more-menu-dropdown')
@@ -1976,6 +2663,8 @@ function updateReduceClutter() {
     if (undoBtn) undoBtn.style.display = 'none'
     if (redoBtn) redoBtn.style.display = 'none'
     if (hideBtn) hideBtn.style.display = 'none'
+    if (standbyBtnEl) standbyBtnEl.style.display = standbyInToolbar ? 'flex' : 'none'
+    if (moreStandbyBtnEl) moreStandbyBtnEl.style.display = standbyInToolbar ? 'none' : 'flex'
     if (menuBtn) menuBtn.style.display = 'none'
     
     if (moreMenuBtn) moreMenuBtn.style.display = 'flex'
@@ -1983,6 +2672,8 @@ function updateReduceClutter() {
     if (undoBtn) undoBtn.style.display = 'flex'
     if (redoBtn) redoBtn.style.display = 'flex'
     if (hideBtn) hideBtn.style.display = 'flex'
+    if (standbyBtnEl) standbyBtnEl.style.display = 'flex'
+    if (moreStandbyBtnEl) moreStandbyBtnEl.style.display = 'none'
     if (menuBtn) menuBtn.style.display = 'flex'
     
     if (moreMenuBtn) moreMenuBtn.style.display = 'none'
@@ -2070,25 +2761,87 @@ function initMoreMenu() {
   updateMoreMenuButtons()
 }
 
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
+function syncSettingsFromMain() {
+  try {
+    const settings = ipcRenderer.sendSync('get-system-settings')
+    if (settings) {
+      if (settings.standbyInToolbar !== undefined) {
+        localStorage.setItem('standby-in-toolbar', settings.standbyInToolbar ? 'true' : 'false')
+      }
+    }
+  } catch (e) {
+  }
   updateReduceClutter()
   initMoreMenu()
+}
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  syncSettingsFromMain()
 } else {
   document.addEventListener('DOMContentLoaded', () => {
-    updateReduceClutter()
-    initMoreMenu()
+    syncSettingsFromMain()
   })
 }
 
 ipcRenderer.on('reduce-clutter-changed', (event, enabled) => {
   localStorage.setItem('reduce-clutter', enabled ? 'true' : 'false')
+  setTimeout(() => updateReduceClutter(), 0)
+})
+
+ipcRenderer.on('disable-toolbar-moving-changed', (event, enabled) => {
+  localStorage.setItem('disable-toolbar-moving', enabled ? 'true' : 'false')
+  updateToolbarMovingState()
+})
+
+ipcRenderer.on('standby-in-toolbar-changed', (event, enabled) => {
+  localStorage.setItem('standby-in-toolbar', enabled ? 'true' : 'false')
+  standbyManager.updateStandbyButtons(enabled)
+})
+
+ipcRenderer.on('sync-toolbar-settings', (event, settings) => {
+  if (settings.standbyInToolbar !== undefined) {
+    localStorage.setItem('standby-in-toolbar', settings.standbyInToolbar ? 'true' : 'false')
+  }
+  if (settings.reduceClutter !== undefined) {
+    localStorage.setItem('reduce-clutter', settings.reduceClutter ? 'true' : 'false')
+  }
   updateReduceClutter()
 })
 
-ipcRenderer.on('theme-changed', (event, theme) => {
-  applyTheme(theme)
-  updateToolbarBackgroundColor()
+
+ipcRenderer.on('hardware-acceleration-changed', (event, enabled) => {
+  localStorage.setItem('hardware-acceleration', enabled ? 'true' : 'false')
+  if (enabled) {
+    canvas.style.willChange = 'contents'
+    canvas.style.transform = 'translateZ(0)'
+    canvas.style.backfaceVisibility = 'hidden'
+    if (previewCanvas) {
+      previewCanvas.style.willChange = 'contents'
+      previewCanvas.style.transform = 'translateZ(0)'
+      previewCanvas.style.backfaceVisibility = 'hidden'
+    }
+    if (selectionCanvas) {
+      selectionCanvas.style.willChange = 'contents'
+      selectionCanvas.style.transform = 'translateZ(0)'
+      selectionCanvas.style.backfaceVisibility = 'hidden'
+    }
+  } else {
+    canvas.style.willChange = ''
+    canvas.style.transform = ''
+    canvas.style.backfaceVisibility = ''
+    if (previewCanvas) {
+      previewCanvas.style.willChange = ''
+      previewCanvas.style.transform = ''
+      previewCanvas.style.backfaceVisibility = ''
+    }
+    if (selectionCanvas) {
+      selectionCanvas.style.willChange = ''
+      selectionCanvas.style.transform = ''
+      selectionCanvas.style.backfaceVisibility = ''
+    }
+  }
 })
+
 
 ipcRenderer.on('accent-color-changed', (event, color) => {
   updateAccentColor(color)
@@ -2140,88 +2893,7 @@ if (document.readyState === 'loading') {
   initSoundsSetting()
 }
 
-let osTheme = 'dark'
-
-function getOSTheme() {
-  return osTheme
-}
-
-function getEffectiveTheme(theme) {
-  return theme === 'system' ? getOSTheme() : theme
-}
-
-function applyTheme(theme) {
-  localStorage.setItem('theme', theme)
-  
-  const effectiveTheme = getEffectiveTheme(theme)
-  document.body.setAttribute('data-theme', effectiveTheme)
-  
-  document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.classList.remove('active')
-  })
-  const themeBtn = document.querySelector(`[data-theme="${theme}"]`)
-  if (themeBtn) {
-    themeBtn.classList.add('active')
-  }
-  
-  updateToolbarBackgroundColor()
-}
-
-document.querySelectorAll('.theme-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    applyTheme(btn.dataset.theme)
-  })
-})
-
-ipcRenderer.invoke('get-os-theme').then(theme => {
-  osTheme = theme
-  const savedTheme = localStorage.getItem('theme') || 'system'
-  if (savedTheme === 'system') {
-    const effectiveTheme = getEffectiveTheme(savedTheme)
-    document.body.setAttribute('data-theme', effectiveTheme)
-  }
-})
-
-const savedTheme = localStorage.getItem('theme') || 'system'
-applyTheme(savedTheme)
-
-ipcRenderer.on('os-theme-changed', (event, effectiveTheme) => {
-  osTheme = effectiveTheme
-  const currentTheme = localStorage.getItem('theme') || 'system'
-  if (currentTheme === 'system') {
-    document.body.setAttribute('data-theme', effectiveTheme)
-    updateToolbarBackgroundColor()
-  }
-})
-
-function darkenTintColor(hexColor, theme) {
-  const [r, g, b] = [1, 3, 5].map(i => parseInt(hexColor.slice(i, i + 2), 16))
-  const effectiveTheme = theme || document.body.getAttribute('data-theme') || 'dark'
-  const isDark = effectiveTheme === 'dark'
-  
-  const [blendedR, blendedG, blendedB] = isDark
-    ? [r, g, b].map(c => Math.floor(30 * 0.7 + (c * 0.25) * 0.3))
-    : [r, g, b].map(c => Math.floor(255 * 0.85 + (c + (255 - c) * 0.7) * 0.15))
-  
-  return `#${[blendedR, blendedG, blendedB].map(c => c.toString(16).padStart(2, '0')).join('')}`
-}
-
-function updateToolbarBackgroundColor() {
-  const styleEl = document.getElementById('toolbar-bg-override')
-  if (styleEl) styleEl.remove()
-  
-  if (localStorage.getItem('toolbar-accent-bg') === 'true') {
-    const tintedBg = darkenTintColor(
-      localStorage.getItem('accent-color') || '#3bbbf6',
-      getEffectiveTheme(localStorage.getItem('theme') || 'system')
-    )
-    const el = Object.assign(document.createElement('style'), {
-      id: 'toolbar-bg-override',
-      textContent: `:root, [data-theme="dark"], [data-theme="light"], body { --toolbar-bg: ${tintedBg} !important; }`
-    })
-    document.head.appendChild(el)
-  }
-}
+initThemeManager()
 
 function updateAccentColor(color) {
   document.documentElement.style.setProperty('--accent-color', color)
@@ -2257,94 +2929,15 @@ updateAccentColor(savedAccentColor)
 
 updateToolbarBackgroundColor()
 
-function createTooltip(element) {
-  const tooltipText = element.getAttribute('data-tooltip')
-  const shortcut = element.getAttribute('data-shortcut')
-  
-  if (!tooltipText) return
+initTooltips()
 
-  const existingTooltip = element.querySelector('.custom-tooltip')
-  if (existingTooltip) {
-    existingTooltip.remove()
-  }
-  
-  const tooltip = document.createElement('div')
-  tooltip.className = 'custom-tooltip'
-  
-  const textSpan = document.createElement('span')
-  textSpan.className = 'tooltip-text'
-  textSpan.textContent = tooltipText
-  
-  tooltip.appendChild(textSpan)
-  
-  if (shortcut) {
-    const shortcutSpan = document.createElement('span')
-    shortcutSpan.className = 'tooltip-shortcut'
-    
-    let displayShortcut = shortcut
-
-    const parts = displayShortcut.split('+')
-    const formattedParts = []
-    
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i].trim()
-      if (part === 'Ctrl' || part === 'Shift' || part === 'Alt' || part === 'Meta' || part === 'Cmd') {
-        formattedParts.push(part)
-      } else if (part === 'Esc') {
-        formattedParts.push('Esc')
-      } else if (part.includes('-')) {
-        
-        formattedParts.push(part.replace('-', ' - '))
-      } else if (part.length === 1) {
-        
-        formattedParts.push(part.toUpperCase())
-      } else {
-        
-        formattedParts.push(part)
-      }
-    }
-
-    displayShortcut = formattedParts.join(' + ')
-    
-    shortcutSpan.textContent = displayShortcut
-    tooltip.appendChild(shortcutSpan)
-  }
-  
-  element.appendChild(tooltip)
-  
-  let showTimeout
-  let hideTimeout
-  
-  element.addEventListener('mouseenter', () => {
-    clearTimeout(hideTimeout)
-    showTimeout = setTimeout(() => {
-      tooltip.classList.add('show')
-    }, 300) 
-  })
-  
-  element.addEventListener('mouseleave', () => {
-    clearTimeout(showTimeout)
-    tooltip.classList.remove('show')
-  })
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  
-  setTimeout(() => {
-    document.querySelectorAll('[data-tooltip]').forEach(createTooltip)
-  }, 100)
-})
-
-setTimeout(() => {
-  document.querySelectorAll('[data-tooltip]').forEach(createTooltip)
-}, 500)
-
-document.addEventListener('click', (e) => {
-  if (e.target.closest('.stroke-popup, .drawing-tools-popup, .shapes-popup, .custom-color-popup')) {
-    setTimeout(() => {
-      document.querySelectorAll('.stroke-popup [data-tooltip], .drawing-tools-popup [data-tooltip], .shapes-popup [data-tooltip], .custom-color-popup [data-tooltip]').forEach(createTooltip)
-    }, 50)
-  }
+const standbyManager = initStandbyManager({
+  state,
+  canvas,
+  setTool,
+  closeAllPopups,
+  finishTextInput,
+  playSound
 })
 
 let canvasVisible = true
@@ -2363,11 +2956,13 @@ if (hideBtn) {
 }
 
 let toolbarWasVisible = false
+let standbyWasActive = false
 
 function triggerCapture() {
   try {
     const toolbar = document.getElementById('main-toolbar')
     toolbarWasVisible = toolbar && toolbar.style.display !== 'none'
+    standbyWasActive = state.standbyMode
     if (toolbar && toolbarWasVisible) {
       toolbar.style.display = 'none'
     }
@@ -2383,7 +2978,7 @@ function triggerCapture() {
         toolbar.style.display = ''
       }
       state.enabled = true
-      canvas.style.pointerEvents = 'auto'
+      canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
     })
   } catch (error) {
     console.error('Error opening capture overlay:', error)
@@ -2393,7 +2988,7 @@ function triggerCapture() {
       toolbar.style.display = ''
     }
     state.enabled = true
-    canvas.style.pointerEvents = 'auto'
+    canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
   }
 }
 
@@ -2411,7 +3006,8 @@ ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
     }
     toolbarWasVisible = false
     state.enabled = true
-    canvas.style.pointerEvents = 'auto'
+    canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
+    standbyWasActive = false
     return
   }
 
@@ -2422,7 +3018,8 @@ ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
   playSound('capture')
   
   state.enabled = true
-  canvas.style.pointerEvents = 'auto'
+  canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
+  standbyWasActive = false
 
   const desktopImg = new Image()
   desktopImg.onload = () => {
@@ -2480,7 +3077,8 @@ ipcRenderer.on('capture-cancelled', () => {
   }
   toolbarWasVisible = false
   state.enabled = true
-  canvas.style.pointerEvents = 'auto'
+  canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
+  standbyWasActive = false
 })
 
 ipcRenderer.on('screenshot-saved', () => {
@@ -2499,6 +3097,8 @@ if (closeBtn) {
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation()
     e.preventDefault()
+    
+    standbyManager.disable()
     
     ipcRenderer.send('hide-window')
   })
@@ -2616,4 +3216,17 @@ ipcRenderer.on('draw-mode', (_, enabled) => {
   }
   state.enabled = enabled
   canvas.style.pointerEvents = enabled ? 'auto' : 'none'
+})
+
+ipcRenderer.on('restore-annotations', (_, data) => {
+  if (data && data.elements && Array.isArray(data.elements)) {
+    state.elements = data.elements
+    state.nextElementId = data.nextElementId || (data.elements.length + 1)
+    state.hasDrawn = data.elements.length > 0
+    state.history = []
+    state.historyIndex = -1
+    saveState()
+    redrawCanvas()
+    updateUndoRedoButtons()
+  }
 })

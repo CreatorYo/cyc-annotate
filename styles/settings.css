@@ -288,7 +288,7 @@ html, body {
   display: flex;
   flex-direction: column;
   padding: 8px 12px;
-  gap: 2px;
+  gap: 6px;
 }
 
 .nav-item {
@@ -555,6 +555,25 @@ html, body {
   padding: 0;
 }
 
+.setting-subsection-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 32px 0 16px 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.setting-subsection-title:first-child {
+  margin-top: 0;
+}
+
 .setting-item {
   display: flex;
   flex-direction: column;
@@ -568,6 +587,23 @@ html, body {
   padding-bottom: 20px;
   border-bottom: none;
 }
+
+  .setting-sub-item {
+    display: none;
+    margin-top: 8px;
+    margin-left: 20px;
+    padding: 12px 0;
+    opacity: 0.95;
+    transition: opacity 0.2s ease;
+  }
+  
+  .setting-sub-item .setting-label-wrapper label {
+    font-size: 15px;
+  }
+  
+  .setting-sub-item .setting-description {
+    font-size: 12px;
+  }
 
 .save-directory-wrapper {
   margin-top: 12px;
@@ -729,6 +765,7 @@ html, body {
   border-radius: 8px;
   background: transparent;
   color: var(--text-primary);
+  font-family: inherit;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -800,7 +837,6 @@ html, body {
 
 .layout-btn.active {
   background: transparent !important;
-  font-weight: 600;
   color: var(--accent-btn-text-color) !important;
 }
 
@@ -956,7 +992,6 @@ html, body {
 .sync-windows-btn:hover {
   border-color: var(--accent-color);
   background: var(--hover-bg);
-  color: var(--accent-color);
 }
 
 .sync-windows-btn.active {
@@ -1012,8 +1047,7 @@ html, body {
 
 .reset-btn:hover {
   background: var(--hover-bg);
-  border-color: var(--accent-color);
-  color: var(--accent-color);
+  color: #ff4d4d;
   opacity: 1;
 }
 
@@ -1154,11 +1188,21 @@ html, body {
   background: rgba(255, 77, 77, 0.1);
   border-color: #ff4d4d;
   color: #ff3333;
-  box-shadow: 0 2px 8px rgba(255, 77, 77, 0.2);
 }
 
 .reset-everything-btn .material-symbols-outlined {
   font-size: 20px;
+}
+
+.reset-section:last-child .reset-everything-btn {
+  border-color: rgba(59, 187, 246, 0.5);
+  color: #3bbbf6;
+}
+
+.reset-section:last-child .reset-everything-btn:hover {
+  background: rgba(59, 187, 246, 0.1);
+  border-color: #3bbbf6;
+  color: #3bbbf6;
 }
 
 .reset-description {
@@ -1170,10 +1214,202 @@ html, body {
   line-height: 1.5;
 }
 
+.dismissed-dialogs-section {
+  margin-top: 24px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 20px;
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.collapsible-header:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.collapsible-header .expand-icon {
+  font-size: 20px;
+  color: var(--text-primary);
+  opacity: 0.5;
+  transition: transform 0.2s ease;
+}
+
+.collapsible-header.expanded .expand-icon {
+  transform: rotate(180deg);
+  color: var(--accent-color);
+}
+
+.dismissed-count {
+  margin-left: auto;
+  background: var(--accent-color);
+  color: var(--accent-btn-text-color, #fff);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.dismissed-count:empty {
+  display: none;
+}
+
+.collapsible-content {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  padding: 0;
+  transition: max-height 0.15s ease, opacity 0.1s ease, padding 0.15s ease;
+}
+
+.collapsible-content.expanded {
+  max-height: 400px;
+  opacity: 1;
+  padding: 16px 0 0 0;
+  transition: max-height 0.15s ease, opacity 0.12s ease 0.05s, padding 0.15s ease;
+}
+
+.dismissed-description {
+  font-size: 12px;
+  color: var(--text-primary);
+  opacity: 0.55;
+  margin: 0 0 14px 0;
+  line-height: 1.4;
+}
+
+.dismissed-dialogs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.no-dismissed-dialogs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  opacity: 0.55;
+  text-align: center;
+  padding: 16px;
+  margin: 0;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  border: 1px dashed var(--border-color);
+}
+
+.no-dismissed-dialogs .material-symbols-outlined {
+  font-size: 20px;
+  color: #22c55e;
+}
+
+.dismissed-dialog-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  transition: all 0.15s ease;
+}
+
+.dismissed-dialog-item:hover {
+  border-color: var(--accent-color);
+  background: var(--bg-hover);
+}
+
+.dismissed-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dismissed-dialog-icon .material-symbols-outlined {
+  font-size: 22px;
+  color: var(--text-primary);
+  opacity: 0.6;
+}
+
+.dismissed-dialog-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dismissed-dialog-name {
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.dismissed-dialog-desc {
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-primary);
+  opacity: 0.55;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.restore-dialog-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.restore-dialog-btn:hover {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--accent-btn-text-color, #fff);
+  opacity: 1;
+}
+
+.restore-dialog-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+
 .about-content {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
   padding: 0;
   align-items: flex-start;
 }
@@ -1186,7 +1422,13 @@ html, body {
   letter-spacing: 0.5px;
 }
 
-.report-issue-btn {
+.about-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.about-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1201,20 +1443,17 @@ html, body {
   transition: all 0.2s ease;
   text-decoration: none;
   user-select: none;
-  width: fit-content;
 }
 
-.report-issue-btn:hover {
+.about-btn:hover {
   background: var(--accent-active-bg);
   border-color: var(--accent-hover);
-  color: var(--accent-hover);
 }
 
-.report-issue-btn .material-symbols-outlined {
+.about-btn .material-symbols-outlined {
   font-size: 18px;
   color: inherit;
 }
-
 
 .settings-footer {
   margin-top: auto;

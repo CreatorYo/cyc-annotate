@@ -4,7 +4,6 @@ let isSelecting = false
 let startX = 0
 let startY = 0
 let selectionRect = null
-let instructions = null
 let overlay = null
 
 function hexToRgb(hex) {
@@ -29,7 +28,7 @@ function applyAccentColor(color) {
     }
     
     if (overlay) {
-      overlay.style.background = 'rgba(0, 0, 0, 0.4)'
+      overlay.style.background = 'rgba(0, 0, 0, 0.5)'
     }
   } catch (e) {
     console.warn('Could not apply accent color:', e)
@@ -38,10 +37,9 @@ function applyAccentColor(color) {
 
 function init() {
   selectionRect = document.getElementById('selection-rect')
-  instructions = document.getElementById('instructions')
   overlay = document.getElementById('overlay')
   
-  if (!selectionRect || !instructions || !overlay) {
+  if (!selectionRect || !overlay) {
     setTimeout(init, 10)
     return
   }
@@ -83,7 +81,7 @@ function updateSelectionRect(x, y, width, height) {
   selectionRect.style.display = 'block'
   
   if (absWidth > 0 && absHeight > 0) {
-    selectionRect.style.boxShadow = '0 0 0 9999px rgba(0, 0, 0, 0.4)'
+    selectionRect.style.boxShadow = '0 0 0 9999px rgba(0, 0, 0, 0.5)'
     if (!overlay.classList.contains('hidden')) {
       overlay.style.display = 'none'
       overlay.classList.add('hidden')
@@ -117,10 +115,6 @@ function handleMouseDown(e) {
   startY = e.clientY
   
   document.body.classList.add('selecting')
-  
-  if (instructions) {
-    instructions.classList.add('hidden')
-  }
   
   if (overlay && !overlay.classList.contains('hidden')) {
     overlay.style.display = 'none'
@@ -165,9 +159,6 @@ function handleMouseUp(e) {
       overlay.style.display = 'block'
       overlay.classList.remove('hidden')
     }
-    if (instructions) {
-      instructions.classList.remove('hidden')
-    }
   }
   
   e.preventDefault()
@@ -185,10 +176,6 @@ function selectEntireScreen() {
   }
   
   updateSelectionRect(bounds.x, bounds.y, bounds.width, bounds.height)
-  
-  if (instructions) {
-    instructions.classList.add('hidden')
-  }
   
   setTimeout(() => {
     ipcRenderer.send('capture-selection', bounds)
@@ -208,10 +195,6 @@ function resetSelection() {
   if (overlay && overlay.classList.contains('hidden')) {
     overlay.style.display = 'block'
     overlay.classList.remove('hidden')
-  }
-  
-  if (instructions) {
-    instructions.classList.remove('hidden')
   }
 }
 

@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Annotate App</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/nano.min.css"/>
   <link rel="stylesheet" href="../../styles/style.css">
 </head>
 <body data-theme="system">
@@ -16,6 +15,10 @@
         <span class="material-symbols-outlined">edit</span>
       </button>
         <div id="drawing-tools-popup" class="drawing-tools-popup">
+          <button class="drawing-tool-option" data-tool="select" data-tooltip="Select" data-shortcut="V">
+            <span class="material-symbols-outlined">arrow_selector_tool</span>
+            <span>Select</span>
+          </button>
           <button class="drawing-tool-option" data-tool="pencil" data-tooltip="Pencil" data-shortcut="P">
             <span class="material-symbols-outlined">edit</span>
             <span>Pencil</span>
@@ -45,6 +48,10 @@
           </button>
           <button class="shape-option" data-shape="arrow" data-tooltip="Arrow">
             <span class="material-symbols-outlined">arrow_forward</span>
+          </button>
+          <div class="shapes-popup-separator"></div>
+          <button id="shape-fill-toggle" class="shape-option" data-tooltip="Enable Fill">
+            <span class="material-symbols-outlined">format_color_fill</span>
           </button>
         </div>
       </div>
@@ -209,6 +216,10 @@
           <span class="material-symbols-outlined">visibility_off</span>
           <span>Toggle Visibility</span>
         </button>
+        <button id="more-standby-btn" class="more-menu-item" data-tooltip="Standby Mode" data-shortcut="Space">
+          <span class="material-symbols-outlined">pause_circle</span>
+          <span>Standby Mode</span>
+        </button>
         <button id="more-menu-settings-btn" class="more-menu-item" data-tooltip="Settings" data-shortcut="Ctrl+,">
           <span class="material-symbols-outlined" style="position: relative;">
             settings
@@ -222,6 +233,9 @@
       </div>
       <button id="hide-btn" class="toolbar-btn" data-tooltip="Toggle Visibility" data-shortcut="H">
         <span class="material-symbols-outlined">visibility_off</span>
+      </button>
+      <button id="standby-btn" class="toolbar-btn" data-tooltip="Standby Mode" data-shortcut="Space">
+        <span class="material-symbols-outlined">pause_circle</span>
       </button>
       <button id="capture-btn" class="toolbar-btn" data-tooltip="Capture" data-shortcut="Shift+C">
         <span class="material-symbols-outlined">camera_alt</span>
@@ -296,7 +310,7 @@
     </div>
   </div>
 
-  <input type="text" id="color-picker-input" style="display: none;">
+  <input type="color" id="color-picker-input" style="display: none;">
 
   <div id="search-overlay" class="search-overlay" style="display: none;">
     <div class="search-container">
@@ -310,7 +324,6 @@
 
   <canvas id="canvas"></canvas>
 
-  <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

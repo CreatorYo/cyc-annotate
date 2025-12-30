@@ -35,6 +35,18 @@ ipcRenderer.on('theme-changed', (event, theme) => {
   applyTheme(theme)
 })
 
+ipcRenderer.on('accent-color-changed', (event, color) => {
+  const normalizedColor = normalizeHex(color)
+  updateColor(normalizedColor)
+  localStorage.setItem('accent-color', normalizedColor)
+})
+
+ipcRenderer.on('windows-accent-color-changed', (event, color) => {
+  const normalizedColor = normalizeHex(color)
+  updateColor(normalizedColor)
+  localStorage.setItem('accent-color', normalizedColor)
+})
+
 function formatShortcut(keys) {
   return keys.map(k => {
     if (k === 'Control') return 'Ctrl'
