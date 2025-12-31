@@ -706,9 +706,11 @@ ipcMain.handle('show-relaunch-dialog', async (event, settingName) => {
 
   ipcMain.on('set-standby-mode', (event, enabled) => {
     standbyModeEnabled = enabled
-    // Use restoreMouseEvents which now uses polling instead of forward: true
-    // This avoids mouse jitter on Windows
     restoreMouseEvents()
+  })
+
+  ipcMain.on('update-toolbar-bounds', (event, bounds) => {
+    if (windowUtils) windowUtils.setToolbarBounds(bounds)
   })
 
   ipcMain.on('toolbar-bg-changed', (event, data) => {

@@ -1,6 +1,6 @@
 const { ipcRenderer } = require('electron')
 
-let deps = {}, active = false, savedTool = null, mouseOver = false
+let deps = {}, active = false, savedTool = null, boundsInterval = null
 
 function init(d) {
   deps = d
@@ -14,6 +14,7 @@ function reset() {
   savedTool = null
   if (deps.state) { deps.state.standbyMode = false; deps.state.toolBeforeStandby = null }
   if (deps.canvas) deps.canvas.style.pointerEvents = 'auto'
+  stopBounds()
   ipcRenderer.send('set-standby-mode', false)
   updateUI(false)
   setDisabled(false)
@@ -32,15 +33,6 @@ function setupEvents() {
   }, true)
   
   ipcRenderer.on('disable-standby-mode', () => disable(false))
-  
-  const toolbar = document.getElementById('main-toolbar')
-  if (toolbar) {
-    // Track mouse over toolbar for UI purposes
-    // Main process now handles setIgnoreMouseEvents via cursor position polling
-    // to avoid mouse jitter issues with forward: true on Windows
-    toolbar.addEventListener('mouseenter', () => { mouseOver = true })
-    toolbar.addEventListener('mouseleave', () => { mouseOver = false })
-  }
 }
 
 function enable() {
@@ -55,7 +47,8 @@ function enable() {
   document.querySelectorAll('[data-tool], .drawing-tool-option').forEach(b => b.classList.remove('active'))
   document.getElementById('pencil-btn')?.classList.remove('active')
   
-  if (!mouseOver) ipcRenderer.send('set-standby-mode', true)
+  startBounds()
+  ipcRenderer.send('set-standby-mode', true)
   if (canvas) canvas.style.pointerEvents = 'none'
   
   updateUI(true)
@@ -75,6 +68,7 @@ function disable(sound = true) {
   active = false
   state.standbyMode = false
   
+  stopBounds()
   ipcRenderer.send('set-standby-mode', false)
   if (canvas) canvas.style.pointerEvents = 'auto'
   
@@ -91,6 +85,25 @@ function disable(sound = true) {
 }
 
 function toggle() { active ? disable(true) : enable() }
+
+function sendBounds() {
+  const tb = document.getElementById('main-toolbar')
+  if (!tb) return
+  let { left: x, top: y, right: r, bottom: b } = tb.getBoundingClientRect()
+  const expand = (el, check) => {
+    if (!el || !check(el)) return
+    const rect = el.getBoundingClientRect()
+    x = Math.min(x, rect.left); y = Math.min(y, rect.top)
+    r = Math.max(r, rect.right); b = Math.max(b, rect.bottom)
+  }
+  expand(document.getElementById('more-menu-dropdown'), e => e.classList.contains('show'))
+  expand(document.getElementById('color-picker-popup'), e => e.style.display !== 'none')
+  expand(document.getElementById('drawing-tools-dropdown'), e => e.classList.contains('show'))
+  ipcRenderer.send('update-toolbar-bounds', { x: Math.round(screenX + x), y: Math.round(screenY + y), width: Math.round(r - x), height: Math.round(b - y) })
+}
+
+function startBounds() { if (!boundsInterval) { sendBounds(); boundsInterval = setInterval(sendBounds, 100) } }
+function stopBounds() { if (boundsInterval) { clearInterval(boundsInterval); boundsInterval = null } }
 
 function updateUI(on) {
   const sb = document.getElementById('standby-btn')

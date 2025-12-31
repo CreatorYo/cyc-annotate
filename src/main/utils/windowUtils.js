@@ -1,124 +1,85 @@
 const { screen } = require('electron')
 
 let deps = {}
-let standbyPollingInterval = null
-let lastMouseOverToolbar = false
+let pollingInterval = null
+let lastOverToolbar = false
+let toolbarBounds = null
+let postCapture = false
 
 function init(dependencies) {
   deps = dependencies
-  return { 
-    restoreMouseEvents, 
-    ensureAlwaysOnTop, 
-    disableDefaultShortcuts,
-    startStandbyPolling,
-    stopStandbyPolling
-  }
+  return { restoreMouseEvents, ensureAlwaysOnTop, disableDefaultShortcuts, startStandbyPolling, stopStandbyPolling, setToolbarBounds: b => { toolbarBounds = b } }
+}
+
+function isOverToolbar() {
+  if (!toolbarBounds) return false
+  const p = screen.getCursorScreenPoint()
+  const pad = 25
+  return p.x >= toolbarBounds.x - pad && p.x <= toolbarBounds.x + toolbarBounds.width + pad &&
+         p.y >= toolbarBounds.y - pad && p.y <= toolbarBounds.y + toolbarBounds.height + pad
 }
 
 function restoreMouseEvents() {
   const win = deps.getWin?.()
-  const standbyModeEnabled = deps.getStandbyMode?.()
+  if (deps.getCaptureOverlayActive?.() || !win || win.isDestroyed()) return
   
-  if (win && !win.isDestroyed()) {
-    if (standbyModeEnabled) {
-      // Use polling instead of forward: true to avoid mouse jitter on Windows
-      win.setIgnoreMouseEvents(true)
-      startStandbyPolling()
-    } else {
-      win.setIgnoreMouseEvents(false)
-      stopStandbyPolling()
-    }
-  }
+  stopStandbyPolling(false)
+  try { win.setIgnoreMouseEvents(false) } catch (e) {}
+  
+  if (!deps.getStandbyMode?.()) return
+  
+  postCapture = true
+  setTimeout(() => {
+    postCapture = false
+    if (!deps.getStandbyMode?.() || deps.getCaptureOverlayActive?.()) return
+    if (!win || win.isDestroyed()) return
+    
+    lastOverToolbar = isOverToolbar()
+    if (!lastOverToolbar) try { win.setIgnoreMouseEvents(true, { forward: true }) } catch (e) {}
+    startStandbyPolling()
+  }, 50)
 }
 
 function startStandbyPolling() {
-  if (standbyPollingInterval) return
+  if (pollingInterval || postCapture) return
+  lastOverToolbar = false
   
-  standbyPollingInterval = setInterval(() => {
+  pollingInterval = setInterval(() => {
     const win = deps.getWin?.()
-    const standbyModeEnabled = deps.getStandbyMode?.()
+    if (!win || win.isDestroyed() || !deps.getStandbyMode?.()) { stopStandbyPolling(); return }
+    if (deps.getCaptureOverlayActive?.() || postCapture) return
     
-    if (!win || win.isDestroyed() || !standbyModeEnabled) {
-      stopStandbyPolling()
-      return
+    const over = isOverToolbar()
+    if (over !== lastOverToolbar) {
+      lastOverToolbar = over
+      try { win.setIgnoreMouseEvents(!over, over ? undefined : { forward: true }) } catch (e) {}
     }
-    
-    try {
-      const cursorPoint = screen.getCursorScreenPoint()
-      const winBounds = win.getBounds()
-      
-      // Check if cursor is within the window bounds (toolbar area)
-      const padding = 5
-      const isOverWindow = 
-        cursorPoint.x >= winBounds.x - padding &&
-        cursorPoint.x <= winBounds.x + winBounds.width + padding &&
-        cursorPoint.y >= winBounds.y - padding &&
-        cursorPoint.y <= winBounds.y + winBounds.height + padding
-      
-      // Only update if state changed to avoid unnecessary calls
-      if (isOverWindow !== lastMouseOverToolbar) {
-        lastMouseOverToolbar = isOverWindow
-        if (isOverWindow) {
-          win.setIgnoreMouseEvents(false)
-        } else {
-          win.setIgnoreMouseEvents(true)
-        }
-      }
-    } catch (e) {
-      // Ignore errors during polling
-    }
-  }, 50) // Poll every 50ms - smooth without being heavy
+  }, 32)
 }
 
-function stopStandbyPolling() {
-  if (standbyPollingInterval) {
-    clearInterval(standbyPollingInterval)
-    standbyPollingInterval = null
-  }
-  lastMouseOverToolbar = false
+function stopStandbyPolling(clearBounds = true) {
+  if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null }
+  lastOverToolbar = false
+  if (clearBounds) toolbarBounds = null
 }
 
 function ensureAlwaysOnTop() {
   const win = deps.getWin?.()
-  const captureOverlayActive = deps.getCaptureOverlayActive?.()
-  
-  if (captureOverlayActive) return
-  
-  if (win && !win.isDestroyed()) {
-    try {
-      if (!win.isAlwaysOnTop()) {
-        win.setAlwaysOnTop(true, 'screen-saver', 1)
-      }
-    } catch (e) {
-      try {
-        win.setAlwaysOnTop(true)
-      } catch (e2) {}
-    }
-  }
+  if (deps.getCaptureOverlayActive?.() || !win || win.isDestroyed()) return
+  try { if (!win.isAlwaysOnTop()) win.setAlwaysOnTop(true, 'screen-saver', 1) } 
+  catch (e) { try { win.setAlwaysOnTop(true) } catch (e2) {} }
 }
 
 function disableDefaultShortcuts(window) {
   if (!window || window.isDestroyed()) return
-  
   const isDev = deps.isDev ?? false
   
   window.webContents.on('before-input-event', (event, input) => {
     if ((input.control || input.meta) && input.key.toLowerCase() === 'f') return
     if (isDev) return
-    
-    const key = input.key.toLowerCase()
-    const ctrl = input.control || input.meta
-    
-    if (ctrl) {
-      if (key === 'r' || (key === 'i' && input.shift) || (key === 'j' && input.shift) || key === 'u' || (key === 'c' && input.shift)) {
-        event.preventDefault()
-        return
-      }
-    }
-    
-    if (input.key === 'F5') {
-      event.preventDefault()
-    }
+    const key = input.key.toLowerCase(), ctrl = input.control || input.meta
+    if (ctrl && (key === 'r' || (key === 'i' && input.shift) || (key === 'j' && input.shift) || key === 'u' || (key === 'c' && input.shift))) { event.preventDefault(); return }
+    if (input.key === 'F5') event.preventDefault()
   })
 }
 
