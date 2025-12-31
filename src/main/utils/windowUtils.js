@@ -1,8 +1,18 @@
+const { screen } = require('electron')
+
 let deps = {}
+let standbyPollingInterval = null
+let lastMouseOverToolbar = false
 
 function init(dependencies) {
   deps = dependencies
-  return { restoreMouseEvents, ensureAlwaysOnTop, disableDefaultShortcuts }
+  return { 
+    restoreMouseEvents, 
+    ensureAlwaysOnTop, 
+    disableDefaultShortcuts,
+    startStandbyPolling,
+    stopStandbyPolling
+  }
 }
 
 function restoreMouseEvents() {
@@ -11,11 +21,61 @@ function restoreMouseEvents() {
   
   if (win && !win.isDestroyed()) {
     if (standbyModeEnabled) {
-      win.setIgnoreMouseEvents(true, { forward: true })
+      // Use polling instead of forward: true to avoid mouse jitter on Windows
+      win.setIgnoreMouseEvents(true)
+      startStandbyPolling()
     } else {
       win.setIgnoreMouseEvents(false)
+      stopStandbyPolling()
     }
   }
+}
+
+function startStandbyPolling() {
+  if (standbyPollingInterval) return
+  
+  standbyPollingInterval = setInterval(() => {
+    const win = deps.getWin?.()
+    const standbyModeEnabled = deps.getStandbyMode?.()
+    
+    if (!win || win.isDestroyed() || !standbyModeEnabled) {
+      stopStandbyPolling()
+      return
+    }
+    
+    try {
+      const cursorPoint = screen.getCursorScreenPoint()
+      const winBounds = win.getBounds()
+      
+      // Check if cursor is within the window bounds (toolbar area)
+      const padding = 5
+      const isOverWindow = 
+        cursorPoint.x >= winBounds.x - padding &&
+        cursorPoint.x <= winBounds.x + winBounds.width + padding &&
+        cursorPoint.y >= winBounds.y - padding &&
+        cursorPoint.y <= winBounds.y + winBounds.height + padding
+      
+      // Only update if state changed to avoid unnecessary calls
+      if (isOverWindow !== lastMouseOverToolbar) {
+        lastMouseOverToolbar = isOverWindow
+        if (isOverWindow) {
+          win.setIgnoreMouseEvents(false)
+        } else {
+          win.setIgnoreMouseEvents(true)
+        }
+      }
+    } catch (e) {
+      // Ignore errors during polling
+    }
+  }, 50) // Poll every 50ms - smooth without being heavy
+}
+
+function stopStandbyPolling() {
+  if (standbyPollingInterval) {
+    clearInterval(standbyPollingInterval)
+    standbyPollingInterval = null
+  }
+  lastMouseOverToolbar = false
 }
 
 function ensureAlwaysOnTop() {

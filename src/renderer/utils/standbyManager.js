@@ -35,14 +35,11 @@ function setupEvents() {
   
   const toolbar = document.getElementById('main-toolbar')
   if (toolbar) {
-    toolbar.addEventListener('mouseenter', () => {
-      mouseOver = true
-      if (active) ipcRenderer.send('set-standby-mode', false)
-    })
-    toolbar.addEventListener('mouseleave', () => {
-      mouseOver = false
-      if (active) ipcRenderer.send('set-standby-mode', true)
-    })
+    // Track mouse over toolbar for UI purposes
+    // Main process now handles setIgnoreMouseEvents via cursor position polling
+    // to avoid mouse jitter issues with forward: true on Windows
+    toolbar.addEventListener('mouseenter', () => { mouseOver = true })
+    toolbar.addEventListener('mouseleave', () => { mouseOver = false })
   }
 }
 

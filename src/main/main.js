@@ -706,13 +706,9 @@ ipcMain.handle('show-relaunch-dialog', async (event, settingName) => {
 
   ipcMain.on('set-standby-mode', (event, enabled) => {
     standbyModeEnabled = enabled
-    if (win && !win.isDestroyed()) {
-      if (enabled) {
-        win.setIgnoreMouseEvents(true, { forward: true })
-      } else {
-        win.setIgnoreMouseEvents(false)
-      }
-    }
+    // Use restoreMouseEvents which now uses polling instead of forward: true
+    // This avoids mouse jitter on Windows
+    restoreMouseEvents()
   })
 
   ipcMain.on('toolbar-bg-changed', (event, data) => {
