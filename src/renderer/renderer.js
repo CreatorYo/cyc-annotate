@@ -1499,6 +1499,11 @@ function setTool(tool) {
 
 function updateCursor() {
   const tool = state.tool
+  
+  if (state.drawing || state.isDraggingSelection || state.isResizing || state.isSelecting) {
+    return
+  }
+  
   if (tool === 'pencil') {
     const pencilCursor = 'data:image/svg+xml;base64,' + btoa(`
       <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
