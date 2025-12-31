@@ -2648,7 +2648,7 @@ function updateReduceClutter() {
   const reduceClutterValue = localStorage.getItem('reduce-clutter')
   const reduceClutter = reduceClutterValue === null ? true : reduceClutterValue === 'true'
   const standbyInToolbarValue = localStorage.getItem('standby-in-toolbar')
-  const standbyInToolbar = standbyInToolbarValue === null ? true : standbyInToolbarValue === 'true'
+  const standbyInToolbar = standbyInToolbarValue === null ? false : standbyInToolbarValue === 'true'
   
   const undoBtn = document.getElementById('undo-btn')
   const redoBtn = document.getElementById('redo-btn')

@@ -528,7 +528,7 @@ function createMainWindow() {
     settingsWin.on('closed', () => {
       settingsWin = null
       if (win && !win.isDestroyed()) {
-        const standbyInToolbar = getSetting('standby-in-toolbar', true)
+        const standbyInToolbar = getSetting('standby-in-toolbar', false)
         const reduceClutter = getSetting('reduce-clutter', true)
         win.webContents.send('sync-toolbar-settings', { standbyInToolbar, reduceClutter })
       }
@@ -842,7 +842,7 @@ ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
 
   ipcMain.on('get-system-settings', (event) => {
     event.returnValue = {
-      standbyInToolbar: getSetting('standby-in-toolbar', true),
+      standbyInToolbar: getSetting('standby-in-toolbar', false),
       showTrayIcon: getSetting('show-tray-icon', true),
       launchOnStartup: getSetting('launch-on-startup', false)
     }

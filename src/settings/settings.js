@@ -676,7 +676,7 @@ if (standbyInToolbarCheckbox) {
   if (standbyInToolbar !== null) {
     standbyInToolbarCheckbox.checked = standbyInToolbar === 'true'
   } else {
-    standbyInToolbarCheckbox.checked = true
+    standbyInToolbarCheckbox.checked = false
   }
   
   standbyInToolbarCheckbox.addEventListener('change', (e) => {
@@ -1047,9 +1047,9 @@ if (resetEverythingBtn) {
     }
     
     if (standbyInToolbarCheckbox) {
-      standbyInToolbarCheckbox.checked = true
-      localStorage.setItem('standby-in-toolbar', 'true')
-      ipcRenderer.send('standby-in-toolbar-changed', true)
+      standbyInToolbarCheckbox.checked = false
+      localStorage.setItem('standby-in-toolbar', 'false')
+      ipcRenderer.send('standby-in-toolbar-changed', false)
     }
 
     if (syncWindowsAccentBtn) {
@@ -1448,18 +1448,37 @@ if (hardwareAccelerationCheckbox) {
   })
 }
 
+function initInfoTooltips() {
+  const tooltip = document.createElement('div')
+  tooltip.className = 'info-tooltip'
+  document.body.appendChild(tooltip)
+
+  document.querySelectorAll('.info-icon[data-tooltip]').forEach(icon => {
+    icon.addEventListener('mouseenter', () => {
+      tooltip.textContent = icon.dataset.tooltip
+      tooltip.classList.add('visible')
+      const rect = icon.getBoundingClientRect()
+      tooltip.style.left = `${rect.left + rect.width / 2}px`
+      tooltip.style.top = `${rect.top - 8}px`
+    })
+    icon.addEventListener('mouseleave', () => tooltip.classList.remove('visible'))
+  })
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initReportIssueButton()
     initViewDetailsButton()
     updateResetAccentVisibility()
     updateResetShortcutVisibility()
+    initInfoTooltips()
   })
 } else {
   initReportIssueButton()
   initViewDetailsButton()
   updateResetAccentVisibility()
   updateResetShortcutVisibility()
+  initInfoTooltips()
 }
 
 const { initWindowControls } = require('../shared/window-controls.js')

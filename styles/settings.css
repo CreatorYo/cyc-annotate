@@ -702,6 +702,53 @@ html, body {
   -ms-user-select: none;
 }
 
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 4px;
+  transform: translateY(-2px);
+}
+
+.info-icon .material-symbols-outlined {
+  font-size: 16px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.info-icon:hover .material-symbols-outlined {
+  opacity: 0.9;
+}
+
+.info-tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  background: #1a1a1a;
+  color: #e0e0e0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  width: 200px;
+  text-align: left;
+  line-height: 1.5;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
+  pointer-events: none;
+  z-index: 100000;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.8);
+  border: 1px solid #333;
+}
+
+.info-tooltip.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
 .theme-toggle,
 .layout-toggle {
   display: flex;
