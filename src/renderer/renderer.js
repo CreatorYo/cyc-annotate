@@ -194,6 +194,7 @@ function redrawCanvas() {
 
 function drawElement(element) {
   if (!element) return
+  if (element.id === state.editingElementId) return
   
   ctx.save()
   
@@ -351,6 +352,20 @@ function getElementBounds(element) {
     
     let maxWidth = 0
     let totalLines = 0
+    
+    if (element.id === state.editingElementId) {
+      const textInput = document.getElementById('text-input')
+      if (textInput && textInput.style.display !== 'none') {
+        const rect = textInput.getBoundingClientRect()
+        const canvasRect = canvas.getBoundingClientRect()
+        return {
+          x: element.x,
+          y: element.y,
+          width: rect.width,
+          height: rect.height
+        }
+      }
+    }
     
     if (element.segments) {
       ctx.save()
@@ -617,6 +632,11 @@ function startDrawing(e) {
 
   e.preventDefault()
   
+  const textInput = document.getElementById('text-input')
+  if (textInput && textInput.style.display === 'block') {
+    finishTextInput()
+  }
+  
   if (state.tool === 'select') {
     const coords = getCanvasCoordinates(e)
     if (selectTool.handleSelectStart(e, coords)) {
@@ -626,11 +646,6 @@ function startDrawing(e) {
   
   if (state.tool === 'text') {
     const coords = getCanvasCoordinates(e)
-    
-    const textInput = document.getElementById('text-input')
-    if (textInput.style.display === 'block') {
-      finishTextInput()
-    }
     startTextInput(coords.x, coords.y)
     return
   }
@@ -946,6 +961,13 @@ function startTextInput(x, y) {
   textInput.style.left = (canvasRect.left + x) + 'px'
   textInput.style.top = (canvasRect.top + y) + 'px'
   textInput.style.zIndex = '2000'
+  
+  const fontSize = Math.max(32, state.strokeSize * 10)
+  textInput.style.fontSize = fontSize + 'px'
+  textInput.style.color = state.color
+  textInput.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  textInput.style.lineHeight = '1.2'
+  
   textInput.textContent = ''
   textInput.innerHTML = ''
 
@@ -1116,11 +1138,13 @@ function finishTextInput() {
         }
         
         element.segments = segments
+        state.editingElementId = null
         redrawCanvas()
         saveState()
       } else {
         state.elements = state.elements.filter(e => e.id !== state.editingElementId)
         state.selectedElements = state.selectedElements.filter(id => id !== state.editingElementId)
+        state.editingElementId = null
         redrawCanvas()
         saveState()
       }
@@ -1153,7 +1177,7 @@ function finishTextInput() {
       }
     }
     
-    const fontSize = Math.max(12, state.strokeSize * 4)
+    const fontSize = Math.max(32, state.strokeSize * 10)
     
     const textElement = createElement('text', {
       x: state.textInput.x,
@@ -1256,6 +1280,13 @@ function editTextElement(element) {
   textInput.style.left = (canvasRect.left + element.x) + 'px'
   textInput.style.top = (canvasRect.top + element.y) + 'px'
   textInput.style.zIndex = '2000'
+  
+  const fontSize = element.fontSize || Math.max(32, (element.strokeSize || state.strokeSize) * 10)
+  textInput.style.fontSize = fontSize + 'px'
+  textInput.style.color = element.color || state.color
+  textInput.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  textInput.style.lineHeight = '1.2'
+  
   textInput.textContent = textContent
   textInput.innerHTML = textContent
   
@@ -1281,6 +1312,8 @@ function editTextElement(element) {
     selection.removeAllRanges()
     selection.addRange(range)
   }, 10)
+  
+  redrawCanvas()
 }
 
 function copySelectedElements() {
@@ -1420,6 +1453,12 @@ textInput.addEventListener('keydown', (e) => {
     textInput.style.display = 'none'
     state.textInput = null
     textInputFinished = false
+  }
+})
+
+textInput.addEventListener('input', () => {
+  if (state.editingElementId) {
+    updateSelectionOverlay()
   }
 })
 
@@ -2974,6 +3013,10 @@ function triggerCapture() {
 
     state.enabled = false
     canvas.style.pointerEvents = 'none'
+    
+    if (standbyWasActive) {
+      standbyManager.pause()
+    }
 
     ipcRenderer.invoke('open-capture-overlay').catch((error) => {
       console.error('Error opening capture overlay:', error)
@@ -2982,8 +3025,12 @@ function triggerCapture() {
       if (toolbar && toolbarWasVisible) {
         toolbar.style.display = ''
       }
+      if (standbyWasActive) {
+        standbyManager.resume()
+      }
       state.enabled = true
       canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
+      standbyWasActive = false
     })
   } catch (error) {
     console.error('Error opening capture overlay:', error)
@@ -2992,8 +3039,12 @@ function triggerCapture() {
     if (toolbar && toolbarWasVisible) {
       toolbar.style.display = ''
     }
+    if (standbyWasActive) {
+      standbyManager.resume()
+    }
     state.enabled = true
     canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
+    standbyWasActive = false
   }
 }
 
@@ -3009,6 +3060,9 @@ ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
     if (toolbar && toolbarWasVisible) {
       toolbar.style.display = ''
     }
+    if (standbyWasActive) {
+      standbyManager.resume()
+    }
     toolbarWasVisible = false
     state.enabled = true
     canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
@@ -3021,6 +3075,10 @@ ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
   }
 
   playSound('capture')
+  
+  if (standbyWasActive) {
+    standbyManager.resume()
+  }
   
   state.enabled = true
   canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
@@ -3079,6 +3137,9 @@ ipcRenderer.on('capture-cancelled', () => {
   const toolbar = document.getElementById('main-toolbar')
   if (toolbar && toolbarWasVisible) {
     toolbar.style.display = ''
+  }
+  if (standbyWasActive) {
+    standbyManager.resume()
   }
   toolbarWasVisible = false
   state.enabled = true

@@ -1159,7 +1159,7 @@ const sidebarSearchToggle = document.getElementById('sidebar-search-toggle')
 const sidebarSearchContainer = document.querySelector('.sidebar-search-container')
 
 const categoryTitles = {
-  appearance: { title: 'Appearance', subtitle: 'Customise your app\'s look and feel' },
+  appearance: { title: 'Appearance', subtitle: 'Customise the app\'s look and feel' },
   toolbar: { title: 'Toolbar', subtitle: 'Configure toolbar layout and display options' },
   shortcuts: { title: 'Shortcuts', subtitle: 'Manage keyboard shortcuts' },
   behavior: { title: 'Behavior', subtitle: 'Customise how the app behaves and responds' },
@@ -1169,6 +1169,9 @@ const categoryTitles = {
   about: { title: 'About', subtitle: 'Application information and support' }
 }
 
+
+
+let searchDebounceTimeout = null
 let currentCategory = localStorage.getItem('settings-category') || 'appearance'
 
 function showCategory(category) {
@@ -1225,101 +1228,196 @@ if (document.readyState === 'loading') {
 function performSearch(query) {
   const searchTerm = query.toLowerCase().trim()
   const sections = document.querySelectorAll('.settings-section')
-  const settingItems = document.querySelectorAll('.setting-item')
+  const categoryHeader = document.querySelector('.settings-header')
+  const headerDivider = document.querySelector('.header-divider')
   let hasResults = false
+
+  // Clear existing search headers
+  document.querySelectorAll('.search-category-header').forEach(h => h.remove())
 
   if (searchTerm === '') {
     sections.forEach(section => {
-      if (section.dataset.category === currentCategory) {
+      const isCurrent = section.dataset.category === currentCategory
+      if (isCurrent) {
         section.classList.add('active')
       } else {
         section.classList.remove('active')
       }
       section.classList.remove('hidden')
+      section.classList.remove('search-result-section')
+      
+      section.querySelectorAll('.setting-item, .setting-subsection-title').forEach(item => {
+        item.classList.remove('hidden')
+      })
     })
-    settingItems.forEach(item => {
-      item.classList.remove('hidden')
-    })
+    
+    if (categoryHeader) categoryHeader.style.display = 'block'
+    if (headerDivider) headerDivider.style.display = 'block'
     noResults.style.display = 'none'
     clearSearchBtn.style.display = 'none'
     return
   }
 
   clearSearchBtn.style.display = 'flex'
+  if (categoryHeader) categoryHeader.style.display = 'none'
+  if (headerDivider) headerDivider.style.display = 'none'
 
   sections.forEach(section => {
-    const sectionData = section.getAttribute('data-section') || ''
     const category = section.getAttribute('data-category') || ''
-    const categoryTitle = categoryTitles[category]?.title.toLowerCase() || ''
+    
+    // EXCLUDE LABS FROM SEARCH
+    if (category === 'labs') {
+      section.classList.remove('active')
+      section.classList.add('hidden')
+      section.classList.remove('search-result-section')
+      return
+    }
+
+    const categoryTitleInfo = categoryTitles[category]
+    const categoryTitle = categoryTitleInfo?.title.toLowerCase() || ''
+    const sectionData = section.getAttribute('data-section')?.toLowerCase() || ''
     const sectionMatches = categoryTitle.includes(searchTerm) || sectionData.includes(searchTerm)
     
     let sectionHasVisibleItems = false
     
-    section.querySelectorAll('.setting-item').forEach(item => {
-      const label = item.querySelector('label')?.textContent.toLowerCase() || ''
-      const description = item.querySelector('.setting-description')?.textContent.toLowerCase() || ''
+    // Hide all contents initially
+    const allItems = section.querySelectorAll('.setting-item')
+    const allTitles = section.querySelectorAll('.setting-subsection-title')
+    allItems.forEach(item => item.classList.add('hidden'))
+    allTitles.forEach(title => title.classList.add('hidden'))
+    
+    // Pass 1: Determine matches for all items
+    allItems.forEach(item => {
+      const label = item.querySelector('label')
+      const description = item.querySelector('.setting-description')
       const keywords = item.getAttribute('data-keywords')?.toLowerCase() || ''
+      const labelText = label?.textContent.toLowerCase() || ''
+      const descText = description?.textContent.toLowerCase() || ''
       
-      const itemMatches = label.includes(searchTerm) || 
-                         description.includes(searchTerm) || 
+      let subItemsText = ''
+      item.querySelectorAll('.setting-sub-item').forEach(sub => {
+        subItemsText += ' ' + (sub.querySelector('label')?.textContent.toLowerCase() || '')
+        subItemsText += ' ' + (sub.getAttribute('data-keywords')?.toLowerCase() || '')
+      })
+
+      const itemMatches = labelText.includes(searchTerm) || 
+                         descText.includes(searchTerm) || 
                          keywords.includes(searchTerm) ||
-                         sectionMatches
+                         subItemsText.includes(searchTerm)
       
-      if (itemMatches) {
+      const isMatch = itemMatches || sectionMatches
+      if (isMatch) {
         item.classList.remove('hidden')
+        
+        item.querySelectorAll('.setting-sub-item').forEach(sub => {
+          const subLabel = sub.querySelector('label')
+          const subKeywords = sub.getAttribute('data-keywords')?.toLowerCase() || ''
+          const subMatches = (subLabel?.textContent.toLowerCase().includes(searchTerm)) || subKeywords.includes(searchTerm)
+          if (subMatches || sectionMatches) {
+            sub.style.display = 'block'
+          }
+        })
         sectionHasVisibleItems = true
         hasResults = true
       } else {
         item.classList.add('hidden')
       }
     })
+
+    // Pass 2: Show subsection titles only if they have visible following items
+    allTitles.forEach(title => {
+      let next = title.nextElementSibling
+      let hasVisibleItem = false
+      while (next && !next.classList.contains('setting-subsection-title')) {
+        if (next.classList.contains('setting-item') && !next.classList.contains('hidden')) {
+          hasVisibleItem = true
+          break
+        }
+        next = next.nextElementSibling
+      }
+      
+      if (hasVisibleItem) {
+        title.classList.remove('hidden')
+      } else {
+        title.classList.add('hidden')
+      }
+    })
     
-    if (sectionHasVisibleItems || sectionMatches) {
+    if (sectionHasVisibleItems) {
       section.classList.add('active')
       section.classList.remove('hidden')
+      section.classList.add('search-result-section')
+      
+      // Add category header for organization
+      const header = document.createElement('div')
+      header.className = 'search-category-header'
+      header.innerHTML = `
+        <span class="material-symbols-outlined">${getCategoryIcon(category)}</span>
+        <span>${categoryTitleInfo?.title || category}</span>
+      `
+      section.insertBefore(header, section.firstChild)
     } else {
       section.classList.remove('active')
       section.classList.add('hidden')
+      section.classList.remove('search-result-section')
     }
   })
 
-  if (hasResults) {
-    noResults.style.display = 'none'
-  } else {
-    noResults.style.display = 'flex'
-  }
+  noResults.style.display = hasResults ? 'none' : 'flex'
 }
 
-if (sidebarSearchToggle && sidebarSearchContainer) {
-  sidebarSearchToggle.addEventListener('click', () => {
-    const isVisible = sidebarSearchContainer.style.display !== 'none'
-    if (isVisible) {
-      sidebarSearchContainer.style.display = 'none'
-      sidebarSearchToggle.classList.remove('active')
-      if (settingsSearch) {
-        settingsSearch.value = ''
-        performSearch('')
-      }
-    } else {
-      sidebarSearchContainer.style.display = 'block'
-      sidebarSearchToggle.classList.add('active')
-      setTimeout(() => {
-        if (settingsSearch) {
-          settingsSearch.focus()
-        }
-      }, 100)
-    }
-  })
+function getCategoryIcon(category) {
+  const navItem = document.querySelector(`.nav-item[data-category="${category}"]`)
+  const icon = navItem?.querySelector('.material-symbols-outlined')?.textContent
+  return icon || 'settings'
 }
 
 if (settingsSearch) {
   settingsSearch.addEventListener('input', (e) => {
-    performSearch(e.target.value)
-    if (clearSearchBtn) {
-      clearSearchBtn.style.display = e.target.value.trim() ? 'flex' : 'none'
-    }
+    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout)
+    searchDebounceTimeout = setTimeout(() => {
+      performSearch(e.target.value)
+    }, 150)
   })
+}
 
+window.addEventListener('keydown', (e) => {
+  const isF = e.key.toLowerCase() === 'f' || e.code === 'KeyF'
+  if ((e.ctrlKey || e.metaKey) && isF) {
+    e.preventDefault()
+    e.stopPropagation()
+    toggleSearch()
+  }
+}, true)
+
+function toggleSearch() {
+  if (!sidebarSearchContainer || !settingsSearch) return
+  
+  const isCurrentlyVisible = window.getComputedStyle(sidebarSearchContainer).display !== 'none'
+  
+  if (isCurrentlyVisible) {
+    sidebarSearchContainer.style.display = 'none'
+    sidebarSearchToggle?.classList.remove('active')
+    settingsSearch.value = ''
+    performSearch('')
+    settingsSearch.blur()
+  } else {
+    sidebarSearchContainer.style.display = 'block'
+    sidebarSearchToggle?.classList.add('active')
+    setTimeout(() => {
+      settingsSearch.focus()
+      settingsSearch.select()
+    }, 10)
+  }
+}
+
+if (sidebarSearchToggle && sidebarSearchContainer) {
+  sidebarSearchToggle.addEventListener('click', toggleSearch)
+}
+
+if (settingsSearch) {
+  // Already have an input listener above with debounce, removing duplicate one
+  
   settingsSearch.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       settingsSearch.value = ''

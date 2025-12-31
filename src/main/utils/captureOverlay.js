@@ -198,27 +198,23 @@ function destroy() {
 }
 
 async function captureSelection(bounds) {
-  let overlayBounds = null
-  
   try {
+    let overlayBoundsAtCapture = null
     if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
-      overlayBounds = captureOverlayWin.getBounds()
+      overlayBoundsAtCapture = captureOverlayWin.getBounds()
       captureOverlayWin.destroy()
       captureOverlayWin = null
     }
 
-    captureOverlayActive = false
     const win = deps.getWin?.()
     const visible = deps.getVisible?.()
-    
-    if (win && !win.isDestroyed()) {
-      deps.restoreMouseEvents?.()
-      deps.ensureAlwaysOnTop?.()
-      if (!visible) win.show()
-    }
-
-    if (!overlayBounds || !bounds || bounds.width < 10 || bounds.height < 10) {
+        
+    if (!overlayBoundsAtCapture || !bounds || bounds.width < 10 || bounds.height < 10) {
+      captureOverlayActive = false
       if (win && !win.isDestroyed()) {
+        deps.restoreMouseEvents?.()
+        deps.ensureAlwaysOnTop?.()
+        if (!visible) win.show()
         win.webContents.send('capture-selection-result', null)
       }
       return
@@ -248,6 +244,14 @@ async function captureSelection(bounds) {
       thumbnailSize: { width, height }
     })
     
+    captureOverlayActive = false
+
+    if (win && !win.isDestroyed()) {
+      deps.restoreMouseEvents?.()
+      deps.ensureAlwaysOnTop?.()
+      if (!visible) win.show()
+    }
+
     if (sources.length === 0) {
       if (win && !win.isDestroyed()) {
         win.webContents.send('capture-selection-result', null)
@@ -270,14 +274,11 @@ async function captureSelection(bounds) {
     
     const img = targetSource.thumbnail
     
-    const relativeX = bounds.x - overlayBounds.x
-    const relativeY = bounds.y - overlayBounds.y
-    
     const cropped = img.crop({
-      x: Math.max(0, Math.min(relativeX, width - 1)),
-      y: Math.max(0, Math.min(relativeY, height - 1)),
-      width: Math.min(bounds.width, width - Math.max(0, relativeX)),
-      height: Math.min(bounds.height, height - Math.max(0, relativeY))
+      x: Math.max(0, Math.min(bounds.x, width - 1)),
+      y: Math.max(0, Math.min(bounds.y, height - 1)),
+      width: Math.min(bounds.width, width - Math.max(0, bounds.x)),
+      height: Math.min(bounds.height, height - Math.max(0, bounds.y))
     })
     
     if (win && !win.isDestroyed()) {

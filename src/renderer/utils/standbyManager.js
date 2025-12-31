@@ -6,7 +6,19 @@ function init(d) {
   deps = d
   reset()
   setupEvents()
-  return { isActive: () => active, enable, disable, toggle, shouldBlockAction: () => active, updateStandbyButtons }
+  return { isActive: () => active, enable, disable, toggle, pause, resume, shouldBlockAction: () => active, updateStandbyButtons }
+}
+
+function pause() {
+  if (!active) return
+  stopBounds()
+  ipcRenderer.send('set-standby-mode', false)
+}
+
+function resume() {
+  if (!active) return
+  startBounds()
+  ipcRenderer.send('set-standby-mode', true)
 }
 
 function reset() {
