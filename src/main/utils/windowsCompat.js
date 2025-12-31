@@ -8,7 +8,6 @@ function getWindowsVersion() {
   try {
     let buildNumber = 0
     
-    // Try registry queries for build number
     try {
       const result = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v CurrentBuild', 
         { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
@@ -26,14 +25,12 @@ function getWindowsVersion() {
       }
     }
     
-    // Determine Windows version name
     let versionName = 'Windows'
     if (buildNumber >= 22000) versionName = 'Windows 11'
     else if (buildNumber >= 10240) versionName = 'Windows 10'
     else if (buildNumber >= 9200) versionName = 'Windows 8.1'
     else if (buildNumber >= 7600) versionName = 'Windows 7'
     
-    // Try to get display version
     let buildVersion = ''
     try {
       const result = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" /v DisplayVersion',
@@ -51,7 +48,6 @@ function getWindowsVersion() {
     
     return buildVersion ? `${versionName} (${buildVersion})` : versionName
   } catch (error) {
-    // Fallback to os.release()
     const parts = os.release().split('.')
     if (parts.length >= 3) {
       const buildNum = parseInt(parts[2]) || 0
@@ -65,14 +61,12 @@ function getWindowsVersion() {
 function getWindowsAccentColor() {
   if (process.platform !== 'win32') return null
   
-  // Try systemPreferences first
   try {
     if (systemPreferences.getAccentColor) {
       return `#${systemPreferences.getAccentColor()}`
     }
   } catch (e) {}
   
-  // Fallback to registry
   try {
     const result = execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\DWM" /v ColorizationColor',
       { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })

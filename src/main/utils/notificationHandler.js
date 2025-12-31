@@ -66,7 +66,6 @@ function show(title, body, filePath) {
     thisWin.webContents.send('set-notification-data', { title, body, accentColor, filePath })
     thisWin.show()
     
-    // Fade in
     let opacity = 0
     const fadeIn = setInterval(() => {
       if (!thisWin || thisWin.isDestroyed()) {
@@ -78,7 +77,6 @@ function show(title, body, filePath) {
         thisWin.setOpacity(1)
         clearInterval(fadeIn)
         
-        // Auto-close after 3 seconds with fade out
         setTimeout(() => {
           if (!thisWin || thisWin.isDestroyed()) return
           
