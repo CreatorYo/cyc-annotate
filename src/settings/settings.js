@@ -46,12 +46,11 @@ function applyTheme(theme) {
     themeBtn.classList.add('active')
   }
 
-  const isDark = effectiveTheme === 'dark'
-  document.querySelectorAll('.theme-btn:not(.active)').forEach(btn => {
-    btn.style.color = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.65)'
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.style.color = ''
     const icon = btn.querySelector('.material-symbols-outlined')
     if (icon) {
-      icon.style.color = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.65)'
+      icon.style.color = ''
     }
   })
 
@@ -123,14 +122,10 @@ function updateToggleSwitchColor() {
 }
 
 function updateButtonTextColor(button) {
-  const currentAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
-  const accentIsLight = isLightColor(currentAccentColor)
-  const textColor = accentIsLight ? '#000000' : '#ffffff'
-  
-  button.style.color = textColor
+  button.style.color = ''
   const icon = button.querySelector('.material-symbols-outlined')
   if (icon) {
-    icon.style.color = textColor
+    icon.style.color = ''
   }
 }
 
@@ -458,13 +453,11 @@ function applyLayout(layout) {
     activeBtn.classList.add('active')
   }
 
-  const effectiveTheme = getEffectiveTheme(localStorage.getItem('theme') || 'system')
-  const isDark = effectiveTheme === 'dark'
-  document.querySelectorAll('.layout-btn:not(.active)').forEach(btn => {
-    btn.style.color = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.65)'
+  document.querySelectorAll('.layout-btn').forEach(btn => {
+    btn.style.color = ''
     const icon = btn.querySelector('.material-symbols-outlined')
     if (icon) {
-      icon.style.color = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.65)'
+      icon.style.color = ''
     }
   })
 

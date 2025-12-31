@@ -511,6 +511,44 @@ html, body {
   line-height: 1.4;
 }
 
+.labs-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+  background: rgba(255, 165, 0, 0.08);
+  border: 1px solid rgba(255, 165, 0, 0.2);
+  border-radius: 10px;
+}
+
+.labs-warning .material-symbols-outlined {
+  color: #ffa500;
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 24px;
+}
+
+.labs-warning-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.labs-warning-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.labs-warning-message {
+  font-size: 13px;
+  color: var(--text-primary);
+  opacity: 0.8;
+  line-height: 1.4;
+}
+
 .settings-section {
   margin-bottom: 40px;
   background: transparent;
@@ -740,7 +778,7 @@ html, body {
   transition: opacity 0.15s, visibility 0.15s;
   pointer-events: none;
   z-index: 100000;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   border: 1px solid #333;
 }
 
@@ -876,19 +914,23 @@ html, body {
   background: transparent !important;
   font-weight: 600;
   color: var(--accent-btn-text-color) !important;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
 }
 
 .theme-btn.active .material-symbols-outlined {
   color: var(--accent-btn-text-color) !important;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
 }
 
 .layout-btn.active {
   background: transparent !important;
   color: var(--accent-btn-text-color) !important;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
 }
 
 .layout-btn.active .material-symbols-outlined {
   color: var(--accent-btn-text-color) !important;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
 }
 
 .theme-btn:hover:not(.active),
