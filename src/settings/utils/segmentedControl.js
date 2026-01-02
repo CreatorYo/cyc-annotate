@@ -88,6 +88,19 @@ function getColorForPicker(color) {
   return normalized.length === 9 ? normalized.substring(0, 7) : normalized
 }
 
+function handleCyclingClick(btn, applyFunction) {
+  const currentValue = btn.dataset.value
+  const isActive = btn.classList.contains('active')
+  
+  if (isActive) {
+    const allButtons = Array.from(btn.parentElement.querySelectorAll('.control-btn'))
+    const nextIndex = (allButtons.indexOf(btn) + 1) % allButtons.length
+    applyFunction(allButtons[nextIndex].dataset.value)
+  } else {
+    applyFunction(currentValue)
+  }
+}
+
 function updatePositionToggle(layout, currentPosition) {
   const positionToggle = document.getElementById('position-toggle')
   if (!positionToggle) return
@@ -131,11 +144,12 @@ function updatePositionToggle(layout, currentPosition) {
 
   positionToggle.querySelectorAll('.control-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const position = btn.dataset.value
       const type = layout === 'vertical' ? 'vertical' : 'horizontal'
-      if (typeof window.applyPosition === 'function') {
-        window.applyPosition(type, position)
-      }
+      handleCyclingClick(btn, (value) => {
+        if (typeof window.applyPosition === 'function') {
+          window.applyPosition(type, value)
+        }
+      })
     })
   })
 }

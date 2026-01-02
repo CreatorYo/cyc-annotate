@@ -411,10 +411,21 @@ function applyPosition(type, position) {
 
 window.applyPosition = applyPosition
 
+function handleCyclingClick(btn, applyFunction) {
+  const currentValue = btn.dataset.value
+  const isActive = btn.classList.contains('active')
+  
+  if (isActive) {
+    const allButtons = Array.from(btn.parentElement.querySelectorAll('.control-btn'))
+    const nextIndex = (allButtons.indexOf(btn) + 1) % allButtons.length
+    applyFunction(allButtons[nextIndex].dataset.value)
+  } else {
+    applyFunction(currentValue)
+  }
+}
+
 document.querySelectorAll('#layout-control .control-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    applyLayout(btn.dataset.value)
-  })
+  btn.addEventListener('click', () => handleCyclingClick(btn, applyLayout))
 })
 
 if (document.readyState === 'loading') {
@@ -938,7 +949,7 @@ if (resetEverythingBtn) {
       updateAccentColorPreview(defaultAccentColor)
 
       currentShortcut = defaultShortcut
-      if (shortcutInput) shortcutInput.value = 'Ctrl+D'
+      if (shortcutInput) shortcutInput.value = formatShortcut(parseShortcut(defaultShortcut))
       localStorage.setItem('shortcut', defaultShortcut)
       ipcRenderer.send('update-shortcut', defaultShortcut)
 
@@ -1153,6 +1164,7 @@ let currentCategory = localStorage.getItem('settings-category') || 'appearance'
 
 function showCategory(category) {
   currentCategory = category
+  window.currentCategory = category
   localStorage.setItem('settings-category', category)
   
   document.querySelectorAll('.nav-item').forEach(item => {

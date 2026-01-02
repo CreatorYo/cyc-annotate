@@ -3,6 +3,31 @@ const { ipcMain, nativeTheme } = require('electron');
 function initThemeIpc(context) {
   const { getWin, getSettingsWin, getOnboardingWin, setSetting, getSetting, getNotificationHandler } = context;
 
+  nativeTheme.on('updated', () => {
+    const currentTheme = getSetting('theme', 'system');
+    if (currentTheme === 'system') {
+      const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+      
+      const win = getWin();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('os-theme-changed', effectiveTheme);
+      }
+      const settingsWin = getSettingsWin();
+      if (settingsWin && !settingsWin.isDestroyed()) {
+        settingsWin.webContents.send('os-theme-changed', effectiveTheme);
+      }
+      const onboardingWin = getOnboardingWin();
+      if (onboardingWin && !onboardingWin.isDestroyed()) {
+        onboardingWin.webContents.send('os-theme-changed', effectiveTheme);
+      }
+      const notificationHandler = getNotificationHandler();
+      const nWin = notificationHandler?.getWin();
+      if (nWin && !nWin.isDestroyed()) {
+        nWin.webContents.send('os-theme-changed', effectiveTheme);
+      }
+    }
+  });
+
   ipcMain.handle('get-os-theme', () => {
     return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
   });
@@ -10,24 +35,40 @@ function initThemeIpc(context) {
   ipcMain.on('theme-changed', (event, theme) => {
     if (theme === 'system') {
       nativeTheme.themeSource = 'system';
-    } else if (theme === 'light') {
-      nativeTheme.themeSource = 'light';
-    } else if (theme === 'dark') {
-      nativeTheme.themeSource = 'dark';
-    }
-    
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('theme-changed', theme);
-    }
-    const settingsWin = getSettingsWin();
-    if (settingsWin && !settingsWin.isDestroyed()) {
-      settingsWin.webContents.send('theme-changed', theme);
-    }
-    const notificationHandler = getNotificationHandler();
-    const nWin = notificationHandler?.getWin();
-    if (nWin && !nWin.isDestroyed()) {
-      nWin.webContents.send('theme-changed', theme);
+      const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+      
+      const win = getWin();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('os-theme-changed', effectiveTheme);
+        win.webContents.send('theme-changed', theme);
+      }
+      const settingsWin = getSettingsWin();
+      if (settingsWin && !settingsWin.isDestroyed()) {
+        settingsWin.webContents.send('os-theme-changed', effectiveTheme);
+        settingsWin.webContents.send('theme-changed', theme);
+      }
+      const notificationHandler = getNotificationHandler();
+      const nWin = notificationHandler?.getWin();
+      if (nWin && !nWin.isDestroyed()) {
+        nWin.webContents.send('os-theme-changed', effectiveTheme);
+        nWin.webContents.send('theme-changed', theme);
+      }
+    } else {
+      nativeTheme.themeSource = theme;
+      
+      const win = getWin();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('theme-changed', theme);
+      }
+      const settingsWin = getSettingsWin();
+      if (settingsWin && !settingsWin.isDestroyed()) {
+        settingsWin.webContents.send('theme-changed', theme);
+      }
+      const notificationHandler = getNotificationHandler();
+      const nWin = notificationHandler?.getWin();
+      if (nWin && !nWin.isDestroyed()) {
+        nWin.webContents.send('theme-changed', theme);
+      }
     }
   });
 

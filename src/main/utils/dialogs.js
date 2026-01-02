@@ -148,7 +148,7 @@ async function showAccentColorPresets(parentWindow, presetColors, x, y) {
   
   return new Promise((resolve) => {
     const menu = Menu.buildFromTemplate([
-      { label: 'Accent Preset Colors', enabled: false },
+      { label: 'Accent Preset Colours', enabled: false },
       { type: 'separator' },
       ...presetColors.map(preset => ({
         label: preset.name,

@@ -1471,9 +1471,9 @@ html, body {
 }
 
 .restore-dialog-btn:hover {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
-  color: var(--accent-btn-text-color, #fff);
+  background: var(--hover-bg);
+  border-color: var(--border-color);
+  color: var(--text-primary);
   opacity: 1;
 }
 

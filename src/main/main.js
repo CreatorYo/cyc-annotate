@@ -292,13 +292,6 @@ function showOverlay() {
   }
 
   if (win && !win.isDestroyed()) {
-    const currentTheme = getSetting('theme', 'system')
-    if (currentTheme === 'system') {
-      const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-      win.webContents.send('theme-changed', effectiveTheme)
-    } else {
-      win.webContents.send('theme-changed', currentTheme)
-    }
     win.webContents.send('draw-mode', true)
     win.webContents.send('disable-standby-mode')
   }
