@@ -107,16 +107,16 @@
                 <label>Theme</label>
                 <span class="setting-description">Choose your preferred colour scheme</span>
               </div>
-              <div class="theme-toggle">
-                <button class="theme-btn" data-theme="light">
+              <div class="segmented-control" data-segments="3" id="theme-control">
+                <button class="control-btn" data-value="light" title="Light">
                   <span class="material-symbols-outlined">light_mode</span>
                   <span>Light</span>
                 </button>
-                <button class="theme-btn" data-theme="dark">
+                <button class="control-btn" data-value="dark" title="Dark">
                   <span class="material-symbols-outlined">dark_mode</span>
                   <span>Dark</span>
                 </button>
-                <button class="theme-btn" data-theme="system">
+                <button class="control-btn" data-value="system" title="System">
                   <span class="material-symbols-outlined">desktop_windows</span>
                   <span>System</span>
                 </button>
@@ -148,29 +148,53 @@
 
         <div class="settings-section" data-section="toolbar" data-category="toolbar">
           <div class="section-content">
+            <h3 class="setting-subsection-title">Layout & Position</h3>
             <div class="setting-item" data-keywords="layout toolbar orientation vertical horizontal">
               <div class="setting-label-wrapper">
                 <label>Layout</label>
                 <span class="setting-description">Choose toolbar orientation</span>
               </div>
-              <div class="layout-toggle">
-                <button class="layout-btn active" data-layout="vertical" title="Vertical">
+              <div class="segmented-control layout-control" data-segments="2" id="layout-control">
+                <button class="control-btn" data-value="vertical" title="Vertical">
                   <span class="material-symbols-outlined">view_column</span>
                   <span>Vertical</span>
                 </button>
-                <button class="layout-btn" data-layout="horizontal" title="Horizontal">
+                <button class="control-btn" data-value="horizontal" title="Horizontal">
                   <span class="material-symbols-outlined">view_week</span>
                   <span>Horizontal</span>
                 </button>
               </div>
             </div>
 
+            <div id="position-setting" class="setting-item" data-keywords="toolbar position placement">
+              <div class="setting-label-wrapper">
+                <label id="position-label">Vertical Position</label>
+                <span id="position-description" class="setting-description">Choose which side to place the vertical toolbar</span>
+              </div>
+              <div id="position-toggle" class="segmented-control" data-segments="2">
+              </div>
+            </div>
+
+            <h3 class="setting-subsection-title">Appearance</h3>
+            <div class="setting-item" data-keywords="toolbar background accent color tint">
+              <div class="setting-row">
+                <div class="setting-label-wrapper" data-toggle-for="toolbar-accent-bg-enabled">
+                  <label>Use Accent Colour for Toolbar</label>
+                  <span class="setting-description">Tint the toolbar background with your accent colour</span>
+                </div>
+                <div class="toggle-switch">
+                  <input type="checkbox" id="toolbar-accent-bg-enabled">
+                  <label for="toolbar-accent-bg-enabled" class="toggle-label"></label>
+                </div>
+              </div>
+            </div>
+
+            <h3 class="setting-subsection-title">Behavior</h3>
             <div class="setting-item" data-keywords="reduce clutter toolbar menu compact">
               <div class="setting-row">
                 <div class="setting-label-wrapper" data-toggle-for="reduce-clutter-enabled">
                   <label>Reduce Clutter</label>
-                  <span class="setting-description">Move undo, redo, toggle visibility, and settings into a
-                    submenu</span>
+                  <span class="setting-description">Move undo, redo, toggle visibility, and settings into a submenu</span>
                 </div>
                 <div class="toggle-switch">
                   <input type="checkbox" id="reduce-clutter-enabled" checked>
@@ -184,26 +208,12 @@
                     <label>Show Standby in Toolbar <span class="info-icon"
                         data-tooltip="Standby mode pauses drawing and lets you click through to windows behind the overlay."><span
                           class="material-symbols-outlined">info</span></span></label>
-                    <span class="setting-description">Keep standby directly on toolbar without moving it into
-                      submenu</span>
+                    <span class="setting-description">Keep standby directly on toolbar without moving it into submenu</span>
                   </div>
                   <div class="toggle-switch">
                     <input type="checkbox" id="standby-in-toolbar">
                     <label for="standby-in-toolbar" class="toggle-label"></label>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="setting-item" data-keywords="toolbar background accent color tint">
-              <div class="setting-row">
-                <div class="setting-label-wrapper" data-toggle-for="toolbar-accent-bg-enabled">
-                  <label>Use Accent Color for Toolbar</label>
-                  <span class="setting-description">Tint the toolbar background with your accent color</span>
-                </div>
-                <div class="toggle-switch">
-                  <input type="checkbox" id="toolbar-accent-bg-enabled">
-                  <label for="toolbar-accent-bg-enabled" class="toggle-label"></label>
                 </div>
               </div>
             </div>
@@ -455,8 +465,9 @@
 
         <div id="no-results" class="no-results" style="display: none;">
           <span class="material-symbols-outlined">search</span>
-          <p>No results found</p>
-          <span class="no-results-hint">Try a different search term</span>
+          <p id="no-results-message">No results found</p>
+          <span class="no-results-hint">Try different keywords or check
+            your spelling.</span>
         </div>
       </div>
     </div>

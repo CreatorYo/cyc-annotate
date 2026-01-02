@@ -68,6 +68,7 @@ function createTooltip(element) {
   element.addEventListener('mouseleave', () => {
     clearTimeout(showTimeout)
     tooltip.classList.remove('show')
+    hideAllTooltips()
   })
 }
 

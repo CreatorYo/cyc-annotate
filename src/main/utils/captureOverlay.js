@@ -1,5 +1,6 @@
-const { BrowserWindow, Menu, screen, desktopCapturer } = require('electron')
+const { BrowserWindow, ipcMain, screen, desktopCapturer, nativeImage, Menu } = require('electron')
 const path = require('path')
+const dialogs = require('./dialogs')
 
 let captureOverlayWin = null
 let captureOverlayActive = false
@@ -164,7 +165,7 @@ function open() {
       captureOverlayWin = null
     })
   } catch (error) {
-    console.error('Error opening capture overlay:', error)
+    dialogs.showErrorDialog(null, 'Capture Overlay Error', 'Error opening capture overlay', error.message)
     captureOverlayActive = false
     const win = deps.getWin?.()
     if (win && !win.isDestroyed()) {
@@ -285,7 +286,7 @@ async function captureSelection(bounds) {
       win.webContents.send('capture-selection-result', cropped.toDataURL(), bounds)
     }
   } catch (error) {
-    console.error('Error capturing selection:', error)
+    dialogs.showErrorDialog(null, 'Capture Error', 'Error capturing selection', error.message)
     const win = deps.getWin?.()
     if (win && !win.isDestroyed()) {
       deps.restoreMouseEvents?.()

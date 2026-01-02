@@ -11,6 +11,10 @@ function init() {
     masterGain.gain.value = 1.0
     masterGain.connect(ctx.destination)
     ctx.onstatechange = processQueue
+    
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {})
+    }
   } catch (e) {
     ctx = null
   }
@@ -24,10 +28,12 @@ function resume() {
     return
   }
   isResuming = true
-  ctx.resume().finally(() => {
+  ctx.resume().then(() => {
     isResuming = false
     if (ctx && ctx.state === 'running') processQueue()
-    else setTimeout(resume, 30)
+  }).catch(() => {
+    isResuming = false
+    setTimeout(resume, 30)
   })
 }
 
@@ -42,7 +48,18 @@ function processQueue() {
 function ensureReady(fn) {
   init()
   if (!ctx) return
-  if (ctx.state === 'running' && masterGain) {
+  
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(() => {
+      if (ctx.state === 'running' && masterGain) {
+        try { fn() } catch (e) {}
+      } else {
+        queue.push(fn)
+      }
+    }).catch(() => {
+      queue.push(fn)
+    })
+  } else if (ctx.state === 'running' && masterGain) {
     try { fn() } catch (e) {}
   } else {
     queue.push(fn)
@@ -64,6 +81,8 @@ setTimeout(warmUp, 500)
 
 function createSound(duration, volume, generator) {
   ensureReady(() => {
+    if (!ctx || !masterGain) return
+    
     const sr = ctx.sampleRate
     const len = Math.max(44, Math.round(sr * duration))
     const buf = ctx.createBuffer(1, len, sr)
@@ -94,8 +113,19 @@ function createSound(duration, volume, generator) {
     gain.gain.setValueAtTime(volume, now + duration * 0.8)
     gain.gain.linearRampToValueAtTime(0.001, now + duration)
     
-    src.start(now)
-    src.stop(now + duration + 0.05)
+    try {
+      src.start(now)
+      src.stop(now + duration + 0.05)
+    } catch (e) {
+      try {
+        src.start(0)
+        src.stop(duration + 0.05)
+      } catch (e2) {
+        try { gain.disconnect() } catch (e3) {}
+        try { src.disconnect() } catch (e3) {}
+        return
+      }
+    }
     
     src.onended = () => {
       try { gain.disconnect() } catch (e) {}
@@ -109,39 +139,39 @@ function exp(t, r) { return Math.exp(-t * r) }
 function rnd() { return Math.random() * 2 - 1 }
 
 const SOUNDS = {
-  trash: [0.4, 0.7, t => {
+  trash: [0.4, 0.9, t => {
     const d = exp(t, 6)
     return (exp(t, 30) * 0.5 + sin(80, t) * 0.3 * d + sin(200, t) * 0.2 * d + sin(800, t) * 0.15 * exp(t, 15) + rnd() * 0.2 * d) * d
   }],
-  pop: [0.15, 0.8, t => {
+  pop: [0.15, 0.9, t => {
     const d = exp(t, 25)
     return (exp(t, 50) * 0.7 + sin(400, t) * 0.5 * d + sin(1200, t) * 0.35 * exp(t, 40) + sin(150, t) * 0.25 * d + rnd() * 0.2 * exp(t, 30)) * d
   }],
-  undo: [0.2, 0.6, t => {
+  undo: [0.2, 0.9, t => {
     const d = exp(t, 20)
     return (sin(300, t) * 0.6 * d + sin(100, t) * 0.4 * d + sin(800, t) * 0.25 * exp(t, 30) + rnd() * 0.15 * d) * d
   }],
-  redo: [0.2, 0.6, t => {
+  redo: [0.2, 0.9, t => {
     const d = exp(t, 20)
     return (sin(400, t) * 0.6 * d + sin(100, t) * 0.4 * d + sin(800, t) * 0.25 * exp(t, 30) + rnd() * 0.15 * d) * d
   }],
-  capture: [0.25, 0.7, t => {
+  capture: [0.25, 0.9, t => {
     const d = exp(t, 15)
     return (sin(600, t) * 0.6 * exp(t, 40) + sin(1200, t) * 0.5 * exp(t, 50) + sin(200, t) * 0.35 * d + sin(1800, t) * 0.25 * exp(t, 60) + rnd() * 0.15 * exp(t, 35)) * d
   }],
-  color: [0.12, 0.6, t => {
+  color: [0.12, 0.9, t => {
     const d = exp(t, 30)
     return (sin(600, t) * 0.6 * d + sin(900, t) * 0.4 * d + sin(1500, t) * 0.25 * exp(t, 50) + sin(300, t) * 0.2 * d) * d
   }],
-  copy: [0.18, 0.75, t => {
+  copy: [0.18, 0.9, t => {
     const d = exp(t, 20)
     return (sin(400 + t * 200, t) * 0.6 * d + sin(1200, t) * 0.5 * exp(t, 60) + sin(1800, t) * 0.35 * exp(t, 45) + sin(250, t) * 0.25 * d + rnd() * 0.1 * exp(t, 50)) * d
   }],
-  paste: [0.22, 0.7, t => {
+  paste: [0.22, 0.9, t => {
     const d = exp(t, 12)
     return (sin(523, t) * 0.6 * d + sin(659, t) * 0.5 * d + sin(600 - t * 150, t) * 0.35 * d + sin(1400, t) * 0.3 * exp(t, 40) + sin(200, t) * 0.25 * d + exp(t, 35) * 0.35) * d
   }],
-  selectAll: [0.25, 0.65, t => {
+  selectAll: [0.25, 0.9, t => {
     const d = exp(t, 12)
     return (sin(300 + t * 2000, t) * 0.5 * d + sin(1200, t) * 0.4 * exp(t, 20) + sin(600, t) * 0.3 * d + sin(2000, t) * 0.2 * exp(t, 25) + rnd() * 0.08 * d) * d
   }],
@@ -169,8 +199,30 @@ const SOUNDS = {
 function playSound(type) {
   const el = document.getElementById('sounds-enabled')
   if (el && el.checked === false) return
+  
+  init()
+  if (ctx && ctx.state === 'suspended') {
+    ctx.resume().catch(() => {})
+  }
+  
   const s = SOUNDS[type]
-  if (s) createSound(s[0], s[1], s[2])
+  if (s) {
+    let attempts = 0
+    const maxAttempts = 3
+    
+    const tryPlay = () => {
+      attempts++
+      try {
+        createSound(s[0], s[1], s[2])
+      } catch (e) {
+        if (attempts < maxAttempts) {
+          setTimeout(tryPlay, 50 * attempts)
+        }
+      }
+    }
+    
+    tryPlay()
+  }
 }
 
 function initAudioContext() {

@@ -67,6 +67,28 @@ function showErrorBox(title, message) {
   dialog.showErrorBox(title, message)
 }
 
+async function showErrorDialog(parentWindow, title, message, detail = null) {
+  await dialog.showMessageBox(parentWindow || null, {
+    type: 'error',
+    title: title || 'Error',
+    message: message || 'An error occurred',
+    detail: detail,
+    buttons: ['OK'],
+    defaultId: 0
+  })
+}
+
+async function showWarningDialog(parentWindow, title, message, detail = null) {
+  await dialog.showMessageBox(parentWindow || null, {
+    type: 'warning',
+    title: title || 'Warning',
+    message: message || 'A warning occurred',
+    detail: detail,
+    buttons: ['OK'],
+    defaultId: 0
+  })
+}
+
 function showSecondInstanceWarning(formattedShortcut) {
   dialog.showMessageBox(null, {
     type: 'warning',
@@ -121,6 +143,50 @@ Node.js: ${systemInfo.nodeVersion}`
   if (result.response === 0) clipboard.writeText(detail)
 }
 
+async function showAccentColorPresets(parentWindow, presetColors, x, y) {
+  const { Menu } = require('electron')
+  
+  return new Promise((resolve) => {
+    const menu = Menu.buildFromTemplate([
+      { label: 'Accent Preset Colors', enabled: false },
+      { type: 'separator' },
+      ...presetColors.map(preset => ({
+        label: preset.name,
+        type: 'normal',
+        click: () => {
+          resolve(preset.color)
+        }
+      })),
+      { type: 'separator' },
+      {
+        label: 'Cancel',
+        type: 'normal',
+        click: () => {
+          resolve(null)
+        }
+      }
+    ])
+    
+    if (parentWindow && !parentWindow.isDestroyed()) {
+      try {
+        menu.popup({
+          window: parentWindow,
+          x: x,
+          y: y
+        })
+      } catch (error) {
+        menu.popup()
+      }
+    } else {
+      menu.popup()
+    }
+    
+    setTimeout(() => {
+      resolve(null)
+    }, 5000)
+  })
+}
+
 module.exports = {
   showRelaunchDialog,
   showResetConfirmation,
@@ -128,7 +194,10 @@ module.exports = {
   selectSaveDirectory,
   showSaveScreenshotDialog,
   showErrorBox,
+  showErrorDialog,
+  showWarningDialog,
   showSecondInstanceWarning,
   showDuplicateWarning,
-  showSystemDetailsDialog
+  showSystemDetailsDialog,
+  showAccentColorPresets
 }

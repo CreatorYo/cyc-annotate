@@ -379,14 +379,14 @@ if (resetColorBtn) {
   })
 }
 
-function finishOnboarding() {
+async function finishOnboarding() {
   try {
     ipcRenderer.send('onboarding-complete', {
       shortcut: currentShortcut,
       accentColor: currentColor
     })
   } catch (error) {
-    console.error('Error finishing onboarding:', error)
+    await ipcRenderer.invoke('show-error-dialog', 'Onboarding Error', 'Error finishing onboarding', error.message)
   }
 }
 

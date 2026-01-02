@@ -13,7 +13,7 @@ function hexToRgb(hex) {
   return { r, g, b }
 }
 
-function applyAccentColor(color) {
+async function applyAccentColor(color) {
   try {
     const accentColor = color || localStorage.getItem('accent-color') || '#3bbbf6'
     const rgb = hexToRgb(accentColor)
@@ -31,7 +31,7 @@ function applyAccentColor(color) {
       overlay.style.background = 'rgba(0, 0, 0, 0.5)'
     }
   } catch (e) {
-    console.warn('Could not apply accent color:', e)
+    await ipcRenderer.invoke('show-warning-dialog', 'Style Warning', 'Could not apply accent color', e.message)
   }
 }
 

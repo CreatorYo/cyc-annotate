@@ -1,4 +1,5 @@
 const { Tray, Menu, ipcMain } = require('electron')
+const dialogs = require('./dialogs')
 const fs = require('fs')
 const path = require('path')
 
@@ -26,7 +27,7 @@ function create() {
     tray.setContextMenu(buildMenu())
     tray.on('click', () => deps.toggleOverlay?.())
   } catch (e) {
-    console.warn('Could not create system tray:', e)
+    dialogs.showWarningDialog(null, 'System Tray Error', 'Could not create system tray', e.message)
   }
 }
 

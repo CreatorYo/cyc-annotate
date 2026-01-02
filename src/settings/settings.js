@@ -1,9 +1,30 @@
 const { ipcRenderer } = require('electron')
+const { 
+  updateSegmentedControl, 
+  updateAllSegmentedControls,
+  updateAccentColorContrast,
+  updateToggleSwitchColor,
+  normalizeHex,
+  getColorForPicker,
+  updatePositionToggle
+} = require('./utils/segmentedControl.js')
+const SettingsSearch = require('./utils/search')
 
 const DEFAULT_ACCENT_COLOR = '#3bbbf6'
 const DEFAULT_SHORTCUT = 'Control+Shift+D'
 
+const PRESET_ACCENT_COLORS = [
+  { name: 'Default Blue', color: '#3bbbf6' },
+  { name: 'Turquoise', color: '#40E0D0' },
+  { name: 'Lime Green', color: '#AEEA00' },
+  { name: 'Orange', color: '#ff8c42' },
+  { name: 'Pink', color: '#ff6b9d' },
+  { name: 'Green', color: '#36b065' },
+  { name: 'Red', color: '#ff6b6b' },
+]
+
 let osTheme = 'dark'
+let directoryCheckInterval = null
 
 function getOSTheme() {
   return osTheme
@@ -32,30 +53,9 @@ function applyTheme(theme) {
   const effectiveTheme = getEffectiveTheme(theme)
   document.body.setAttribute('data-theme', effectiveTheme)
 
-  const themeToggle = document.querySelector('.theme-toggle')
-  if (themeToggle) {
-    themeToggle.setAttribute('data-active', theme)
-  }
-
-  document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.classList.remove('active')
-  })
-
-  const themeBtn = document.querySelector(`.theme-btn[data-theme="${theme}"]`)
-  if (themeBtn) {
-    themeBtn.classList.add('active')
-  }
-
-  document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.style.color = ''
-    const icon = btn.querySelector('.material-symbols-outlined')
-    if (icon) {
-      icon.style.color = ''
-    }
-  })
+  updateSegmentedControl('theme-control', theme)
 
   ipcRenderer.send('theme-changed', theme)
-  
   updateToolbarBackgroundColor()
 }
 
@@ -66,94 +66,33 @@ ipcRenderer.on('os-theme-changed', (event, effectiveTheme) => {
     document.body.setAttribute('data-theme', effectiveTheme)
     const savedAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
     updateAccentColor(savedAccentColor)
-    const isDark = effectiveTheme === 'dark'
-    document.querySelectorAll('.theme-btn:not(.active)').forEach(btn => {
-      btn.style.color = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
-      const icon = btn.querySelector('.material-symbols-outlined')
-      if (icon) {
-        icon.style.color = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
-      }
-    })
+    updateAllSegmentedControls()
   }
 })
 
-document.querySelectorAll('.theme-btn').forEach(btn => {
+document.querySelectorAll('#theme-control .control-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    applyTheme(btn.dataset.theme)
+    applyTheme(btn.dataset.value)
   })
 })
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     applyTheme(savedTheme)
-    updateThemeButtonColors()
   })
 } else {
   applyTheme(savedTheme)
-  updateThemeButtonColors()
 }
 
-function isLightColor(color) {
-  const r = parseInt(color.substr(1, 2), 16)
-  const g = parseInt(color.substr(3, 2), 16)
-  const b = parseInt(color.substr(5, 2), 16)
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  return luminance > 0.5
-}
-
-function updateToggleSwitchColor() {
-  const currentAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
-  const accentIsLight = isLightColor(currentAccentColor)
-  
-  const style = document.createElement('style')
-  style.id = 'toggle-switch-dynamic-color'
-  style.textContent = `
-    .toggle-switch input[type="checkbox"]:checked + .toggle-label::after {
-      background: ${accentIsLight ? '#000000' : '#ffffff'};
-    }
-  `
-
-  const oldStyle = document.getElementById('toggle-switch-dynamic-color')
-  if (oldStyle) {
-    oldStyle.remove()
+function updatePositionSettingsVisibility() {
+  if (currentLayout === 'vertical') {
+    updatePositionToggle('vertical', currentVerticalPosition)
+  } else {
+    updatePositionToggle('horizontal', currentHorizontalPosition)
   }
-  
-  document.head.appendChild(style)
-}
-
-function updateButtonTextColor(button) {
-  button.style.color = ''
-  const icon = button.querySelector('.material-symbols-outlined')
-  if (icon) {
-    icon.style.color = ''
-  }
-}
-
-function updateLayoutButtonColors() {
-  document.querySelectorAll('.layout-btn.active').forEach(btn => {
-    updateButtonTextColor(btn)
-  })
-}
-
-function updateThemeButtonColors() {
-  document.querySelectorAll('.theme-btn.active').forEach(btn => {
-    updateButtonTextColor(btn)
-  })
 }
 
 updateToggleSwitchColor()
-
-function normalizeHex(hex) {
-  if (/^#[0-9A-Fa-f]{3}$/.test(hex)) {
-    return '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3]
-  }
-  return hex
-}
-
-function getColorForPicker(color) {
-  let normalized = normalizeHex(color)
-  return normalized.length === 9 ? normalized.substring(0, 7) : normalized
-}
 
 function darkenTintColor(hexColor, theme) {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hexColor.slice(i, i + 2), 16))
@@ -191,20 +130,8 @@ function updateToolbarBackgroundColor() {
 function updateAccentColor(color) {
   const normalizedColor = normalizeHex(color)
   document.documentElement.style.setProperty('--accent-color', normalizedColor)
-  const r = parseInt(normalizedColor.substr(1, 2), 16)
-  const g = parseInt(normalizedColor.substr(3, 2), 16)
-  const b = parseInt(normalizedColor.substr(5, 2), 16)
-  const hoverR = Math.max(0, r - 30)
-  const hoverG = Math.max(0, g - 30)
-  const hoverB = Math.max(0, b - 30)
-  const hoverColor = `#${hoverR.toString(16).padStart(2, '0')}${hoverG.toString(16).padStart(2, '0')}${hoverB.toString(16).padStart(2, '0')}`
-  document.documentElement.style.setProperty('--accent-hover', hoverColor)
-  document.documentElement.style.setProperty('--accent-active-bg', `rgba(${r}, ${g}, ${b}, 0.15)`)
-  document.documentElement.style.setProperty('--accent-active-shadow', `rgba(${r}, ${g}, ${b}, 0.3)`)
   
-  const accentIsLight = isLightColor(normalizedColor)
-  const buttonTextColor = accentIsLight ? '#000000' : '#ffffff'
-  document.documentElement.style.setProperty('--accent-btn-text-color', buttonTextColor)
+  updateAccentColorContrast(normalizedColor)
   
   localStorage.setItem('accent-color', normalizedColor)
 
@@ -212,8 +139,6 @@ function updateAccentColor(color) {
     accentColorPicker.value = getColorForPicker(normalizedColor)
   }
 
-  updateLayoutButtonColors()
-  updateThemeButtonColors()
   updateToggleSwitchColor()
   updateResetAccentVisibility()
   
@@ -259,8 +184,29 @@ if (accentColorPreview && accentColorPicker) {
     setTimeout(() => accentColorPicker.click(), 10)
   })
   
+  accentColorPreview.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    showAccentColorPresets(e.clientX, e.clientY)
+  })
+  
+  accentColorPicker.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    showAccentColorPresets(e.clientX, e.clientY)
+  })
+  
   accentColorPicker.addEventListener('focus', () => {
     syncPickerValue()
+  })
+}
+
+function showAccentColorPresets(x, y) {
+  ipcRenderer.invoke('show-accent-color-presets', PRESET_ACCENT_COLORS, x, y).then((selectedColor) => {
+    if (selectedColor) {
+      updateAccentColor(selectedColor)
+      updateAccentColorPreview(selectedColor)
+      if (accentColorPicker) accentColorPicker.value = getColorForPicker(selectedColor)
+      if (accentColorHex) accentColorHex.value = selectedColor
+    }
   })
 }
 
@@ -390,11 +336,10 @@ if (syncWindowsAccentBtn) {
           if (accentColorHex) accentColorHex.value = windowsColor
           updateResetAccentVisibility()
         } else {
-          alert('Unable to get Windows accent colour. This feature is only available on Windows.')
+          await ipcRenderer.invoke('show-error-dialog', 'Accent Color Error', 'Unable to get Windows accent colour. This feature is only available on Windows.')
         }
       } catch (error) {
-        console.error('Error syncing Windows accent colour:', error)
-        alert('Error syncing with Windows accent colour.')
+        await ipcRenderer.invoke('show-error-dialog', 'Accent Color Error', 'Error syncing with Windows accent colour', error.message)
       }
     }
   })
@@ -435,42 +380,54 @@ if (resetAccentColorBtn) {
 }
 
 let currentLayout = localStorage.getItem('toolbar-layout') || 'vertical'
+let currentVerticalPosition = localStorage.getItem('toolbar-position-vertical') || 'left'
+let currentHorizontalPosition = localStorage.getItem('toolbar-position-horizontal') || 'bottom'
 
 function applyLayout(layout) {
   currentLayout = layout
   localStorage.setItem('toolbar-layout', layout)
   
-  const layoutToggle = document.querySelector('.layout-toggle')
-  if (layoutToggle) {
-    layoutToggle.setAttribute('data-active', layout)
-  }
-  
-  document.querySelectorAll('.layout-btn').forEach(btn => {
-    btn.classList.remove('active')
-  })
-  const activeBtn = document.querySelector(`[data-layout="${layout}"]`)
-  if (activeBtn) {
-    activeBtn.classList.add('active')
-  }
+  updateSegmentedControl('layout-control', layout)
 
-  document.querySelectorAll('.layout-btn').forEach(btn => {
-    btn.style.color = ''
-    const icon = btn.querySelector('.material-symbols-outlined')
-    if (icon) {
-      icon.style.color = ''
-    }
-  })
-
+  updateAllSegmentedControls()
+  updatePositionSettingsVisibility()
   ipcRenderer.send('layout-changed', layout)
 }
 
-document.querySelectorAll('.layout-btn').forEach(btn => {
+function applyPosition(type, position) {
+  if (type === 'vertical') {
+    currentVerticalPosition = position
+    localStorage.setItem('toolbar-position-vertical', position)
+  } else {
+    currentHorizontalPosition = position
+    localStorage.setItem('toolbar-position-horizontal', position)
+  }
+  
+  updateSegmentedControl('position-toggle', position)
+
+  updateAllSegmentedControls()
+  ipcRenderer.send(`${type}-position-changed`, position)
+}
+
+window.applyPosition = applyPosition
+
+document.querySelectorAll('#layout-control .control-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    applyLayout(btn.dataset.layout)
+    applyLayout(btn.dataset.value)
   })
 })
 
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    updatePositionSettingsVisibility()
+  })
+} else {
+  updatePositionSettingsVisibility()
+}
+
 applyLayout(currentLayout)
+applyPosition('vertical', currentVerticalPosition)
+applyPosition('horizontal', currentHorizontalPosition)
 
 function formatShortcut(keys) {
   return keys.map(k => {
@@ -527,36 +484,7 @@ document.addEventListener('click', (e) => {
   }
 })
 
-function toggleSettingsSearch() {
-  if (sidebarSearchToggle && sidebarSearchContainer) {
-    const isVisible = sidebarSearchContainer.style.display !== 'none'
-    if (isVisible) {
-      sidebarSearchContainer.style.display = 'none'
-      sidebarSearchToggle.classList.remove('active')
-      if (settingsSearch) {
-        settingsSearch.value = ''
-        performSearch('')
-      }
-    } else {
-      sidebarSearchContainer.style.display = 'block'
-      sidebarSearchToggle.classList.add('active')
-      setTimeout(() => {
-        if (settingsSearch) {
-          settingsSearch.focus()
-        }
-      }, 100)
-    }
-  }
-}
-
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-    e.preventDefault()
-    e.stopPropagation()
-    toggleSettingsSearch()
-    return
-  }
-  
   if (!isRecordingShortcut) return
   
   e.preventDefault()
@@ -784,11 +712,31 @@ if (autoSaveSnapshotsCheckbox) {
     })
   }
   
-  let directoryCheckInterval = null
-  
+  if (saveDirectoryPath) {
+    saveDirectoryPath.addEventListener('click', () => {
+        if (saveDirectoryPath.textContent === "Copied!") return
+        if (!saveDirectoryPath.classList.contains('has-directory')) return
+        const text = saveDirectoryPath.textContent.replace(' (Directory not found)', '')
+        navigator.clipboard.writeText(text).then(() => {
+            const originalText = saveDirectoryPath.textContent
+            const originalColor = saveDirectoryPath.style.color
+            saveDirectoryPath.textContent = "Copied!"
+            saveDirectoryPath.style.color = "#16a34a"
+            saveDirectoryPath.classList.add('copied')
+            setTimeout(() => {
+                saveDirectoryPath.textContent = originalText
+                saveDirectoryPath.style.color = originalColor
+                saveDirectoryPath.classList.remove('copied')
+            }, 1000)
+        })
+    })
+  }
+
   const savedDirectory = localStorage.getItem('save-directory-path')
   if (savedDirectory && saveDirectoryPath) {
     saveDirectoryPath.textContent = savedDirectory
+    saveDirectoryPath.classList.add('has-directory')
+
     if (autoSaveSnapshotsCheckbox && autoSaveSnapshotsCheckbox.checked) {
       checkDirectoryExists(savedDirectory)
       
@@ -803,6 +751,9 @@ if (autoSaveSnapshotsCheckbox) {
         }
       }, 3000)
     }
+  } else if (saveDirectoryPath) {
+    saveDirectoryPath.textContent = 'No directory selected'
+    saveDirectoryPath.classList.remove('has-directory')
   }
   
   autoSaveSnapshotsCheckbox.addEventListener('change', (e) => {
@@ -831,15 +782,15 @@ if (autoSaveSnapshotsCheckbox) {
         }
       }
     } else {
-      if (directoryCheckInterval) {
-        clearInterval(directoryCheckInterval)
-        directoryCheckInterval = null
-      }
+      ipcRenderer.send('update-settings-badge', false)
       const directoryWarning = document.getElementById('directory-warning')
       if (directoryWarning) {
         directoryWarning.style.display = 'none'
       }
-      ipcRenderer.send('update-settings-badge', false)
+      if (directoryCheckInterval) {
+        clearInterval(directoryCheckInterval)
+        directoryCheckInterval = null
+      }
     }
   })
 }
@@ -866,10 +817,25 @@ if (selectSaveDirectoryBtn) {
         saveDirectoryPath.textContent = selectedPath
         saveDirectoryPath.style.color = ''
         saveDirectoryPath.style.opacity = ''
+        saveDirectoryPath.classList.add('has-directory')
       }
       ipcRenderer.send('save-directory-changed', selectedPath)
       
       checkDirectoryExists(selectedPath)
+      
+      const autoSaveEnabled = localStorage.getItem('auto-save-snapshots') === 'true'
+      if (autoSaveEnabled && !directoryCheckInterval) {
+        directoryCheckInterval = setInterval(() => {
+          const enabled = localStorage.getItem('auto-save-snapshots') === 'true'
+          const currentDir = localStorage.getItem('save-directory-path')
+          if (enabled && currentDir) {
+            checkDirectoryExists(currentDir)
+          } else {
+            clearInterval(directoryCheckInterval)
+            directoryCheckInterval = null
+          }
+        }, 3000)
+      }
     }
   })
 }
@@ -956,12 +922,16 @@ if (resetEverythingBtn) {
       const defaultTheme = 'system'
       const defaultAccentColor = '#3bbbf6'
       const defaultLayout = 'vertical'
+      const defaultVerticalPosition = 'left'
+      const defaultHorizontalPosition = 'bottom'
       const defaultShortcut = 'Control+Shift+D'
       const defaultSounds = true
 
       applyTheme(defaultTheme)
       updateAccentColor(defaultAccentColor)
       applyLayout(defaultLayout)
+      applyPosition('vertical', defaultVerticalPosition)
+      applyPosition('horizontal', defaultHorizontalPosition)
 
       if (accentColorPicker) accentColorPicker.value = defaultAccentColor
       if (accentColorHex) accentColorHex.value = defaultAccentColor
@@ -1024,7 +994,23 @@ if (resetEverythingBtn) {
       ipcRenderer.send('save-directory-changed', null)
       if (saveDirectoryPath) {
         saveDirectoryPath.textContent = 'No directory selected'
+        saveDirectoryPath.style.color = ''
+        saveDirectoryPath.style.opacity = ''
+        saveDirectoryPath.classList.remove('has-directory')
       }
+      
+      if (directoryCheckInterval) {
+        clearInterval(directoryCheckInterval)
+        directoryCheckInterval = null
+      }
+      
+      const directoryWarning = document.getElementById('directory-warning')
+      if (directoryWarning) {
+        directoryWarning.style.display = 'none'
+      }
+      
+      sessionStorage.removeItem('directory-warning-dismissed')
+      ipcRenderer.send('update-settings-badge', false)
     }
 
     if (toolbarAccentBgCheckbox) {
@@ -1142,7 +1128,7 @@ async function loadDismissedDialogs() {
       }
     }
   } catch (e) {
-    console.warn('Could not load dismissed dialogs:', e)
+    await ipcRenderer.invoke('show-warning-dialog', 'Settings Warning', 'Could not load dismissed dialogs', e.message)
   }
 }
 
@@ -1151,12 +1137,6 @@ ipcRenderer.on('dismissed-dialogs-updated', () => {
 })
 
 setTimeout(() => loadDismissedDialogs(), 100)
-
-const settingsSearch = document.getElementById('settings-search')
-const clearSearchBtn = document.getElementById('clear-search')
-const noResults = document.getElementById('no-results')
-const sidebarSearchToggle = document.getElementById('sidebar-search-toggle')
-const sidebarSearchContainer = document.querySelector('.sidebar-search-container')
 
 const categoryTitles = {
   appearance: { title: 'Appearance', subtitle: 'Customise the app\'s look and feel' },
@@ -1169,9 +1149,6 @@ const categoryTitles = {
   about: { title: 'About', subtitle: 'Application information and support' }
 }
 
-
-
-let searchDebounceTimeout = null
 let currentCategory = localStorage.getItem('settings-category') || 'appearance'
 
 function showCategory(category) {
@@ -1199,11 +1176,6 @@ function showCategory(category) {
       section.classList.remove('active')
     }
   })
-  
-  if (settingsSearch) {
-    settingsSearch.value = ''
-    performSearch('')
-  }
 }
 
 function initCategoryNavigation() {
@@ -1223,224 +1195,6 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initCategoryNavigation)
 } else {
   initCategoryNavigation()
-}
-
-function performSearch(query) {
-  const searchTerm = query.toLowerCase().trim()
-  const sections = document.querySelectorAll('.settings-section')
-  const categoryHeader = document.querySelector('.settings-header')
-  const headerDivider = document.querySelector('.header-divider')
-  let hasResults = false
-
-  // Clear existing search headers
-  document.querySelectorAll('.search-category-header').forEach(h => h.remove())
-
-  if (searchTerm === '') {
-    sections.forEach(section => {
-      const isCurrent = section.dataset.category === currentCategory
-      if (isCurrent) {
-        section.classList.add('active')
-      } else {
-        section.classList.remove('active')
-      }
-      section.classList.remove('hidden')
-      section.classList.remove('search-result-section')
-      
-      section.querySelectorAll('.setting-item, .setting-subsection-title').forEach(item => {
-        item.classList.remove('hidden')
-      })
-    })
-    
-    if (categoryHeader) categoryHeader.style.display = 'block'
-    if (headerDivider) headerDivider.style.display = 'block'
-    noResults.style.display = 'none'
-    clearSearchBtn.style.display = 'none'
-    return
-  }
-
-  clearSearchBtn.style.display = 'flex'
-  if (categoryHeader) categoryHeader.style.display = 'none'
-  if (headerDivider) headerDivider.style.display = 'none'
-
-  sections.forEach(section => {
-    const category = section.getAttribute('data-category') || ''
-    
-    // EXCLUDE LABS FROM SEARCH
-    if (category === 'labs') {
-      section.classList.remove('active')
-      section.classList.add('hidden')
-      section.classList.remove('search-result-section')
-      return
-    }
-
-    const categoryTitleInfo = categoryTitles[category]
-    const categoryTitle = categoryTitleInfo?.title.toLowerCase() || ''
-    const sectionData = section.getAttribute('data-section')?.toLowerCase() || ''
-    const sectionMatches = categoryTitle.includes(searchTerm) || sectionData.includes(searchTerm)
-    
-    let sectionHasVisibleItems = false
-    
-    // Hide all contents initially
-    const allItems = section.querySelectorAll('.setting-item')
-    const allTitles = section.querySelectorAll('.setting-subsection-title')
-    allItems.forEach(item => item.classList.add('hidden'))
-    allTitles.forEach(title => title.classList.add('hidden'))
-    
-    // Pass 1: Determine matches for all items
-    allItems.forEach(item => {
-      const label = item.querySelector('label')
-      const description = item.querySelector('.setting-description')
-      const keywords = item.getAttribute('data-keywords')?.toLowerCase() || ''
-      const labelText = label?.textContent.toLowerCase() || ''
-      const descText = description?.textContent.toLowerCase() || ''
-      
-      let subItemsText = ''
-      item.querySelectorAll('.setting-sub-item').forEach(sub => {
-        subItemsText += ' ' + (sub.querySelector('label')?.textContent.toLowerCase() || '')
-        subItemsText += ' ' + (sub.getAttribute('data-keywords')?.toLowerCase() || '')
-      })
-
-      const itemMatches = labelText.includes(searchTerm) || 
-                         descText.includes(searchTerm) || 
-                         keywords.includes(searchTerm) ||
-                         subItemsText.includes(searchTerm)
-      
-      const isMatch = itemMatches || sectionMatches
-      if (isMatch) {
-        item.classList.remove('hidden')
-        
-        item.querySelectorAll('.setting-sub-item').forEach(sub => {
-          const subLabel = sub.querySelector('label')
-          const subKeywords = sub.getAttribute('data-keywords')?.toLowerCase() || ''
-          const subMatches = (subLabel?.textContent.toLowerCase().includes(searchTerm)) || subKeywords.includes(searchTerm)
-          if (subMatches || sectionMatches) {
-            sub.style.display = 'block'
-          }
-        })
-        sectionHasVisibleItems = true
-        hasResults = true
-      } else {
-        item.classList.add('hidden')
-      }
-    })
-
-    // Pass 2: Show subsection titles only if they have visible following items
-    allTitles.forEach(title => {
-      let next = title.nextElementSibling
-      let hasVisibleItem = false
-      while (next && !next.classList.contains('setting-subsection-title')) {
-        if (next.classList.contains('setting-item') && !next.classList.contains('hidden')) {
-          hasVisibleItem = true
-          break
-        }
-        next = next.nextElementSibling
-      }
-      
-      if (hasVisibleItem) {
-        title.classList.remove('hidden')
-      } else {
-        title.classList.add('hidden')
-      }
-    })
-    
-    if (sectionHasVisibleItems) {
-      section.classList.add('active')
-      section.classList.remove('hidden')
-      section.classList.add('search-result-section')
-      
-      // Add category header for organization
-      const header = document.createElement('div')
-      header.className = 'search-category-header'
-      header.innerHTML = `
-        <span class="material-symbols-outlined">${getCategoryIcon(category)}</span>
-        <span>${categoryTitleInfo?.title || category}</span>
-      `
-      section.insertBefore(header, section.firstChild)
-    } else {
-      section.classList.remove('active')
-      section.classList.add('hidden')
-      section.classList.remove('search-result-section')
-    }
-  })
-
-  noResults.style.display = hasResults ? 'none' : 'flex'
-}
-
-function getCategoryIcon(category) {
-  const navItem = document.querySelector(`.nav-item[data-category="${category}"]`)
-  const icon = navItem?.querySelector('.material-symbols-outlined')?.textContent
-  return icon || 'settings'
-}
-
-if (settingsSearch) {
-  settingsSearch.addEventListener('input', (e) => {
-    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout)
-    searchDebounceTimeout = setTimeout(() => {
-      performSearch(e.target.value)
-    }, 150)
-  })
-}
-
-window.addEventListener('keydown', (e) => {
-  const isF = e.key.toLowerCase() === 'f' || e.code === 'KeyF'
-  if ((e.ctrlKey || e.metaKey) && isF) {
-    e.preventDefault()
-    e.stopPropagation()
-    toggleSearch()
-  }
-}, true)
-
-function toggleSearch() {
-  if (!sidebarSearchContainer || !settingsSearch) return
-  
-  const isCurrentlyVisible = window.getComputedStyle(sidebarSearchContainer).display !== 'none'
-  
-  if (isCurrentlyVisible) {
-    sidebarSearchContainer.style.display = 'none'
-    sidebarSearchToggle?.classList.remove('active')
-    settingsSearch.value = ''
-    performSearch('')
-    settingsSearch.blur()
-  } else {
-    sidebarSearchContainer.style.display = 'block'
-    sidebarSearchToggle?.classList.add('active')
-    setTimeout(() => {
-      settingsSearch.focus()
-      settingsSearch.select()
-    }, 10)
-  }
-}
-
-if (sidebarSearchToggle && sidebarSearchContainer) {
-  sidebarSearchToggle.addEventListener('click', toggleSearch)
-}
-
-if (settingsSearch) {
-  // Already have an input listener above with debounce, removing duplicate one
-  
-  settingsSearch.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      settingsSearch.value = ''
-      performSearch('')
-      if (clearSearchBtn) clearSearchBtn.style.display = 'none'
-      if (sidebarSearchToggle && sidebarSearchContainer) {
-        sidebarSearchContainer.style.display = 'none'
-        sidebarSearchToggle.classList.remove('active')
-      }
-      settingsSearch.blur()
-    }
-  })
-}
-
-if (clearSearchBtn) {
-  clearSearchBtn.addEventListener('click', () => {
-    if (settingsSearch) {
-      settingsSearch.value = ''
-      performSearch('')
-      clearSearchBtn.style.display = 'none'
-      settingsSearch.focus()
-    }
-  })
 }
 
 async function initReportIssueButton() {
@@ -1473,7 +1227,7 @@ ${systemInfo.osVersion ? `- Operating System: ${systemInfo.osVersion}` : `- Plat
       reportBtn.href = `mailto:help@creatoryogames.com?subject=${subject}&body=${body}`
     }
   } catch (error) {
-    console.error('Error initializing report issue button:', error)
+    await ipcRenderer.invoke('show-error-dialog', 'Initialization Error', 'Error initializing report issue button', error.message)
   }
 }
 
@@ -1571,6 +1325,11 @@ if (document.readyState === 'loading') {
   updateResetShortcutVisibility()
   initInfoTooltips()
 }
+
+window.categoryTitles = categoryTitles
+window.currentCategory = currentCategory
+
+const settingsSearch = new SettingsSearch()
 
 const { initWindowControls } = require('../shared/window-controls.js')
 initWindowControls({ showMinimize: true, showMaximize: true, showClose: true })

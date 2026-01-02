@@ -1,8 +1,9 @@
 const { app } = require('electron')
+const { exec } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { exec } = require('child_process')
+const dialogs = require('./dialogs')
 
 function setEnabled(enabled) {
   if (process.platform === 'win32') {
@@ -36,17 +37,17 @@ function manageWindowsStartupShortcut(enabled) {
         const psScript = `$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${escapedShortcutPath}'); $Shortcut.TargetPath = '${escapedExePath}'; $Shortcut.WorkingDirectory = '${escapedWorkingDir}'; $Shortcut.Save()`
         
         exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`, { stdio: 'ignore' }, (error) => {
-          if (error) console.error('Error creating startup shortcut:', error)
+          if (error) dialogs.showErrorDialog(null, 'Startup Error', 'Error creating startup shortcut', error.message)
         })
       } else {
         if (fs.existsSync(shortcutPath)) {
           fs.unlink(shortcutPath, (error) => {
-            if (error) console.error('Error removing startup shortcut:', error)
+            if (error) dialogs.showErrorDialog(null, 'Startup Error', 'Error removing startup shortcut', error.message)
           })
         }
       }
     } catch (error) {
-      console.error('Error managing startup shortcut:', error)
+      dialogs.showErrorDialog(null, 'Startup Error', 'Error managing startup shortcut', error.message)
     }
   })
 }

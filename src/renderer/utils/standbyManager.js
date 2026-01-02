@@ -131,8 +131,11 @@ function updateUI(on) {
   sb?.querySelector('.material-symbols-outlined')?.replaceChildren(document.createTextNode(icon))
   msb?.querySelector('.material-symbols-outlined')?.replaceChildren(document.createTextNode(icon))
   
-  const txt = msb?.querySelector('span:last-child')
-  if (txt) txt.textContent = on ? 'Resume' : 'Standby Mode'
+  if (msb) {
+    msb.setAttribute('data-tooltip', on ? 'Resume' : 'Standby Mode')
+    const tooltipText = msb.querySelector('.custom-tooltip .tooltip-text')
+    if (tooltipText) tooltipText.textContent = on ? 'Resume' : 'Standby Mode'
+  }
 }
 
 function setDisabled(d) {

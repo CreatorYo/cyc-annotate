@@ -1,9 +1,10 @@
-const { ipcRenderer, nativeTheme } = require('electron')
-const { initSelectTool } = require('./selectTool.js')
-const { initThemeManager, updateToolbarBackgroundColor, getEffectiveTheme } = require('./utils/themeManager.js')
+const { ipcRenderer } = require('electron')
+const { initSelectTool } = require('./tools/selectTool.js')
+const { initThemeManager, updateToolbarBackgroundColor } = require('./utils/themeManager.js')
 const { initTooltips, hideAllTooltips } = require('./utils/tooltipManager.js')
 const { initAudioContext, playSound } = require('./utils/soundEffects.js')
 const { initStandbyManager } = require('./utils/standbyManager.js')
+const ToolbarPositionManager = require('./utils/toolbarPositionManager')
 
 const canvas = document.getElementById('canvas')
 
@@ -257,10 +258,6 @@ function drawElement(element) {
       ctx.stroke()
     } else if (element.shapeType === 'arrow') {
       drawArrow(ctx, element.start.x, element.start.y, element.end.x, element.end.y)
-    } else if (element.shapeType === 'diamond') {
-      drawDiamond(ctx, element.start.x, element.start.y, element.end.x, element.end.y, element.filled)
-    } else if (element.shapeType === 'heart') {
-      drawHeart(ctx, element.start.x, element.start.y, element.end.x, element.end.y, element.filled)
     }
   } else if (element.type === 'text') {
     ctx.fillStyle = element.color || '#000000'
@@ -891,60 +888,6 @@ function drawArrow(ctx, x1, y1, x2, y2) {
   ctx.stroke()
 }
 
-function drawDiamond(ctx, x1, y1, x2, y2, filled) {
-  const minX = Math.min(x1, x2)
-  const maxX = Math.max(x1, x2)
-  const minY = Math.min(y1, y2)
-  const maxY = Math.max(y1, y2)
-  const centerX = (minX + maxX) / 2
-  const centerY = (minY + maxY) / 2
-  const w = (maxX - minX) / 2
-  const h = (maxY - minY) / 2
-  
-  ctx.beginPath()
-  ctx.moveTo(centerX, minY)
-  ctx.lineTo(maxX, centerY)
-  ctx.lineTo(centerX, maxY)
-  ctx.lineTo(minX, centerY)
-  ctx.closePath()
-  
-  if (filled) {
-    ctx.fill()
-  } else {
-    ctx.stroke()
-  }
-}
-
-function drawHeart(ctx, x1, y1, x2, y2, filled) {
-  const minX = Math.min(x1, x2)
-  const maxX = Math.max(x1, x2)
-  const minY = Math.min(y1, y2)
-  const maxY = Math.max(y1, y2)
-  const centerX = (minX + maxX) / 2
-  const centerY = (minY + maxY) / 2
-  const w = (maxX - minX) / 2
-  const h = (maxY - minY) / 2
-  const size = Math.min(w, h)
-  
-  const topY = centerY - size * 0.3
-  const bottomY = centerY + size * 0.7
-  const leftX = centerX - size * 0.5
-  const rightX = centerX + size * 0.5
-  
-  ctx.beginPath()
-  ctx.moveTo(centerX, bottomY)
-  ctx.bezierCurveTo(centerX, centerY + size * 0.2, leftX, centerY, leftX, topY)
-  ctx.bezierCurveTo(leftX, topY - size * 0.2, leftX + size * 0.2, topY - size * 0.2, centerX, topY)
-  ctx.bezierCurveTo(centerX + size * 0.3, topY - size * 0.2, rightX, topY - size * 0.2, rightX, topY)
-  ctx.bezierCurveTo(rightX, centerY, centerX, centerY + size * 0.2, centerX, bottomY)
-  ctx.closePath()
-  
-  if (filled) {
-    ctx.fill()
-  } else {
-    ctx.stroke()
-  }
-}
 
 function clearPreview() {
   if (previewCtx) {
@@ -1130,9 +1073,11 @@ function finishTextInput() {
           if (result !== null) {
             const trimmedText = fullText.trim()
             if (trimmedText.endsWith('=')) {
-              segments[segments.length - 1].text = `${trimmedText} ${result}`
+              const lastSegment = segments[segments.length - 1]
+              lastSegment.text = lastSegment.text.replace(/\s*=$/, ` = ${result}`)
             } else {
-              segments.push({ text: ` = ${result}`, formatting: { bold: false, italic: false, underline: false } })
+              const lastSegment = segments[segments.length - 1]
+              lastSegment.text += ` = ${result}`
             }
           }
         }
@@ -1170,9 +1115,11 @@ function finishTextInput() {
       if (result !== null) {
         const trimmedText = fullText.trim()
         if (trimmedText.endsWith('=')) {
-          segments[segments.length - 1].text = `${trimmedText} ${result}`
+          const lastSegment = segments[segments.length - 1]
+          lastSegment.text = lastSegment.text.replace(/\s*=$/, ` = ${result}`)
         } else {
-          segments.push({ text: ` = ${result}`, formatting: { bold: false, italic: false, underline: false } })
+          const lastSegment = segments[segments.length - 1]
+          lastSegment.text += ` = ${result}`
         }
       }
     }
@@ -2337,10 +2284,21 @@ document.getElementById('redo-btn').addEventListener('click', redo)
 updateUndoRedoButtons()
 
 const mainToolbar = document.getElementById('main-toolbar')
-let isDragging = false
-let currentLayout = localStorage.getItem('toolbar-layout') || 'vertical'
+let toolbarPositionManager
 
 if (mainToolbar) {
+  const savedLayout = localStorage.getItem('toolbar-layout') || 'vertical'
+  const savedVerticalPosition = localStorage.getItem('toolbar-position-vertical') || 'left'
+  const savedHorizontalPosition = localStorage.getItem('toolbar-position-horizontal') || 'bottom'
+  
+  toolbarPositionManager = new ToolbarPositionManager(mainToolbar, {
+    layout: savedLayout,
+    verticalPosition: savedVerticalPosition,
+    horizontalPosition: savedHorizontalPosition
+  })
+  
+  toolbarPositionManager.setLayout(savedLayout)
+  
   mainToolbar.addEventListener('mousedown', () => {
     ipcRenderer.send('focus-window')
   })
@@ -2357,276 +2315,29 @@ function updateToolbarMovingState() {
 
 updateToolbarMovingState()
 
-function applyLayout(layout) {
-  currentLayout = layout
-  mainToolbar.classList.remove('toolbar-vertical', 'toolbar-horizontal')
-  mainToolbar.classList.add(`toolbar-${layout}`)
-  localStorage.setItem('toolbar-layout', layout)
+ipcRenderer.on('layout-changed', (event, layout) => {
+  if (toolbarPositionManager) {
+    toolbarPositionManager.setLayout(layout)
+  }
+})
 
-  document.querySelectorAll('.layout-btn').forEach(btn => {
-    btn.classList.remove('active')
-  })
-  document.querySelector(`[data-layout="${layout}"]`)?.classList.add('active')
+ipcRenderer.on('vertical-position-changed', (event, position) => {
+  if (toolbarPositionManager) {
+    toolbarPositionManager.setVerticalPosition(position)
+  }
+})
 
-  resetToolbarPosition()
+ipcRenderer.on('horizontal-position-changed', (event, position) => {
+  if (toolbarPositionManager) {
+    toolbarPositionManager.setHorizontalPosition(position)
+  }
+})
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  initSettings()
+} else {
+  document.addEventListener('DOMContentLoaded', initSettings)
 }
-
-function saveToolbarPosition() {
-  
-  const rect = mainToolbar.getBoundingClientRect()
-  if (currentLayout === 'vertical') {
-    
-    const centerX = rect.left + rect.width / 2
-    const centerY = rect.top + rect.height / 2
-    localStorage.setItem('toolbar-x', centerX)
-    localStorage.setItem('toolbar-y', centerY)
-  } else {
-    
-    const centerX = rect.left + rect.width / 2
-    const bottomY = window.innerHeight - rect.bottom
-    localStorage.setItem('toolbar-x', centerX)
-    localStorage.setItem('toolbar-y', bottomY)
-  }
-}
-
-function resetToolbarPosition() {
-  if (currentLayout === 'vertical') {
-    mainToolbar.style.left = '20px'
-    mainToolbar.style.top = '50%'
-    mainToolbar.style.transform = 'translateY(-50%)'
-    mainToolbar.style.bottom = 'auto'
-    mainToolbar.style.right = 'auto'
-  } else {
-    mainToolbar.style.bottom = '20px'
-    mainToolbar.style.left = '50%'
-    mainToolbar.style.transform = 'translateX(-50%)'
-    mainToolbar.style.top = 'auto'
-    mainToolbar.style.right = 'auto'
-  }
-  
-  setTimeout(() => {
-    saveToolbarPosition()
-  }, 10)
-}
-
-mainToolbar.addEventListener('dblclick', (e) => {
-  
-  const clickedButton = e.target.closest('button')
-  const clickedColor = e.target.closest('.color-swatch')
-  const clickedWrapper = e.target.closest('.stroke-thickness-wrapper, .shapes-wrapper, .drawing-tools-wrapper, .custom-color-wrapper')
-  const clickedPopup = e.target.closest('.stroke-popup, .shapes-popup, .drawing-tools-popup, .custom-color-popup')
-  const clickedOption = e.target.closest('.stroke-option, .shape-option, .drawing-tool-option, .color-option')
-  const clickedGroup = e.target.closest('.toolbar-group, .color-palette')
-  
-  if (clickedButton || clickedColor || clickedWrapper || clickedPopup || clickedOption || clickedGroup) {
-    return
-  }
-  
-  e.stopPropagation()
-  resetToolbarPosition()
-})
-
-applyLayout(currentLayout)
-
-document.querySelectorAll('.layout-btn').forEach(btn => {
-  if (btn.dataset.layout === currentLayout) {
-    btn.classList.add('active')
-  } else {
-    btn.classList.remove('active')
-  }
-})
-
-document.querySelectorAll('.layout-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    applyLayout(btn.dataset.layout)
-  })
-})
-
-let dragStartPos = { x: 0, y: 0 }
-let toolbarStartPos = { x: 0, y: 0 }
-
-mainToolbar.addEventListener('mousedown', (e) => {
-  const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving') === 'true'
-  if (disableToolbarMoving) {
-    return
-  }
-  
-  const clickedButton = e.target.closest('button')
-  const clickedColor = e.target.closest('.color-swatch')
-  const clickedWrapper = e.target.closest('.stroke-thickness-wrapper, .shapes-wrapper')
-  const clickedPopup = e.target.closest('.stroke-popup, .shapes-popup')
-  const clickedOption = e.target.closest('.stroke-option, .shape-option')
-  const clickedGroup = e.target.closest('.toolbar-group, .color-palette')
-  
-  if (clickedButton || clickedColor || clickedWrapper || clickedPopup || clickedOption || clickedGroup) {
-    return
-  }
-
-  isDragging = true
-  mainToolbar.classList.add('dragging')
-  const rect = mainToolbar.getBoundingClientRect()
-  dragStartPos.x = e.clientX
-  dragStartPos.y = e.clientY
-  
-  if (currentLayout === 'vertical') {
-    toolbarStartPos.x = rect.left
-    toolbarStartPos.y = rect.top + rect.height / 2
-  } else {
-    toolbarStartPos.x = rect.left + rect.width / 2
-    toolbarStartPos.y = window.innerHeight - rect.bottom
-  }
-  
-  e.preventDefault()
-  e.stopPropagation()
-})
-
-document.addEventListener('mousemove', (e) => {
-  if (!isDragging) return
-  
-  const deltaX = e.clientX - dragStartPos.x
-  const deltaY = e.clientY - dragStartPos.y
-  
-  if (currentLayout === 'vertical') {
-    let newX = toolbarStartPos.x + deltaX
-    let newY = toolbarStartPos.y + deltaY
-
-    const toolbarHalfWidth = mainToolbar.offsetWidth / 2
-    const toolbarHalfHeight = mainToolbar.offsetHeight / 2
-    
-    newX = Math.max(toolbarHalfWidth, Math.min(newX, window.innerWidth - toolbarHalfWidth))
-    newY = Math.max(toolbarHalfHeight, Math.min(newY, window.innerHeight - toolbarHalfHeight))
-    
-    mainToolbar.style.left = newX + 'px'
-    mainToolbar.style.top = newY + 'px'
-    mainToolbar.style.transform = 'translate(-50%, -50%)'
-    mainToolbar.style.bottom = 'auto'
-    mainToolbar.style.right = 'auto'
-  } else {
-    let newX = toolbarStartPos.x + deltaX
-    let newY = toolbarStartPos.y - deltaY
-
-    const toolbarHalfWidth = mainToolbar.offsetWidth / 2
-    const toolbarHeight = mainToolbar.offsetHeight
-    
-    newX = Math.max(toolbarHalfWidth, Math.min(newX, window.innerWidth - toolbarHalfWidth))
-    newY = Math.max(0, Math.min(newY, window.innerHeight - toolbarHeight))
-    
-    mainToolbar.style.left = newX + 'px'
-    mainToolbar.style.bottom = newY + 'px'
-    mainToolbar.style.transform = 'translateX(-50%)'
-    mainToolbar.style.top = 'auto'
-    mainToolbar.style.right = 'auto'
-  }
-})
-
-document.addEventListener('mouseup', () => {
-  if (isDragging) {
-    isDragging = false
-    mainToolbar.classList.remove('dragging')
-
-    saveToolbarPosition()
-    
-    updateDropdownPositioning()
-  }
-})
-
-function updateDropdownPositioning() {
-  const rect = mainToolbar.getBoundingClientRect()
-  
-  if (currentLayout === 'vertical') {
-    const toolbarCenterX = rect.left + rect.width / 2
-    const isOnRightSide = toolbarCenterX > window.innerWidth / 2
-    
-    if (isOnRightSide) {
-      mainToolbar.classList.add('toolbar-right-side')
-    } else {
-      mainToolbar.classList.remove('toolbar-right-side')
-    }
-    
-    mainToolbar.classList.remove('toolbar-top-side')
-  } else {
-    const toolbarCenterY = rect.top + rect.height / 2
-    const isOnTop = toolbarCenterY < window.innerHeight / 2
-    
-    if (isOnTop) {
-      mainToolbar.classList.add('toolbar-top-side')
-    } else {
-      mainToolbar.classList.remove('toolbar-top-side')
-    }
-    
-    mainToolbar.classList.remove('toolbar-right-side')
-  }
-}
-
-updateDropdownPositioning()
-window.addEventListener('resize', updateDropdownPositioning)
-
-function loadToolbarPosition() {
-  const savedX = localStorage.getItem('toolbar-x')
-  const savedY = localStorage.getItem('toolbar-y')
-
-  const defaultX = currentLayout === 'vertical' ? 60 : window.innerWidth / 2
-  const defaultY = currentLayout === 'vertical' ? window.innerHeight / 2 : 20
-  
-  if (savedX !== null && savedY !== null) {
-    const x = parseFloat(savedX)
-    const y = parseFloat(savedY)
-
-    const toolbarHalfWidth = mainToolbar.offsetWidth / 2
-    const toolbarHalfHeight = mainToolbar.offsetHeight / 2
-    
-    if (x >= toolbarHalfWidth && x <= window.innerWidth - toolbarHalfWidth && 
-        y >= toolbarHalfHeight && y <= window.innerHeight - toolbarHalfHeight) {
-      if (currentLayout === 'vertical') {
-        mainToolbar.style.left = x + 'px'
-        mainToolbar.style.top = y + 'px'
-        mainToolbar.style.transform = 'translate(-50%, -50%)'
-        mainToolbar.style.bottom = 'auto'
-        mainToolbar.style.right = 'auto'
-      } else {
-        mainToolbar.style.left = x + 'px'
-        mainToolbar.style.bottom = y + 'px'
-        mainToolbar.style.transform = 'translateX(-50%)'
-        mainToolbar.style.top = 'auto'
-        mainToolbar.style.right = 'auto'
-      }
-      return
-    }
-  }
-
-  if (currentLayout === 'vertical') {
-    mainToolbar.style.left = defaultX + 'px'
-    mainToolbar.style.top = defaultY + 'px'
-    mainToolbar.style.transform = 'translate(-50%, -50%)'
-    mainToolbar.style.bottom = 'auto'
-    mainToolbar.style.right = 'auto'
-  } else {
-    mainToolbar.style.left = defaultX + 'px'
-    mainToolbar.style.bottom = defaultY + 'px'
-    mainToolbar.style.transform = 'translateX(-50%)'
-    mainToolbar.style.top = 'auto'
-    mainToolbar.style.right = 'auto'
-  }
-
-  setTimeout(() => {
-    updateDropdownPositioning()
-  }, 100)
-}
-
-loadToolbarPosition()
-
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    updateDropdownPositioning()
-  }, 200)
-})
-
-window.addEventListener('resize', () => {
-  const rect = mainToolbar.getBoundingClientRect()
-  if (rect.left < 0 || rect.top < 0 || rect.right > window.innerWidth || rect.bottom > window.innerHeight) {
-    loadToolbarPosition()
-  }
-})
 
 function initSettings() {
   const menuBtn = document.getElementById('menu-btn')
@@ -2900,10 +2611,6 @@ ipcRenderer.on('windows-accent-color-changed', (event, color) => {
   updateAccentColor(color)
 })
 
-ipcRenderer.on('layout-changed', (event, layout) => {
-  applyLayout(layout)
-})
-
 ipcRenderer.on('sounds-changed', (event, enabled) => {
   const soundsCheckbox = document.getElementById('sounds-enabled')
   if (soundsCheckbox) {
@@ -3002,7 +2709,7 @@ if (hideBtn) {
 let toolbarWasVisible = false
 let standbyWasActive = false
 
-function triggerCapture() {
+async function triggerCapture() {
   try {
     const toolbar = document.getElementById('main-toolbar')
     toolbarWasVisible = toolbar && toolbar.style.display !== 'none'
@@ -3018,9 +2725,8 @@ function triggerCapture() {
       standbyManager.pause()
     }
 
-    ipcRenderer.invoke('open-capture-overlay').catch((error) => {
-      console.error('Error opening capture overlay:', error)
-      alert('Failed to open capture overlay. Please try again.')
+    ipcRenderer.invoke('open-capture-overlay').catch(async (error) => {
+      await ipcRenderer.invoke('show-error-dialog', 'Capture Error', 'Failed to open capture overlay', error.message || 'Please try again.')
       const toolbar = document.getElementById('main-toolbar')
       if (toolbar && toolbarWasVisible) {
         toolbar.style.display = ''
@@ -3033,8 +2739,7 @@ function triggerCapture() {
       standbyWasActive = false
     })
   } catch (error) {
-    console.error('Error opening capture overlay:', error)
-    alert('Failed to open capture overlay. Please try again.')
+    await ipcRenderer.invoke('show-error-dialog', 'Capture Error', 'Failed to open capture overlay', error.message || 'Please try again.')
     const toolbar = document.getElementById('main-toolbar')
     if (toolbar && toolbarWasVisible) {
       toolbar.style.display = ''
@@ -3085,7 +2790,7 @@ ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
   standbyWasActive = false
 
   const desktopImg = new Image()
-  desktopImg.onload = () => {
+  desktopImg.onload = async () => {
     try {
       const tempCanvas = document.createElement('canvas')
       tempCanvas.width = bounds.width
@@ -3122,7 +2827,7 @@ ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
       }
       annotationImage.src = annotationImg
     } catch (error) {
-      console.error('Error processing capture:', error)
+      await ipcRenderer.invoke('show-error-dialog', 'Processing Error', 'Error processing capture', error.message)
       toolbarWasVisible = false
     }
   }
