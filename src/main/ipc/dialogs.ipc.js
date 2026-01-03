@@ -27,8 +27,8 @@ function initDialogsIpc(context) {
     await dialogs.showSettingsResetDialog(getSettingsWin());
   });
 
-  ipcMain.handle('show-accent-color-presets', async (event, presetColors, x, y) => {
-    return await dialogs.showAccentColorPresets(getSettingsWin(), presetColors, x, y);
+  ipcMain.handle('show-accent-color-presets', async (event, presetColors, x, y, options = {}) => {
+    return await dialogs.showAccentColorPresets(getSettingsWin(), presetColors, x, y, options);
   });
 
   ipcMain.handle('show-duplicate-warning', async (event, elementCount) => {

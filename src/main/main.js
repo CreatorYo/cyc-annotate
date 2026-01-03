@@ -58,6 +58,7 @@ function initCaptureOverlayModule() {
   captureOverlay = initCaptureOverlay({
     getWin: () => win,
     getVisible: () => visible,
+    getSetting,
     restoreMouseEvents,
     ensureAlwaysOnTop,
     disableDefaultShortcuts

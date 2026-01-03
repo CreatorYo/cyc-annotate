@@ -42,6 +42,7 @@
         </div>
       </div>
       <nav class="sidebar-nav">
+        <div class="nav-pill"></div>
         <button class="nav-item active" data-category="appearance">
           <span class="material-symbols-outlined">palette</span>
           <span>Appearance</span>
@@ -107,40 +108,46 @@
                 <label>Theme</label>
                 <span class="setting-description">Choose your preferred colour scheme</span>
               </div>
-              <div class="segmented-control" data-segments="3" id="theme-control">
-                <button class="control-btn" data-value="light" title="Light">
-                  <span class="material-symbols-outlined">light_mode</span>
-                  <span>Light</span>
+              <div class="dropdown-menu" id="theme-dropdown">
+                <button class="dropdown-menu-trigger" id="theme-dropdown-trigger">
+                  <div class="trigger-content">
+                    <span class="material-symbols-outlined" id="current-theme-icon">light_mode</span>
+                    <span id="current-theme-text">Light</span>
+                  </div>
+                  <span class="material-symbols-outlined arrow">expand_more</span>
                 </button>
-                <button class="control-btn" data-value="dark" title="Dark">
-                  <span class="material-symbols-outlined">dark_mode</span>
-                  <span>Dark</span>
-                </button>
-                <button class="control-btn" data-value="system" title="System">
-                  <span class="material-symbols-outlined">desktop_windows</span>
-                  <span>System</span>
-                </button>
+                <div class="dropdown-menu-menu">
+                  <div class="dropdown-menu-item" data-value="light">
+                    <span class="material-symbols-outlined">light_mode</span>
+                    <span>Light</span>
+                  </div>
+                  <div class="dropdown-menu-item" data-value="dark">
+                    <span class="material-symbols-outlined">dark_mode</span>
+                    <span>Dark</span>
+                  </div>
+                  <div class="dropdown-menu-item" data-value="system">
+                    <span class="material-symbols-outlined">desktop_windows</span>
+                    <span>System</span>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div class="setting-item" data-keywords="accent colour customise theme">
               <div class="setting-label-wrapper">
-                <label>Accent Colour</label>
+                <label>Accent Colour <span id="sync-info-icon" class="info-icon" style="display: none;"
+                    data-tooltip="This setting is currently synced with your Windows accent colour. Disable sync to change it manually."><span
+                      class="material-symbols-outlined">info</span></span></label>
                 <span class="setting-description">Customise the accent colour used throughout the app</span>
               </div>
               <div class="accent-color-wrapper">
                 <button id="accent-color-preview" class="accent-color-preview"
                   title="Click to open colour picker"></button>
                 <input type="color" id="accent-color-picker" class="accent-color-picker" value="#3bbbf6" tabindex="0">
-                <input type="text" id="accent-color-hex" class="accent-color-hex" placeholder="#3bbbf6" maxlength="7"
-                  tabindex="0">
-                <button id="sync-windows-accent" class="sync-windows-btn" title="Sync with Windows accent colour">
-                  <span class="material-symbols-outlined">sync</span>
-                  <span>Sync with Windows</span>
-                </button>
-                <button id="reset-accent-color" class="reset-btn" title="Reset to default">
-                  <span class="material-symbols-outlined">refresh</span>
-                </button>
+                <div class="accent-color-hex-container">
+                  <input type="text" id="accent-color-hex" class="accent-color-hex" placeholder="#3bbbf6" maxlength="7"
+                    tabindex="0">
+                </div>
               </div>
             </div>
           </div>
@@ -154,24 +161,44 @@
                 <label>Layout</label>
                 <span class="setting-description">Choose toolbar orientation</span>
               </div>
-              <div class="segmented-control layout-control" data-segments="2" id="layout-control">
-                <button class="control-btn" data-value="vertical" title="Vertical">
-                  <span class="material-symbols-outlined">view_column</span>
-                  <span>Vertical</span>
+              <div class="dropdown-menu" id="layout-dropdown">
+                <button class="dropdown-menu-trigger" id="layout-dropdown-trigger">
+                  <div class="trigger-content">
+                    <span class="material-symbols-outlined" id="current-layout-icon">view_column</span>
+                    <span id="current-layout-text">Vertical</span>
+                  </div>
+                  <span class="material-symbols-outlined arrow">expand_more</span>
                 </button>
-                <button class="control-btn" data-value="horizontal" title="Horizontal">
-                  <span class="material-symbols-outlined">view_week</span>
-                  <span>Horizontal</span>
-                </button>
+                <div class="dropdown-menu-menu">
+                  <div class="dropdown-menu-item" data-value="vertical">
+                    <span class="material-symbols-outlined">view_column</span>
+                    <span>Vertical</span>
+                  </div>
+                  <div class="dropdown-menu-item" data-value="horizontal">
+                    <span class="material-symbols-outlined">view_week</span>
+                    <span>Horizontal</span>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div id="position-setting" class="setting-item" data-keywords="toolbar position placement">
               <div class="setting-label-wrapper">
                 <label id="position-label">Vertical Position</label>
-                <span id="position-description" class="setting-description">Choose which side to place the vertical toolbar</span>
+                <span id="position-description" class="setting-description">Choose which side to place the vertical
+                  toolbar</span>
               </div>
-              <div id="position-toggle" class="segmented-control" data-segments="2">
+              <div class="dropdown-menu" id="position-dropdown">
+                <button class="dropdown-menu-trigger" id="position-dropdown-trigger">
+                  <div class="trigger-content">
+                    <span class="material-symbols-outlined" id="current-position-icon">align_horizontal_left</span>
+                    <span id="current-position-text">Left</span>
+                  </div>
+                  <span class="material-symbols-outlined arrow">expand_more</span>
+                </button>
+                <div class="dropdown-menu-menu" id="position-dropdown-menu">
+                  <!-- Dynamically populated -->
+                </div>
               </div>
             </div>
 
@@ -194,7 +221,8 @@
               <div class="setting-row">
                 <div class="setting-label-wrapper" data-toggle-for="reduce-clutter-enabled">
                   <label>Reduce Clutter</label>
-                  <span class="setting-description">Move undo, redo, toggle visibility, and settings into a submenu</span>
+                  <span class="setting-description">Move undo, redo, toggle visibility, and settings into a
+                    submenu</span>
                 </div>
                 <div class="toggle-switch">
                   <input type="checkbox" id="reduce-clutter-enabled" checked>
@@ -208,7 +236,8 @@
                     <label>Show Standby in Toolbar <span class="info-icon"
                         data-tooltip="Standby mode pauses drawing and lets you click through to windows behind the overlay."><span
                           class="material-symbols-outlined">info</span></span></label>
-                    <span class="setting-description">Keep standby directly on toolbar without moving it into submenu</span>
+                    <span class="setting-description">Keep standby directly on toolbar without moving it into
+                      submenu</span>
                   </div>
                   <div class="toggle-switch">
                     <input type="checkbox" id="standby-in-toolbar">
@@ -225,7 +254,7 @@
                   <span class="setting-description">Prevent the toolbar from being moved by dragging</span>
                 </div>
                 <div class="toggle-switch">
-                  <input type="checkbox" id="disable-toolbar-moving">
+                  <input type="checkbox" id="disable-toolbar-moving" checked>
                   <label for="disable-toolbar-moving" class="toggle-label"></label>
                 </div>
               </div>
@@ -330,6 +359,8 @@
                 </div>
               </div>
             </div>
+
+
           </div>
         </div>
 
@@ -400,6 +431,19 @@
                 <div class="toggle-switch">
                   <input type="checkbox" id="hardware-acceleration">
                   <label for="hardware-acceleration" class="toggle-label"></label>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-item" data-keywords="snap align magnetic object guide">
+              <div class="setting-row">
+                <div class="setting-label-wrapper" data-toggle-for="snap-to-objects-enabled">
+                  <label>Snap to Objects</label>
+                  <span class="setting-description">Align elements to other objects when dragging or resizing</span>
+                </div>
+                <div class="toggle-switch">
+                  <input type="checkbox" id="snap-to-objects-enabled" checked>
+                  <label for="snap-to-objects-enabled" class="toggle-label"></label>
                 </div>
               </div>
             </div>

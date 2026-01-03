@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Annotate App</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link rel="stylesheet" href="../../styles/style.css">
 </head>
+
 <body data-theme="system">
   <div id="main-toolbar" class="toolbar-vertical draggable">
     <div class="toolbar-group">
       <div class="drawing-tools-wrapper">
-      <button id="pencil-btn" class="toolbar-btn active" data-tool="pencil" data-tooltip="Pencil" data-shortcut="P">
-        <span class="material-symbols-outlined">edit</span>
-      </button>
+        <button id="pencil-btn" class="toolbar-btn active" data-tool="pencil" data-tooltip="Pencil" data-shortcut="P">
+          <span class="material-symbols-outlined">edit</span>
+        </button>
         <div id="drawing-tools-popup" class="drawing-tools-popup">
           <button class="drawing-tool-option" data-tool="select" data-tooltip="Select" data-shortcut="V">
             <span class="material-symbols-outlined">arrow_selector_tool</span>
@@ -37,20 +40,20 @@
           <span class="material-symbols-outlined">shapes</span>
         </button>
         <div id="shapes-popup" class="shapes-popup">
-          <button class="shape-option" data-shape="rectangle" data-tooltip="Rectangle">
+          <button class="shape-option" data-shape="rectangle" data-tooltip="Rectangle" data-shortcut="R">
             <span class="material-symbols-outlined">rectangle</span>
           </button>
-          <button class="shape-option" data-shape="circle" data-tooltip="Circle">
+          <button class="shape-option" data-shape="circle" data-tooltip="Circle" data-shortcut="C">
             <span class="material-symbols-outlined">radio_button_unchecked</span>
           </button>
-          <button class="shape-option" data-shape="line" data-tooltip="Line">
+          <button class="shape-option" data-shape="line" data-tooltip="Line" data-shortcut="L">
             <span class="material-symbols-outlined">remove</span>
           </button>
-          <button class="shape-option" data-shape="arrow" data-tooltip="Arrow">
+          <button class="shape-option" data-shape="arrow" data-tooltip="Arrow" data-shortcut="A">
             <span class="material-symbols-outlined">arrow_forward</span>
           </button>
           <div class="shapes-popup-separator"></div>
-          <button id="shape-fill-toggle" class="shape-option" data-tooltip="Enable Fill">
+          <button id="shape-fill-toggle" class="shape-option" data-tooltip="Enable Fill" data-shortcut="F">
             <span class="material-symbols-outlined">format_color_fill</span>
           </button>
         </div>
@@ -59,9 +62,9 @@
         <span class="material-symbols-outlined">ink_eraser</span>
       </button>
     </div>
-    
+
     <div class="toolbar-separator"></div>
-    
+
     <div class="stroke-thickness-wrapper">
       <button id="stroke-thickness-btn" class="toolbar-btn" data-tooltip="Stroke Thickness" data-shortcut="1-4">
         <span class="material-symbols-outlined">line_weight</span>
@@ -81,13 +84,16 @@
         </button>
       </div>
     </div>
-    
+
     <div class="toolbar-separator"></div>
-    
+
     <div class="color-palette">
-      <button class="color-swatch" data-color="#ef4444" style="background-color: #ef4444;" data-tooltip="Red" data-shortcut="Q"></button>
-      <button class="color-swatch" data-color="#3b82f6" style="background-color: #3b82f6;" data-tooltip="Blue" data-shortcut="W"></button>
-      <button class="color-swatch" data-color="#10b981" style="background-color: #10b981;" data-tooltip="Green" data-shortcut="G"></button>
+      <button class="color-swatch" data-color="#ef4444" style="background-color: #ef4444;" data-tooltip="Red"
+        data-shortcut="Q"></button>
+      <button class="color-swatch" data-color="#3b82f6" style="background-color: #3b82f6;" data-tooltip="Blue"
+        data-shortcut="W"></button>
+      <button class="color-swatch" data-color="#10b981" style="background-color: #10b981;" data-tooltip="Green"
+        data-shortcut="G"></button>
       <div class="custom-color-wrapper">
         <button id="custom-color-btn" class="color-swatch custom-color active" data-tooltip="Custom Color">
           <span class="material-symbols-outlined">palette</span>
@@ -97,78 +103,125 @@
             <div class="color-section-label">Warm</div>
             <div class="color-grid">
               <button class="color-option" data-color="#ff0000" style="background-color: #ff0000;" title="Red"></button>
-              <button class="color-option" data-color="#ff4500" style="background-color: #ff4500;" title="Orange Red"></button>
-              <button class="color-option" data-color="#ff8c00" style="background-color: #ff8c00;" title="Dark Orange"></button>
-              <button class="color-option" data-color="#ffa500" style="background-color: #ffa500;" title="Orange"></button>
-              <button class="color-option" data-color="#ffd700" style="background-color: #ffd700;" title="Gold"></button>
-              <button class="color-option" data-color="#ffff00" style="background-color: #ffff00;" title="Yellow"></button>
-              <button class="color-option" data-color="#ff6347" style="background-color: #ff6347;" title="Tomato"></button>
-              <button class="color-option" data-color="#ff7f50" style="background-color: #ff7f50;" title="Coral"></button>
+              <button class="color-option" data-color="#ff4500" style="background-color: #ff4500;"
+                title="Orange Red"></button>
+              <button class="color-option" data-color="#ff8c00" style="background-color: #ff8c00;"
+                title="Dark Orange"></button>
+              <button class="color-option" data-color="#ffa500" style="background-color: #ffa500;"
+                title="Orange"></button>
+              <button class="color-option" data-color="#ffd700" style="background-color: #ffd700;"
+                title="Gold"></button>
+              <button class="color-option" data-color="#ffff00" style="background-color: #ffff00;"
+                title="Yellow"></button>
+              <button class="color-option" data-color="#ff6347" style="background-color: #ff6347;"
+                title="Tomato"></button>
+              <button class="color-option" data-color="#ff7f50" style="background-color: #ff7f50;"
+                title="Coral"></button>
             </div>
           </div>
           <div class="color-section">
             <div class="color-section-label">Cool</div>
             <div class="color-grid">
-              <button class="color-option" data-color="#0000ff" style="background-color: #0000ff;" title="Blue"></button>
-              <button class="color-option" data-color="#4169e1" style="background-color: #4169e1;" title="Royal Blue"></button>
-              <button class="color-option" data-color="#00bfff" style="background-color: #00bfff;" title="Deep Sky Blue"></button>
-              <button class="color-option" data-color="#00ffff" style="background-color: #00ffff;" title="Cyan"></button>
-              <button class="color-option" data-color="#008000" style="background-color: #008000;" title="Green"></button>
-              <button class="color-option" data-color="#00ff00" style="background-color: #00ff00;" title="Lime"></button>
-              <button class="color-option" data-color="#20b2aa" style="background-color: #20b2aa;" title="Light Sea Green"></button>
-              <button class="color-option" data-color="#48d1cc" style="background-color: #48d1cc;" title="Medium Turquoise"></button>
+              <button class="color-option" data-color="#0000ff" style="background-color: #0000ff;"
+                title="Blue"></button>
+              <button class="color-option" data-color="#4169e1" style="background-color: #4169e1;"
+                title="Royal Blue"></button>
+              <button class="color-option" data-color="#00bfff" style="background-color: #00bfff;"
+                title="Deep Sky Blue"></button>
+              <button class="color-option" data-color="#00ffff" style="background-color: #00ffff;"
+                title="Cyan"></button>
+              <button class="color-option" data-color="#008000" style="background-color: #008000;"
+                title="Green"></button>
+              <button class="color-option" data-color="#00ff00" style="background-color: #00ff00;"
+                title="Lime"></button>
+              <button class="color-option" data-color="#20b2aa" style="background-color: #20b2aa;"
+                title="Light Sea Green"></button>
+              <button class="color-option" data-color="#48d1cc" style="background-color: #48d1cc;"
+                title="Medium Turquoise"></button>
             </div>
           </div>
           <div class="color-section">
             <div class="color-section-label">Pastel</div>
             <div class="color-grid">
-              <button class="color-option" data-color="#ffb6c1" style="background-color: #ffb6c1;" title="Light Pink"></button>
-              <button class="color-option" data-color="#ffdab9" style="background-color: #ffdab9;" title="Peach Puff"></button>
-              <button class="color-option" data-color="#fffacd" style="background-color: #fffacd;" title="Lemon Chiffon"></button>
-              <button class="color-option" data-color="#e0ffff" style="background-color: #e0ffff;" title="Light Cyan"></button>
-              <button class="color-option" data-color="#dda0dd" style="background-color: #dda0dd;" title="Plum"></button>
-              <button class="color-option" data-color="#f0e68c" style="background-color: #f0e68c;" title="Khaki"></button>
-              <button class="color-option" data-color="#98fb98" style="background-color: #98fb98;" title="Pale Green"></button>
-              <button class="color-option" data-color="#afeeee" style="background-color: #afeeee;" title="Pale Turquoise"></button>
+              <button class="color-option" data-color="#ffb6c1" style="background-color: #ffb6c1;"
+                title="Light Pink"></button>
+              <button class="color-option" data-color="#ffdab9" style="background-color: #ffdab9;"
+                title="Peach Puff"></button>
+              <button class="color-option" data-color="#fffacd" style="background-color: #fffacd;"
+                title="Lemon Chiffon"></button>
+              <button class="color-option" data-color="#e0ffff" style="background-color: #e0ffff;"
+                title="Light Cyan"></button>
+              <button class="color-option" data-color="#dda0dd" style="background-color: #dda0dd;"
+                title="Plum"></button>
+              <button class="color-option" data-color="#f0e68c" style="background-color: #f0e68c;"
+                title="Khaki"></button>
+              <button class="color-option" data-color="#98fb98" style="background-color: #98fb98;"
+                title="Pale Green"></button>
+              <button class="color-option" data-color="#afeeee" style="background-color: #afeeee;"
+                title="Pale Turquoise"></button>
             </div>
           </div>
           <div class="color-section">
             <div class="color-section-label">Dark</div>
             <div class="color-grid">
-              <button class="color-option" data-color="#8b0000" style="background-color: #8b0000;" title="Dark Red"></button>
-              <button class="color-option" data-color="#ff4500" style="background-color: #ff4500;" title="Dark Orange"></button>
-              <button class="color-option" data-color="#006400" style="background-color: #006400;" title="Dark Green"></button>
-              <button class="color-option" data-color="#00008b" style="background-color: #00008b;" title="Dark Blue"></button>
-              <button class="color-option" data-color="#4b0082" style="background-color: #4b0082;" title="Indigo"></button>
-              <button class="color-option" data-color="#800080" style="background-color: #800080;" title="Purple"></button>
-              <button class="color-option" data-color="#8b008b" style="background-color: #8b008b;" title="Dark Magenta"></button>
-              <button class="color-option" data-color="#2f4f4f" style="background-color: #2f4f4f;" title="Dark Slate Gray"></button>
+              <button class="color-option" data-color="#8b0000" style="background-color: #8b0000;"
+                title="Dark Red"></button>
+              <button class="color-option" data-color="#ff4500" style="background-color: #ff4500;"
+                title="Dark Orange"></button>
+              <button class="color-option" data-color="#006400" style="background-color: #006400;"
+                title="Dark Green"></button>
+              <button class="color-option" data-color="#00008b" style="background-color: #00008b;"
+                title="Dark Blue"></button>
+              <button class="color-option" data-color="#4b0082" style="background-color: #4b0082;"
+                title="Indigo"></button>
+              <button class="color-option" data-color="#800080" style="background-color: #800080;"
+                title="Purple"></button>
+              <button class="color-option" data-color="#8b008b" style="background-color: #8b008b;"
+                title="Dark Magenta"></button>
+              <button class="color-option" data-color="#2f4f4f" style="background-color: #2f4f4f;"
+                title="Dark Slate Gray"></button>
             </div>
           </div>
           <div class="color-section">
             <div class="color-section-label">Neutral</div>
             <div class="color-grid">
-              <button class="color-option" data-color="#000000" style="background-color: #000000;" title="Black"></button>
-              <button class="color-option" data-color="#696969" style="background-color: #696969;" title="Dim Gray"></button>
-              <button class="color-option" data-color="#808080" style="background-color: #808080;" title="Gray"></button>
-              <button class="color-option" data-color="#a9a9a9" style="background-color: #a9a9a9;" title="Dark Gray"></button>
-              <button class="color-option" data-color="#c0c0c0" style="background-color: #c0c0c0;" title="Silver"></button>
-              <button class="color-option" data-color="#d3d3d3" style="background-color: #d3d3d3;" title="Light Gray"></button>
-              <button class="color-option" data-color="#8b4513" style="background-color: #8b4513;" title="Saddle Brown"></button>
-              <button class="color-option" data-color="#a0522d" style="background-color: #a0522d;" title="Sienna"></button>
+              <button class="color-option" data-color="#000000" style="background-color: #000000;"
+                title="Black"></button>
+              <button class="color-option" data-color="#696969" style="background-color: #696969;"
+                title="Dim Gray"></button>
+              <button class="color-option" data-color="#808080" style="background-color: #808080;"
+                title="Gray"></button>
+              <button class="color-option" data-color="#a9a9a9" style="background-color: #a9a9a9;"
+                title="Dark Gray"></button>
+              <button class="color-option" data-color="#c0c0c0" style="background-color: #c0c0c0;"
+                title="Silver"></button>
+              <button class="color-option" data-color="#d3d3d3" style="background-color: #d3d3d3;"
+                title="Light Gray"></button>
+              <button class="color-option" data-color="#8b4513" style="background-color: #8b4513;"
+                title="Saddle Brown"></button>
+              <button class="color-option" data-color="#a0522d" style="background-color: #a0522d;"
+                title="Sienna"></button>
             </div>
           </div>
           <div class="color-section">
             <div class="color-section-label">Vibrant</div>
             <div class="color-grid">
-              <button class="color-option" data-color="#ff1493" style="background-color: #ff1493;" title="Deep Pink"></button>
-              <button class="color-option" data-color="#ff00ff" style="background-color: #ff00ff;" title="Magenta"></button>
-              <button class="color-option" data-color="#9400d3" style="background-color: #9400d3;" title="Violet"></button>
-              <button class="color-option" data-color="#8a2be2" style="background-color: #8a2be2;" title="Blue Violet"></button>
-              <button class="color-option" data-color="#00ff7f" style="background-color: #00ff7f;" title="Spring Green"></button>
-              <button class="color-option" data-color="#00fa9a" style="background-color: #00fa9a;" title="Medium Spring Green"></button>
-              <button class="color-option" data-color="#ff69b4" style="background-color: #ff69b4;" title="Hot Pink"></button>
-              <button class="color-option" data-color="#ff1493" style="background-color: #ff1493;" title="Deep Pink"></button>
+              <button class="color-option" data-color="#ff1493" style="background-color: #ff1493;"
+                title="Deep Pink"></button>
+              <button class="color-option" data-color="#ff00ff" style="background-color: #ff00ff;"
+                title="Magenta"></button>
+              <button class="color-option" data-color="#9400d3" style="background-color: #9400d3;"
+                title="Violet"></button>
+              <button class="color-option" data-color="#8a2be2" style="background-color: #8a2be2;"
+                title="Blue Violet"></button>
+              <button class="color-option" data-color="#00ff7f" style="background-color: #00ff7f;"
+                title="Spring Green"></button>
+              <button class="color-option" data-color="#00fa9a" style="background-color: #00fa9a;"
+                title="Medium Spring Green"></button>
+              <button class="color-option" data-color="#ff69b4" style="background-color: #ff69b4;"
+                title="Hot Pink"></button>
+              <button class="color-option" data-color="#ff1493" style="background-color: #ff1493;"
+                title="Deep Pink"></button>
             </div>
           </div>
           <div class="color-picker-option">
@@ -180,9 +233,9 @@
         </div>
       </div>
     </div>
-    
+
     <div class="toolbar-separator"></div>
-    
+
     <div class="toolbar-group">
       <button id="undo-btn" class="toolbar-btn" data-tooltip="Undo" data-shortcut="Ctrl+Z">
         <span class="material-symbols-outlined">undo</span>
@@ -194,44 +247,44 @@
         <span class="material-symbols-outlined">delete</span>
       </button>
     </div>
-    
+
     <div class="toolbar-separator"></div>
-    
+
     <div class="toolbar-group">
       <div class="more-menu-wrapper">
         <button id="more-menu-btn" class="toolbar-btn" data-tooltip="More Options" style="display: none;">
           <span class="material-symbols-outlined">more_vert</span>
         </button>
         <div id="more-menu-dropdown" class="more-menu-dropdown">
-        <button id="more-undo-btn" class="more-menu-item" data-tooltip="Undo" data-shortcut="Ctrl+Z">
-          <span class="material-symbols-outlined">undo</span>
-          <span>Undo</span>
-        </button>
-        <button id="more-redo-btn" class="more-menu-item" data-tooltip="Redo" data-shortcut="Ctrl+Shift+Z">
-          <span class="material-symbols-outlined">redo</span>
-          <span>Redo</span>
-        </button>
-        <div class="more-menu-separator"></div>
-        <button id="more-hide-btn" class="more-menu-item" data-tooltip="Toggle Visibility" data-shortcut="H">
-          <span class="material-symbols-outlined">visibility_off</span>
-          <span>Toggle Visibility</span>
-        </button>
-        <button id="more-standby-btn" class="more-menu-item" data-tooltip="Standby Mode" data-shortcut="Space">
-          <span class="material-symbols-outlined">pause_circle</span>
-          <span>Standby Mode</span>
-        </button>
-        <button id="more-menu-settings-btn" class="more-menu-item" data-tooltip="Settings" data-shortcut="Ctrl+,">
-          <span class="material-symbols-outlined" style="position: relative;">
-            settings
-          <span id="more-settings-badge" class="settings-badge" style="display: none;">
-            <span class="material-symbols-outlined">warning</span>
+          <button id="more-undo-btn" class="more-menu-item" data-tooltip="Undo" data-shortcut="Ctrl+Z">
+            <span class="material-symbols-outlined">undo</span>
+            <span>Undo</span>
+          </button>
+          <button id="more-redo-btn" class="more-menu-item" data-tooltip="Redo" data-shortcut="Ctrl+Shift+Z">
+            <span class="material-symbols-outlined">redo</span>
+            <span>Redo</span>
+          </button>
+          <div class="more-menu-separator"></div>
+          <button id="more-hide-btn" class="more-menu-item" data-tooltip="Toggle Visibility" data-shortcut="Ctrl+H">
+            <span class="material-symbols-outlined">visibility_off</span>
+            <span>Toggle Visibility</span>
+          </button>
+          <button id="more-standby-btn" class="more-menu-item" data-tooltip="Standby Mode" data-shortcut="Space">
+            <span class="material-symbols-outlined">pause_circle</span>
+            <span>Standby Mode</span>
+          </button>
+          <button id="more-menu-settings-btn" class="more-menu-item" data-tooltip="Settings" data-shortcut="Ctrl+,">
+            <span class="material-symbols-outlined" style="position: relative;">
+              settings
+              <span id="more-settings-badge" class="settings-badge" style="display: none;">
+                <span class="material-symbols-outlined">warning</span>
+              </span>
             </span>
-          </span>
-          <span>Settings</span>
-        </button>
+            <span>Settings</span>
+          </button>
         </div>
       </div>
-      <button id="hide-btn" class="toolbar-btn" data-tooltip="Toggle Visibility" data-shortcut="H">
+      <button id="hide-btn" class="toolbar-btn" data-tooltip="Toggle Visibility" data-shortcut="Ctrl+H">
         <span class="material-symbols-outlined">visibility_off</span>
       </button>
       <button id="standby-btn" class="toolbar-btn" data-tooltip="Standby Mode" data-shortcut="Space">
@@ -254,71 +307,19 @@
 
   <div id="text-input" class="text-input" contenteditable="true" style="display: none;"></div>
 
-  <div id="settings-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Settings</h2>
-        <button id="close-settings" class="close-btn">
+  <input type="color" id="color-picker-input" style="display: none;">
+
+  <div id="command-menu-overlay" class="command-menu-overlay" style="display: none;">
+    <div class="command-menu-container">
+      <div class="command-menu-input-wrapper">
+        <span class="material-symbols-outlined command-menu-icon">search</span>
+        <input type="text" id="command-menu-input" class="command-menu-input" placeholder="Search tools..."
+          autocomplete="off">
+        <button id="close-command-menu" class="close-command-menu-btn" title="Close (Esc)">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
-      <div class="modal-body">
-        <div class="setting-item">
-          <label>Theme</label>
-          <div class="theme-toggle">
-            <button class="theme-btn active" data-theme="system">System</button>
-            <button class="theme-btn" data-theme="light">Light</button>
-            <button class="theme-btn" data-theme="dark">Dark</button>
-          </div>
-        </div>
-        
-        <div class="setting-item">
-          <label>Toolbar Layout</label>
-          <div class="layout-toggle">
-            <button class="layout-btn active" data-layout="vertical" title="Vertical">
-              <span class="material-symbols-outlined">view_column</span>
-            </button>
-            <button class="layout-btn" data-layout="horizontal" title="Horizontal">
-              <span class="material-symbols-outlined">view_agenda</span>
-            </button>
-          </div>
-        </div>
-        
-        <div class="setting-item">
-          <label>Keyboard Shortcut</label>
-          <div class="shortcut-input-wrapper">
-            <input type="text" id="shortcut-input" class="shortcut-input" readonly placeholder="Click to set...">
-            <button id="reset-shortcut" class="reset-btn" title="Reset">
-              <span class="material-symbols-outlined">refresh</span>
-            </button>
-          </div>
-        </div>
-        
-        <div class="setting-item">
-          <div class="setting-row">
-            <div>
-              <label>Sound Effects</label>
-              <span class="setting-description">Play sounds for actions</span>
-            </div>
-            <div class="toggle-switch">
-              <input type="checkbox" id="sounds-enabled" checked>
-              <label for="sounds-enabled" class="toggle-label"></label>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <input type="color" id="color-picker-input" style="display: none;">
-
-  <div id="search-overlay" class="search-overlay" style="display: none;">
-    <div class="search-container">
-      <span class="material-symbols-outlined search-icon">search</span>
-      <input type="text" id="search-input" class="search-input" placeholder="Search...">
-      <button id="close-search" class="close-search-btn" title="Close (Esc)">
-        <span class="material-symbols-outlined">close</span>
-      </button>
+      <div id="command-menu-results" class="command-menu-results" style="display: none;"></div>
     </div>
   </div>
 
@@ -326,4 +327,5 @@
 
   <script src="renderer.js"></script>
 </body>
+
 </html>

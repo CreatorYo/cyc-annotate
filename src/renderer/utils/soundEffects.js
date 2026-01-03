@@ -193,6 +193,21 @@ const SOUNDS = {
     const bright = sin(2400, t) * 0.2 * exp(t, 25)
     const click = exp(t, 80) * 0.5
     return (ping + body + low + bright + click) * env
+  }],
+  visibilityOn: [0.12, 0.85, t => {
+    const env = exp(t, 40)
+    const click = exp(t, 250) * 0.7
+    const metal = sin(2500, t) * 0.15 * exp(t, 80)
+    const resonance = sin(800, t) * 0.3 * exp(t, 35)
+    const lowEnd = sin(140, t) * 0.25 * exp(t, 20)
+    return (click + metal + resonance + lowEnd) * env
+  }],
+  visibilityOff: [0.1, 0.75, t => {
+    const env = exp(t, 50)
+    const click = exp(t, 300) * 0.8
+    const resonance = sin(1200, t) * 0.25 * exp(t, 45)
+    const body = sin(300, t) * 0.2 * exp(t, 25)
+    return (click + resonance + body) * env
   }]
 }
 

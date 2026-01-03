@@ -40,7 +40,7 @@ class ToolbarPositionManager {
   }
 
   handleMouseDown(e) {
-    const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving') === 'true'
+    const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving') !== 'false'
     if (disableToolbarMoving) return
     
     const clickedButton = e.target.closest('button')

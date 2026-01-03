@@ -1,22 +1,18 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Capture Selection</title>
   <style>
     * {
-      cursor: crosshair !important;
-      pointer-events: auto;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
       box-sizing: border-box;
+      cursor: crosshair !important;
     }
 
     body {
+      margin: 0;
       width: 100vw;
       height: 100vh;
       background: transparent;
@@ -25,18 +21,13 @@
     }
 
     body.selecting,
-    body.selecting *,
-    body.selecting *::before,
-    body.selecting *::after {
+    body.selecting * {
       cursor: default !important;
     }
 
     #overlay {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+      inset: 0;
       background: rgba(0, 0, 0, 0.5);
       pointer-events: none;
       z-index: 1;
@@ -52,15 +43,15 @@
       background: transparent;
       pointer-events: none;
       display: none;
-      cursor: crosshair !important;
       z-index: 10;
     }
-
   </style>
 </head>
+
 <body>
   <div id="overlay"></div>
   <div id="selection-rect"></div>
+  <script src="capture-overlay.js"></script>
 </body>
-<script src="capture-overlay.js"></script>
+
 </html>

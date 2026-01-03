@@ -1,4 +1,4 @@
-const { dialog, app, clipboard } = require('electron')
+const { dialog, app, clipboard, nativeImage, Menu } = require('electron')
 
 async function showRelaunchDialog(parentWindow, settingName) {
   const settingLabel = settingName === 'optimized-rendering' ? 'Optimised Rendering' : 'Hardware Acceleration'
@@ -143,47 +143,69 @@ Node.js: ${systemInfo.nodeVersion}`
   if (result.response === 0) clipboard.writeText(detail)
 }
 
-async function showAccentColorPresets(parentWindow, presetColors, x, y) {
-  const { Menu } = require('electron')
+async function showAccentColorPresets(parentWindow, presetColors, x, y, options = {}) {
+  const { isSyncEnabled = false } = options
   
   return new Promise((resolve) => {
-    const menu = Menu.buildFromTemplate([
+    let resolved = false;
+    const handleResolve = (val) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(val);
+    };
+
+    const menuTemplate = [
       { label: 'Accent Preset Colours', enabled: false },
       { type: 'separator' },
-      ...presetColors.map(preset => ({
+      ...presetColors.slice(0, 7).map(preset => ({
         label: preset.name,
+        icon: preset.iconData ? nativeImage.createFromDataURL(preset.iconData) : null,
         type: 'normal',
-        click: () => {
-          resolve(preset.color)
-        }
+        enabled: true,
+        click: () => handleResolve(preset.color)
       })),
+      {
+        label: 'More Preset Colours',
+        enabled: true,
+        submenu: presetColors.slice(7).map(preset => ({
+          label: preset.name,
+          icon: preset.iconData ? nativeImage.createFromDataURL(preset.iconData) : null,
+          type: 'normal',
+          enabled: true,
+          click: () => handleResolve(preset.color)
+        }))
+      },
+      { type: 'separator' },
+      {
+        label: 'Sync with Windows',
+        type: 'checkbox',
+        checked: isSyncEnabled,
+        click: () => handleResolve('TOGGLE_SYNC')
+      },
       { type: 'separator' },
       {
         label: 'Cancel',
         type: 'normal',
-        click: () => {
-          resolve(null)
-        }
+        click: () => handleResolve(null)
       }
-    ])
+    ]
+
+    const menu = Menu.buildFromTemplate(menuTemplate)
     
-    if (parentWindow && !parentWindow.isDestroyed()) {
-      try {
-        menu.popup({
-          window: parentWindow,
-          x: x,
-          y: y
-        })
-      } catch (error) {
-        menu.popup()
+    const popupOptions = {
+      window: parentWindow && !parentWindow.isDestroyed() ? parentWindow : null,
+      x: x,
+      y: y,
+      callback: () => {
+        setTimeout(() => handleResolve(null), 100);
       }
+    };
+
+    if (popupOptions.window) {
+      menu.popup(popupOptions)
     } else {
-      menu.popup()
+      menu.popup({ x, y, callback: popupOptions.callback })
     }
-    
-    setTimeout(() => {
-      resolve(null)
-    }, 5000)
   })
 }
 

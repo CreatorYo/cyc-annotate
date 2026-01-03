@@ -63,7 +63,8 @@ function getWindowsAccentColor() {
   
   try {
     if (systemPreferences.getAccentColor) {
-      return `#${systemPreferences.getAccentColor()}`
+      let color = systemPreferences.getAccentColor()
+      return `#${color.substring(0, 6)}`
     }
   } catch (e) {}
   
@@ -73,9 +74,9 @@ function getWindowsAccentColor() {
     const match = result.match(/0x([0-9a-fA-F]{8})/i)
     if (match) {
       const dword = parseInt(match[1], 16)
-      const b = (dword >> 16) & 0xFF
+      const r = (dword >> 16) & 0xFF
       const g = (dword >> 8) & 0xFF
-      const r = dword & 0xFF
+      const b = dword & 0xFF
       return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
     }
   } catch (e) {}

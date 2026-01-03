@@ -1,13 +1,10 @@
 const { ipcRenderer } = require('electron')
 const { 
-  updateSegmentedControl, 
-  updateAllSegmentedControls,
-  updateAccentColorContrast,
-  updateToggleSwitchColor,
-  normalizeHex,
-  getColorForPicker,
+  updateDropdownMenu, 
   updatePositionToggle
-} = require('./utils/segmentedControl.js')
+} = require('./utils/dropdownMenu.js')
+const { updateToggleSwitchColor } = require('./utils/toggleSwitch.js')
+const { normalizeHex, getColorForPicker, updateAccentColorContrast } = require('./utils/colorUtils.js')
 const SettingsSearch = require('./utils/search')
 
 const DEFAULT_ACCENT_COLOR = '#3bbbf6'
@@ -21,6 +18,11 @@ const PRESET_ACCENT_COLORS = [
   { name: 'Pink', color: '#ff6b9d' },
   { name: 'Green', color: '#36b065' },
   { name: 'Red', color: '#ff6b6b' },
+  { name: 'Purple', color: '#7c4dff' },
+  { name: 'Navy', color: '#2962ff' },
+  { name: 'Teal', color: '#00bfa5' },
+  { name: 'Yellow', color: '#ffd600' },
+  { name: 'Magenta', color: '#ff00ff' }
 ]
 
 let osTheme = 'dark'
@@ -53,7 +55,7 @@ function applyTheme(theme) {
   const effectiveTheme = getEffectiveTheme(theme)
   document.body.setAttribute('data-theme', effectiveTheme)
 
-  updateSegmentedControl('theme-control', theme)
+  updateDropdownMenu('theme-dropdown', theme)
 
   ipcRenderer.send('theme-changed', theme)
   updateToolbarBackgroundColor()
@@ -66,13 +68,25 @@ ipcRenderer.on('os-theme-changed', (event, effectiveTheme) => {
     document.body.setAttribute('data-theme', effectiveTheme)
     const savedAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
     updateAccentColor(savedAccentColor)
-    updateAllSegmentedControls()
   }
 })
 
-document.querySelectorAll('#theme-control .control-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    applyTheme(btn.dataset.value)
+const themeDropdown = document.getElementById('theme-dropdown')
+const themeDropdownTrigger = document.getElementById('theme-dropdown-trigger')
+
+if (themeDropdownTrigger) {
+  themeDropdownTrigger.addEventListener('click', (e) => {
+    e.stopPropagation()
+    closeAllDropdowns(themeDropdown)
+    themeDropdown.classList.toggle('open')
+  })
+}
+
+document.querySelectorAll('#theme-dropdown .dropdown-menu-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const value = item.dataset.value
+    applyTheme(value)
+    themeDropdown.classList.remove('open')
   })
 })
 
@@ -132,44 +146,28 @@ function updateAccentColor(color) {
   document.documentElement.style.setProperty('--accent-color', normalizedColor)
   
   updateAccentColorContrast(normalizedColor)
-  
   localStorage.setItem('accent-color', normalizedColor)
 
-  if (accentColorPicker) {
-    accentColorPicker.value = getColorForPicker(normalizedColor)
-  }
+  if (accentColorPicker) accentColorPicker.value = getColorForPicker(normalizedColor)
+  if (accentColorHex) accentColorHex.value = normalizedColor
+  if (accentColorPreview) accentColorPreview.style.background = normalizedColor
 
   updateToggleSwitchColor()
-  updateResetAccentVisibility()
-  
   updateToolbarBackgroundColor()
-
   ipcRenderer.send('accent-color-changed', normalizedColor)
 }
 
 const accentColorPicker = document.getElementById('accent-color-picker')
 const accentColorPreview = document.getElementById('accent-color-preview')
 const accentColorHex = document.getElementById('accent-color-hex')
-const resetAccentColorBtn = document.getElementById('reset-accent-color')
-const syncWindowsAccentBtn = document.getElementById('sync-windows-accent')
+const syncInfoIcon = document.getElementById('sync-info-icon')
 
 const savedAccentColor = localStorage.getItem('accent-color') || '#40E0D0'
 updateAccentColor(savedAccentColor)
 
-function updateAccentColorPreview(color) {
-  if (accentColorPreview) {
-    accentColorPreview.style.background = color
-  }
-}
-
 if (accentColorPicker) {
   accentColorPicker.value = savedAccentColor
-  accentColorPicker.addEventListener('change', (e) => {
-    const color = e.target.value
-    updateAccentColor(color)
-    updateAccentColorPreview(color)
-    if (accentColorHex) accentColorHex.value = color
-  })
+  accentColorPicker.addEventListener('change', (e) => updateAccentColor(e.target.value))
 }
 
 if (accentColorPreview && accentColorPicker) {
@@ -199,18 +197,58 @@ if (accentColorPreview && accentColorPicker) {
   })
 }
 
+const PRESET_ICONS = PRESET_ACCENT_COLORS.map(preset => {
+  const canvas = document.createElement('canvas');
+  const size = 16;
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = preset.color;
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2 - 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  return { ...preset, iconData: canvas.toDataURL('image/png') };
+});
+
 function showAccentColorPresets(x, y) {
-  ipcRenderer.invoke('show-accent-color-presets', PRESET_ACCENT_COLORS, x, y).then((selectedColor) => {
-    if (selectedColor) {
-      updateAccentColor(selectedColor)
-      updateAccentColorPreview(selectedColor)
-      if (accentColorPicker) accentColorPicker.value = getColorForPicker(selectedColor)
-      if (accentColorHex) accentColorHex.value = selectedColor
+  ipcRenderer.invoke('show-accent-color-presets', PRESET_ICONS, x, y, { isSyncEnabled: syncWindowsEnabled }).then((result) => {
+    if (result === 'TOGGLE_SYNC') {
+      toggleSync()
+    } else if (result) {
+      if (syncWindowsEnabled) toggleSync()
+      updateAccentColor(result)
     }
   })
 }
 
-updateAccentColorPreview(savedAccentColor)
+async function toggleSync() {
+  const isCurrentlyActive = syncWindowsEnabled
+  
+  if (isCurrentlyActive) {
+    syncWindowsEnabled = false
+    updateSyncState(false)
+    localStorage.setItem('sync-windows-accent', 'false')
+    ipcRenderer.send('toggle-windows-accent-sync', false)
+  } else {
+    try {
+      const windowsColor = await ipcRenderer.invoke('get-windows-accent-color')
+      if (windowsColor) {
+        syncWindowsEnabled = true
+        updateSyncState(true)
+        localStorage.setItem('sync-windows-accent', 'true')
+        ipcRenderer.send('toggle-windows-accent-sync', true)
+        updateAccentColor(windowsColor)
+      } else {
+        await ipcRenderer.invoke('show-error-dialog', 'Accent Color Error', 'Unable to get Windows accent colour. This feature is only available on Windows.')
+      }
+    } catch (error) {
+      await ipcRenderer.invoke('show-error-dialog', 'Accent Color Error', 'Error syncing with Windows accent colour', error.message)
+    }
+  }
+}
 
 if (accentColorHex) {
   accentColorHex.value = savedAccentColor
@@ -219,19 +257,13 @@ if (accentColorHex) {
     if (/^#[0-9A-Fa-f]{3}$/.test(hex) || /^#[0-9A-Fa-f]{6}$/.test(hex)) {
       const normalizedHex = normalizeHex(hex)
       updateAccentColor(normalizedHex)
-      updateAccentColorPreview(normalizedHex)
-      if (accentColorPicker) accentColorPicker.value = normalizedHex
-      e.target.value = normalizedHex
     }
   })
   accentColorHex.addEventListener('blur', (e) => {
     const hex = e.target.value.trim()
     if (/^#[0-9A-Fa-f]{3}$/.test(hex) || /^#[0-9A-Fa-f]{6}$/.test(hex)) {
       const normalizedHex = normalizeHex(hex)
-      e.target.value = normalizedHex
       updateAccentColor(normalizedHex)
-      updateAccentColorPreview(normalizedHex)
-      if (accentColorPicker) accentColorPicker.value = normalizedHex
     } else {
       e.target.value = savedAccentColor
     }
@@ -243,9 +275,6 @@ if (accentColorHex) {
       if (/^#[0-9A-Fa-f]{3}$/.test(hex) || /^#[0-9A-Fa-f]{6}$/.test(hex)) {
         const normalizedHex = normalizeHex(hex)
         updateAccentColor(normalizedHex)
-        updateAccentColorPreview(normalizedHex)
-        if (accentColorPicker) accentColorPicker.value = normalizedHex
-        e.target.value = normalizedHex
       } else {
         e.target.value = savedAccentColor
       }
@@ -255,12 +284,10 @@ if (accentColorHex) {
 }
 
 function updateSyncState(enabled) {
-  if (syncWindowsAccentBtn) {
-    if (enabled) {
-      syncWindowsAccentBtn.classList.add('active')
-    } else {
-      syncWindowsAccentBtn.classList.remove('active')
-    }
+  syncWindowsEnabled = enabled
+  
+  if (syncInfoIcon) {
+    syncInfoIcon.style.display = enabled ? 'inline-flex' : 'none'
   }
   
   if (accentColorHex) {
@@ -268,13 +295,13 @@ function updateSyncState(enabled) {
     if (enabled) {
       accentColorHex.style.opacity = '0.5'
       accentColorHex.style.cursor = 'not-allowed'
+      accentColorHex.title = 'Right click to disable sync'
     } else {
       accentColorHex.style.opacity = ''
       accentColorHex.style.cursor = ''
+      accentColorHex.title = ''
     }
   }
-  
-  updateResetAccentVisibility()
   
   if (accentColorPicker) {
     accentColorPicker.disabled = enabled
@@ -287,13 +314,13 @@ function updateSyncState(enabled) {
   
   if (accentColorPreview) {
     if (enabled) {
-      accentColorPreview.style.pointerEvents = 'none'
-      accentColorPreview.style.cursor = 'not-allowed'
-      accentColorPreview.style.opacity = '0.5'
+      accentColorPreview.style.cursor = 'help'
+      accentColorPreview.style.opacity = '0.7'
+      accentColorPreview.title = 'Right click to disable sync'
     } else {
-      accentColorPreview.style.removeProperty('pointer-events')
       accentColorPreview.style.removeProperty('cursor')
       accentColorPreview.style.removeProperty('opacity')
+      accentColorPreview.title = 'Click to open colour picker'
     }
   }
 }
@@ -307,77 +334,13 @@ ipcRenderer.invoke('get-sync-windows-accent-state').then(enabled => {
   }
 })
 
-if (syncWindowsAccentBtn) {
+ipcRenderer.on('windows-accent-color-changed', (event, windowsColor) => {
   if (syncWindowsEnabled) {
-    updateSyncState(true)
-  } else {
-    updateSyncState(false)
+    updateAccentColor(windowsColor)
   }
-  
-  syncWindowsAccentBtn.addEventListener('click', async () => {
-    const isCurrentlyActive = syncWindowsAccentBtn.classList.contains('active')
-    
-    if (isCurrentlyActive) {
-      updateSyncState(false)
-      localStorage.setItem('sync-windows-accent', 'false')
-      ipcRenderer.send('toggle-windows-accent-sync', false)
-      updateResetAccentVisibility()
-    } else {
-      try {
-        const windowsColor = await ipcRenderer.invoke('get-windows-accent-color')
-        if (windowsColor) {
-          updateSyncState(true)
-          localStorage.setItem('sync-windows-accent', 'true')
-          ipcRenderer.send('toggle-windows-accent-sync', true)
-          
-          updateAccentColor(windowsColor)
-          updateAccentColorPreview(windowsColor)
-          if (accentColorPicker) accentColorPicker.value = windowsColor
-          if (accentColorHex) accentColorHex.value = windowsColor
-          updateResetAccentVisibility()
-        } else {
-          await ipcRenderer.invoke('show-error-dialog', 'Accent Color Error', 'Unable to get Windows accent colour. This feature is only available on Windows.')
-        }
-      } catch (error) {
-        await ipcRenderer.invoke('show-error-dialog', 'Accent Color Error', 'Error syncing with Windows accent colour', error.message)
-      }
-    }
-  })
-  
-  ipcRenderer.on('windows-accent-color-changed', (event, windowsColor) => {
-    const isSyncActive = syncWindowsAccentBtn.classList.contains('active') || localStorage.getItem('sync-windows-accent') === 'true'
-    if (isSyncActive) {
-      updateAccentColor(windowsColor)
-      updateAccentColorPreview(windowsColor)
-      if (accentColorPicker) accentColorPicker.value = windowsColor
-      if (accentColorHex) accentColorHex.value = windowsColor
-    }
-  })
-}
+})
 
-function updateResetAccentVisibility() {
-  if (resetAccentColorBtn) {
-    const isSyncEnabled = syncWindowsAccentBtn && syncWindowsAccentBtn.classList.contains('active')
-    if (isSyncEnabled) {
-      resetAccentColorBtn.style.display = 'none'
-      return
-    }
-    
-    const currentColor = normalizeHex(localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR)
-    const defaultColor = normalizeHex(DEFAULT_ACCENT_COLOR)
-    const isDefault = currentColor.toLowerCase() === defaultColor.toLowerCase()
-    resetAccentColorBtn.style.display = isDefault ? 'none' : 'flex'
-  }
-}
 
-if (resetAccentColorBtn) {
-  resetAccentColorBtn.addEventListener('click', () => {
-    updateAccentColor(DEFAULT_ACCENT_COLOR)
-    updateAccentColorPreview(DEFAULT_ACCENT_COLOR)
-    if (accentColorPicker) accentColorPicker.value = DEFAULT_ACCENT_COLOR
-    if (accentColorHex) accentColorHex.value = DEFAULT_ACCENT_COLOR
-  })
-}
 
 let currentLayout = localStorage.getItem('toolbar-layout') || 'vertical'
 let currentVerticalPosition = localStorage.getItem('toolbar-position-vertical') || 'left'
@@ -387,9 +350,8 @@ function applyLayout(layout) {
   currentLayout = layout
   localStorage.setItem('toolbar-layout', layout)
   
-  updateSegmentedControl('layout-control', layout)
+  updateDropdownMenu('layout-dropdown', layout)
 
-  updateAllSegmentedControls()
   updatePositionSettingsVisibility()
   ipcRenderer.send('layout-changed', layout)
 }
@@ -403,29 +365,62 @@ function applyPosition(type, position) {
     localStorage.setItem('toolbar-position-horizontal', position)
   }
   
-  updateSegmentedControl('position-toggle', position)
+  updateDropdownMenu('position-dropdown', position)
 
-  updateAllSegmentedControls()
   ipcRenderer.send(`${type}-position-changed`, position)
 }
 
 window.applyPosition = applyPosition
 
-function handleCyclingClick(btn, applyFunction) {
-  const currentValue = btn.dataset.value
-  const isActive = btn.classList.contains('active')
-  
-  if (isActive) {
-    const allButtons = Array.from(btn.parentElement.querySelectorAll('.control-btn'))
-    const nextIndex = (allButtons.indexOf(btn) + 1) % allButtons.length
-    applyFunction(allButtons[nextIndex].dataset.value)
-  } else {
-    applyFunction(currentValue)
-  }
+const layoutDropdown = document.getElementById('layout-dropdown')
+const layoutDropdownTrigger = document.getElementById('layout-dropdown-trigger')
+
+if (layoutDropdownTrigger) {
+  layoutDropdownTrigger.addEventListener('click', (e) => {
+    e.stopPropagation()
+    closeAllDropdowns(layoutDropdown)
+    layoutDropdown.classList.toggle('open')
+  })
 }
 
-document.querySelectorAll('#layout-control .control-btn').forEach(btn => {
-  btn.addEventListener('click', () => handleCyclingClick(btn, applyLayout))
+document.querySelectorAll('#layout-dropdown .dropdown-menu-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const value = item.dataset.value
+    applyLayout(value)
+    layoutDropdown.classList.remove('open')
+  })
+})
+
+const positionDropdown = document.getElementById('position-dropdown')
+const positionDropdownTrigger = document.getElementById('position-dropdown-trigger')
+
+if (positionDropdownTrigger) {
+  positionDropdownTrigger.addEventListener('click', (e) => {
+    e.stopPropagation()
+    closeAllDropdowns(positionDropdown)
+    positionDropdown.classList.toggle('open')
+  })
+}
+
+function closeAllDropdowns(except = null) {
+  const dropdowns = document.querySelectorAll('.dropdown-menu')
+  dropdowns.forEach(d => {
+    if (d !== except) {
+      d.classList.remove('open')
+    }
+  })
+}
+
+document.addEventListener('click', (e) => {
+  if (themeDropdown && !themeDropdown.contains(e.target)) themeDropdown.classList.remove('open')
+  if (layoutDropdown && !layoutDropdown.contains(e.target)) layoutDropdown.classList.remove('open')
+  if (positionDropdown && !positionDropdown.contains(e.target)) positionDropdown.classList.remove('open')
+})
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeAllDropdowns()
+  }
 })
 
 if (document.readyState === 'loading') {
@@ -559,6 +554,21 @@ if (textSolveCheckbox) {
   })
 }
 
+const snapToObjectsCheckbox = document.getElementById('snap-to-objects-enabled')
+if (snapToObjectsCheckbox) {
+  const snapToObjects = localStorage.getItem('snap-to-objects-enabled')
+  if (snapToObjects !== null) {
+    snapToObjectsCheckbox.checked = snapToObjects === 'true'
+  } else {
+    snapToObjectsCheckbox.checked = false
+  }
+  
+  snapToObjectsCheckbox.addEventListener('change', (e) => {
+    localStorage.setItem('snap-to-objects-enabled', e.target.checked)
+    ipcRenderer.send('snap-to-objects-changed', e.target.checked)
+  })
+}
+
 const showTrayIconCheckbox = document.getElementById('show-tray-icon')
 if (showTrayIconCheckbox) {
   const showTrayIcon = localStorage.getItem('show-tray-icon')
@@ -592,9 +602,7 @@ if (toolbarAccentBgCheckbox) {
 const disableToolbarMovingCheckbox = document.getElementById('disable-toolbar-moving')
 if (disableToolbarMovingCheckbox) {
   const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving')
-  if (disableToolbarMoving !== null) {
-    disableToolbarMovingCheckbox.checked = disableToolbarMoving === 'true'
-  }
+  disableToolbarMovingCheckbox.checked = disableToolbarMoving !== 'false'
   
   disableToolbarMovingCheckbox.addEventListener('change', (e) => {
     localStorage.setItem('disable-toolbar-moving', e.target.checked ? 'true' : 'false')
@@ -944,13 +952,12 @@ if (resetEverythingBtn) {
       applyPosition('vertical', defaultVerticalPosition)
       applyPosition('horizontal', defaultHorizontalPosition)
 
-      if (accentColorPicker) accentColorPicker.value = defaultAccentColor
-      if (accentColorHex) accentColorHex.value = defaultAccentColor
-      updateAccentColorPreview(defaultAccentColor)
+
 
       currentShortcut = defaultShortcut
       if (shortcutInput) shortcutInput.value = formatShortcut(parseShortcut(defaultShortcut))
       localStorage.setItem('shortcut', defaultShortcut)
+      updateResetShortcutVisibility()
       ipcRenderer.send('update-shortcut', defaultShortcut)
 
       if (soundsCheckbox) {
@@ -962,6 +969,12 @@ if (resetEverythingBtn) {
       if (textSolveCheckbox) {
         textSolveCheckbox.checked = false
         localStorage.setItem('text-solve-enabled', false)
+      }
+
+      if (snapToObjectsCheckbox) {
+        snapToObjectsCheckbox.checked = false
+        localStorage.setItem('snap-to-objects-enabled', false)
+        ipcRenderer.send('snap-to-objects-changed', false)
       }
 
       if (showTrayIconCheckbox) {
@@ -1031,9 +1044,9 @@ if (resetEverythingBtn) {
     }
     
     if (disableToolbarMovingCheckbox) {
-      disableToolbarMovingCheckbox.checked = false
-      localStorage.setItem('disable-toolbar-moving', 'false')
-      ipcRenderer.send('disable-toolbar-moving-changed', false)
+      disableToolbarMovingCheckbox.checked = true
+      localStorage.setItem('disable-toolbar-moving', 'true')
+      ipcRenderer.send('disable-toolbar-moving-changed', true)
     }
     
     if (standbyInToolbarCheckbox) {
@@ -1042,11 +1055,9 @@ if (resetEverythingBtn) {
       ipcRenderer.send('standby-in-toolbar-changed', false)
     }
 
-    if (syncWindowsAccentBtn) {
-      syncWindowsAccentBtn.classList.remove('active')
-      localStorage.setItem('sync-windows-accent', 'false')
-      ipcRenderer.send('toggle-windows-accent-sync', false)
-    }
+    updateSyncState(false)
+    localStorage.setItem('sync-windows-accent', 'false')
+    ipcRenderer.send('toggle-windows-accent-sync', false)
 
     if (optimizedRenderingCheckbox) {
       optimizedRenderingCheckbox.checked = false
@@ -1167,10 +1178,17 @@ function showCategory(category) {
   window.currentCategory = category
   localStorage.setItem('settings-category', category)
   
+  const pill = document.querySelector('.nav-pill')
+  
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.remove('active')
     if (item.dataset.category === category) {
       item.classList.add('active')
+      if (pill) {
+        pill.style.top = `${item.offsetTop}px`
+        pill.style.height = `${item.offsetHeight}px`
+        pill.style.opacity = '1'
+      }
     }
   })
   
@@ -1326,14 +1344,12 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initReportIssueButton()
     initViewDetailsButton()
-    updateResetAccentVisibility()
     updateResetShortcutVisibility()
     initInfoTooltips()
   })
 } else {
   initReportIssueButton()
   initViewDetailsButton()
-  updateResetAccentVisibility()
   updateResetShortcutVisibility()
   initInfoTooltips()
 }

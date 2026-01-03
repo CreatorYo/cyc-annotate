@@ -1,9 +1,12 @@
 const { ipcRenderer } = require('electron')
 const { initSelectTool } = require('./tools/selectTool.js')
+const { initTextTool } = require('./tools/textTool.js')
+const { initCommandMenu } = require('./tools/commandMenu.js')
 const { initThemeManager, updateToolbarBackgroundColor } = require('./utils/themeManager.js')
 const { initTooltips, hideAllTooltips } = require('./utils/tooltipManager.js')
 const { initAudioContext, playSound } = require('./utils/soundEffects.js')
 const { initStandbyManager } = require('./utils/standbyManager.js')
+const { initShortcutManager } = require('./utils/shortcutManager.js')
 const ToolbarPositionManager = require('./utils/toolbarPositionManager')
 
 const canvas = document.getElementById('canvas')
@@ -79,7 +82,8 @@ let state = {
   resizeStartBounds: null,
   hoveredElementId: null,
   copiedElements: null,
-  editingElementId: null
+  editingElementId: null,
+  snapToObjectsEnabled: localStorage.getItem('snap-to-objects-enabled') === 'true'
 }
 
 canvas.style.pointerEvents = 'auto'
@@ -271,29 +275,52 @@ function drawElement(element) {
       const lineHeight = fontSize * 1.2
       const maxTextWidth = canvas.width - element.x - 50
       
-      let currentY = element.y
+      const textYOffset = fontSize * 0.12
+      let cursorX = element.x
+      let cursorY = element.y + textYOffset
       
       element.segments.forEach((segment) => {
         const fontStyle = segment.formatting?.italic ? 'italic' : 'normal'
         const fontWeight = segment.formatting?.bold ? 'bold' : 'normal'
         ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
         
-        const wrappedLines = wrapText(ctx, segment.text || '', maxTextWidth)
+        const lines = segment.text.split('\n')
         
-        wrappedLines.forEach((line) => {
-          ctx.fillText(line, element.x, currentY)
-          
-          if (segment.formatting?.underline) {
-            const textWidth = ctx.measureText(line).width
-            ctx.strokeStyle = element.color || '#000000'
-            ctx.lineWidth = Math.max(1, fontSize / 15)
-            ctx.beginPath()
-            ctx.moveTo(element.x, currentY + fontSize + 2)
-            ctx.lineTo(element.x + textWidth, currentY + fontSize + 2)
-            ctx.stroke()
+        lines.forEach((line, lineIndex) => {
+          if (lineIndex > 0) {
+            cursorX = element.x
+            cursorY += lineHeight
           }
           
-          currentY += lineHeight
+          const tokens = line.split(/(\s+)/)
+          
+          tokens.forEach(token => {
+            if (token.length === 0) return
+            
+            const tokenWidth = ctx.measureText(token).width
+            
+            if (cursorX + tokenWidth > element.x + maxTextWidth && cursorX > element.x) {
+              cursorX = element.x
+              cursorY += lineHeight
+              
+              if (token.trim() === '') {
+                return
+              }
+            }
+            
+            ctx.fillText(token, cursorX, cursorY)
+            
+            if (segment.formatting?.underline) {
+              ctx.strokeStyle = element.color || '#000000'
+              ctx.lineWidth = Math.max(1, fontSize / 15)
+              ctx.beginPath()
+              ctx.moveTo(cursorX, cursorY + fontSize * 0.9)
+              ctx.lineTo(cursorX + tokenWidth, cursorY + fontSize * 0.9)
+              ctx.stroke()
+            }
+            
+            cursorX += tokenWidth
+          })
         })
       })
     }
@@ -348,7 +375,6 @@ function getElementBounds(element) {
     const maxTextWidth = canvas.width - element.x - 50
     
     let maxWidth = 0
-    let totalLines = 0
     
     if (element.id === state.editingElementId) {
       const textInput = document.getElementById('text-input')
@@ -367,28 +393,54 @@ function getElementBounds(element) {
     if (element.segments) {
       ctx.save()
       
+      let cursorX = 0
+      let currentLineY = 0
+      
       element.segments.forEach(seg => {
         const fontStyle = seg.formatting?.italic ? 'italic' : 'normal'
         const fontWeight = seg.formatting?.bold ? 'bold' : 'normal'
         ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
         
-        const wrappedLines = wrapText(ctx, seg.text || '', maxTextWidth)
-        totalLines += wrappedLines.length
+        const lines = seg.text.split('\n')
         
-        wrappedLines.forEach(line => {
-          const width = ctx.measureText(line).width
-          maxWidth = Math.max(maxWidth, width)
+        lines.forEach((line, lineIndex) => {
+          if (lineIndex > 0) {
+            maxWidth = Math.max(maxWidth, cursorX)
+            cursorX = 0
+            currentLineY += lineHeight
+          }
+          
+          const tokens = line.split(/(\s+)/)
+          
+          tokens.forEach(token => {
+            if (token.length === 0) return
+            
+            const tokenWidth = ctx.measureText(token).width
+            
+            if (cursorX + tokenWidth > maxTextWidth && cursorX > 0) {
+              maxWidth = Math.max(maxWidth, cursorX)
+              cursorX = 0
+              currentLineY += lineHeight
+              
+              if (token.trim() === '') return
+            }
+            
+            cursorX += tokenWidth
+            maxWidth = Math.max(maxWidth, cursorX)
+          })
         })
       })
       
+      let totalHeight = currentLineY + lineHeight
+      
       ctx.restore()
-    }
-    
-    return {
-      x: element.x,
-      y: element.y,
-      width: maxWidth || 100,
-      height: (totalLines || 1) * lineHeight
+      
+      return {
+        x: element.x - 5,
+        y: element.y - 5,
+        width: maxWidth + 10,
+        height: totalHeight + 5
+      }
     }
   }
   return null
@@ -498,6 +550,13 @@ const selectTool = initSelectTool(state, ctx, canvas, {
   updateSelectionOnly: () => updateSelectionOnly(),
   saveState: () => saveState(),
   playSound: (type) => playSound(type)
+})
+
+const textTool = initTextTool(state, canvas, {
+  createElement,
+  redrawCanvas: () => redrawCanvas(),
+  saveState: () => saveState(),
+  updateSelectionOnly: () => updateSelectionOnly()
 })
 
 
@@ -631,7 +690,7 @@ function startDrawing(e) {
   
   const textInput = document.getElementById('text-input')
   if (textInput && textInput.style.display === 'block') {
-    finishTextInput()
+    textTool.finishTextInput()
   }
   
   if (state.tool === 'select') {
@@ -643,7 +702,7 @@ function startDrawing(e) {
   
   if (state.tool === 'text') {
     const coords = getCanvasCoordinates(e)
-    startTextInput(coords.x, coords.y)
+    textTool.startTextInput(coords.x, coords.y)
     return
   }
   
@@ -895,374 +954,6 @@ function clearPreview() {
   }
 }
 
-function startTextInput(x, y) {
-  const textInput = document.getElementById('text-input')
-  const canvasRect = canvas.getBoundingClientRect()
-
-  textInput.style.display = 'block'
-  textInput.style.position = 'fixed'
-  textInput.style.left = (canvasRect.left + x) + 'px'
-  textInput.style.top = (canvasRect.top + y) + 'px'
-  textInput.style.zIndex = '2000'
-  
-  const fontSize = Math.max(32, state.strokeSize * 10)
-  textInput.style.fontSize = fontSize + 'px'
-  textInput.style.color = state.color
-  textInput.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-  textInput.style.lineHeight = '1.2'
-  
-  textInput.textContent = ''
-  textInput.innerHTML = ''
-
-  state.textFormatting = {
-    bold: false,
-    italic: false,
-    underline: false
-  }
-
-  setTimeout(() => {
-    textInput.focus()
-  }, 10)
-  
-  state.textInput = { x, y }
-}
-
-function wrapText(ctx, text, maxWidth) {
-  if (!text || !text.trim()) {
-    return ['']
-  }
-
-  const words = text.split(' ')
-  const lines = []
-  
-  if (words.length === 0) {
-    return ['']
-  }
-
-  let currentLine = words[0]
-
-  for (let i = 1; i < words.length; i++) {
-    const word = words[i]
-    const testLine = currentLine + ' ' + word
-    const width = ctx.measureText(testLine).width
-    
-    if (width < maxWidth) {
-      currentLine = testLine
-    } else {
-      if (currentLine) {
-        lines.push(currentLine)
-      }
-      currentLine = word
-      
-      if (ctx.measureText(word).width > maxWidth) {
-        lines.push(word)
-        currentLine = ''
-      }
-    }
-  }
-  
-  if (currentLine) {
-    lines.push(currentLine)
-  }
-  
-  return lines
-}
-
-function evaluateMathExpression(expression) {
-  try {
-    let cleaned = expression.trim()
-    
-    if (cleaned.endsWith('=')) {
-      cleaned = cleaned.slice(0, -1).trim()
-    }
-    
-    cleaned = cleaned.replace(/[xX×]/g, '*')
-    
-    cleaned = cleaned.replace(/\s/g, '')
-    
-    if (!/[+\-*/]/.test(cleaned)) return null
-    if (!/[0-9]/.test(cleaned)) return null
-    
-    const allowedChars = /^[0-9+\-*/().]+$/
-    if (!allowedChars.test(cleaned)) return null
-
-    const result = Function('"use strict"; return (' + cleaned + ')')()
-
-    if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
-      return result
-    }
-    return null
-  } catch (e) {
-    return null
-  }
-}
-
-function parseFormattedText(element) {
-  const segments = []
-  
-  function traverse(node, formatting = { bold: false, italic: false, underline: false }) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent
-      if (text) {
-        segments.push({ text, formatting: { ...formatting } })
-      }
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const tagName = node.tagName.toLowerCase()
-      const newFormatting = { ...formatting }
-      
-      if (tagName === 'b' || tagName === 'strong') {
-        newFormatting.bold = true
-      } else if (tagName === 'i' || tagName === 'em') {
-        newFormatting.italic = true
-      } else if (tagName === 'u') {
-        newFormatting.underline = true
-      }
-      
-      for (let child of node.childNodes) {
-        traverse(child, newFormatting)
-      }
-    }
-  }
-  
-  for (let child of element.childNodes) {
-    traverse(child)
-  }
-  
-  if (segments.length === 0) {
-    segments.push({ text: element.textContent || '', formatting: { bold: false, italic: false, underline: false } })
-  }
-  
-  const merged = []
-  for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i]
-    
-    if (merged.length > 0) {
-      const last = merged[merged.length - 1]
-      const formatMatch = last.formatting.bold === segment.formatting.bold &&
-                         last.formatting.italic === segment.formatting.italic &&
-                         last.formatting.underline === segment.formatting.underline
-      
-      if (formatMatch) {
-        last.text += segment.text
-      } else {
-        merged.push({ text: segment.text, formatting: { ...segment.formatting } })
-      }
-    } else {
-      merged.push({ text: segment.text, formatting: { ...segment.formatting } })
-    }
-  }
-  
-  return merged
-}
-
-function finishTextInput() {
-  const textInput = document.getElementById('text-input')
-  const textContent = textInput.textContent.trim()
-  
-  if (state.editingElementId) {
-    const element = state.elements.find(e => e.id === state.editingElementId)
-    if (element && element.type === 'text') {
-      if (textContent) {
-        updateTextFormatting()
-        const textSolveEnabled = localStorage.getItem('text-solve-enabled') === 'true'
-        let segments = parseFormattedText(textInput)
-          
-        if (textSolveEnabled && segments.length > 0) {
-          const fullText = segments.map(s => s.text).join('')
-          const result = evaluateMathExpression(fullText)
-          if (result !== null) {
-            const trimmedText = fullText.trim()
-            if (trimmedText.endsWith('=')) {
-              const lastSegment = segments[segments.length - 1]
-              lastSegment.text = lastSegment.text.replace(/\s*=$/, ` = ${result}`)
-            } else {
-              const lastSegment = segments[segments.length - 1]
-              lastSegment.text += ` = ${result}`
-            }
-          }
-        }
-        
-        element.segments = segments
-        state.editingElementId = null
-        redrawCanvas()
-        saveState()
-      } else {
-        state.elements = state.elements.filter(e => e.id !== state.editingElementId)
-        state.selectedElements = state.selectedElements.filter(id => id !== state.editingElementId)
-        state.editingElementId = null
-        redrawCanvas()
-        saveState()
-      }
-      state.editingElementId = null
-      textInput.style.display = 'none'
-      state.textInput = null
-      if (state.textFormatting) {
-        state.textFormatting = { bold: false, italic: false, underline: false }
-      }
-      return
-    }
-  }
-  
-  if (textContent && state.textInput) {
-    updateTextFormatting()
-    
-    const textSolveEnabled = localStorage.getItem('text-solve-enabled') === 'true'
-    let segments = parseFormattedText(textInput)
-      
-    if (textSolveEnabled && segments.length > 0) {
-      const fullText = segments.map(s => s.text).join('')
-      const result = evaluateMathExpression(fullText)
-      if (result !== null) {
-        const trimmedText = fullText.trim()
-        if (trimmedText.endsWith('=')) {
-          const lastSegment = segments[segments.length - 1]
-          lastSegment.text = lastSegment.text.replace(/\s*=$/, ` = ${result}`)
-        } else {
-          const lastSegment = segments[segments.length - 1]
-          lastSegment.text += ` = ${result}`
-        }
-      }
-    }
-    
-    const fontSize = Math.max(32, state.strokeSize * 10)
-    
-    const textElement = createElement('text', {
-      x: state.textInput.x,
-      y: state.textInput.y,
-      color: state.color,
-      strokeSize: state.strokeSize,
-      fontSize: fontSize,
-      segments: segments
-    })
-    
-    ctx.save()
-    ctx.fillStyle = state.color
-    ctx.textBaseline = 'top'
-    ctx.globalAlpha = 1.0
-
-    const maxWidth = Math.max(400, canvas.width * 0.8)
-    const lineHeight = fontSize * 1.2
-    let currentX = state.textInput.x
-    let currentY = state.textInput.y
-    
-    const lines = []
-    let currentLine = []
-
-    segments.forEach(segment => {
-      const fontStyle = segment.formatting.italic ? 'italic' : 'normal'
-      const fontWeight = segment.formatting.bold ? 'bold' : 'normal'
-      ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
-      
-      const words = segment.text.trim().split(/\s+/).filter(w => w.length > 0)
-      
-      words.forEach(word => {
-        const testText = currentLine.length > 0 
-          ? (currentLine.map(p => p.text).join(' ') + ' ' + word)
-          : word
-        const testWidth = ctx.measureText(testText).width
-        
-        if (testWidth > maxWidth && currentLine.length > 0) {
-          lines.push([...currentLine])
-          currentLine = [{ text: word, formatting: segment.formatting }]
-        } else {
-          currentLine.push({ text: word, formatting: segment.formatting })
-        }
-      })
-    })
-    
-    if (currentLine.length > 0) {
-      lines.push(currentLine)
-    }
-
-    lines.forEach((line, lineIndex) => {
-      let x = currentX
-      const y = state.textInput.y + (lineIndex * lineHeight)
-      
-      line.forEach((part, partIndex) => {
-        const fontStyle = part.formatting.italic ? 'italic' : 'normal'
-        const fontWeight = part.formatting.bold ? 'bold' : 'normal'
-        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
-        
-        const space = partIndex > 0 ? ' ' : ''
-        const text = space + part.text
-        ctx.fillText(text, x, y)
-        
-        if (part.formatting.underline) {
-          const textWidth = ctx.measureText(text).width
-          ctx.strokeStyle = state.color
-          ctx.lineWidth = Math.max(1, fontSize / 15)
-          ctx.beginPath()
-          ctx.moveTo(x, y + fontSize + 2)
-          ctx.lineTo(x + textWidth, y + fontSize + 2)
-          ctx.stroke()
-        }
-        
-        x += ctx.measureText(text).width
-      })
-    })
-    
-    ctx.restore()
-    redrawCanvas()
-    saveState()
-    state.hasDrawn = true
-  }
-  
-  textInput.style.display = 'none'
-  state.textInput = null
-  state.editingElementId = null
-  if (state.textFormatting) {
-    state.textFormatting = { bold: false, italic: false, underline: false }
-  }
-}
-
-function editTextElement(element) {
-  const textInput = document.getElementById('text-input')
-  if (!textInput) return
-  
-  const textContent = element.segments ? element.segments.map(s => s.text).join(' ') : ''
-  
-  const canvasRect = canvas.getBoundingClientRect()
-  textInput.style.display = 'block'
-  textInput.style.position = 'fixed'
-  textInput.style.left = (canvasRect.left + element.x) + 'px'
-  textInput.style.top = (canvasRect.top + element.y) + 'px'
-  textInput.style.zIndex = '2000'
-  
-  const fontSize = element.fontSize || Math.max(32, (element.strokeSize || state.strokeSize) * 10)
-  textInput.style.fontSize = fontSize + 'px'
-  textInput.style.color = element.color || state.color
-  textInput.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-  textInput.style.lineHeight = '1.2'
-  
-  textInput.textContent = textContent
-  textInput.innerHTML = textContent
-  
-  state.editingElementId = element.id
-  state.textInput = { x: element.x, y: element.y }
-  
-  if (element.segments && element.segments.length > 0) {
-    const firstSegment = element.segments[0]
-    state.textFormatting = {
-      bold: firstSegment.formatting?.bold || false,
-      italic: firstSegment.formatting?.italic || false,
-      underline: firstSegment.formatting?.underline || false
-    }
-  } else {
-    state.textFormatting = { bold: false, italic: false, underline: false }
-  }
-  
-  setTimeout(() => {
-    textInput.focus()
-    const range = document.createRange()
-    range.selectNodeContents(textInput)
-    const selection = window.getSelection()
-    selection.removeAllRanges()
-    selection.addRange(range)
-  }, 10)
-  
-  redrawCanvas()
-}
-
 function copySelectedElements() {
   if (state.selectedElements.length === 0) return
   
@@ -1333,7 +1024,7 @@ function handleDoubleClick(e) {
       selectTool.selectElement(clickedElement.id)
     }
     
-    editTextElement(clickedElement)
+    textTool.editTextElement(clickedElement)
   }
 }
 
@@ -1360,7 +1051,7 @@ textInput.addEventListener('blur', () => {
   
   if (!textInputFinished) {
     setTimeout(() => {
-      finishTextInput()
+      textTool.finishTextInput()
       textInputFinished = false
     }, 100)
   }
@@ -1372,28 +1063,29 @@ textInput.addEventListener('keydown', (e) => {
       e.preventDefault()
       e.stopPropagation()
       document.execCommand('bold', false, null)
-      updateTextFormatting()
+      textTool.updateTextFormatting()
       return
     } else if (e.key.toLowerCase() === 'i') {
       e.preventDefault()
       e.stopPropagation()
       document.execCommand('italic', false, null)
-      updateTextFormatting()
+      textTool.updateTextFormatting()
       return
     } else if (e.key.toLowerCase() === 'u') {
       e.preventDefault()
       e.stopPropagation()
       document.execCommand('underline', false, null)
-      updateTextFormatting()
+      textTool.updateTextFormatting()
       return
     }
   }
   
   if (e.key === 'Enter') {
+    if (e.shiftKey) return
     e.preventDefault()
     e.stopPropagation()
     textInputFinished = true
-    finishTextInput()
+    textTool.finishTextInput()
   } else if (e.key === 'Escape') {
     e.preventDefault()
     e.stopPropagation()
@@ -1409,23 +1101,13 @@ textInput.addEventListener('input', () => {
   }
 })
 
-function updateTextFormatting() {
-  if (!state.textFormatting) {
-    state.textFormatting = { bold: false, italic: false, underline: false }
-  }
-  
-  state.textFormatting.bold = document.queryCommandState('bold')
-  state.textFormatting.italic = document.queryCommandState('italic')
-  state.textFormatting.underline = document.queryCommandState('underline')
-}
-
 function setTool(tool) {
   state.tool = tool
 
   if (tool !== 'text' && tool !== 'select') {
     const textInput = document.getElementById('text-input')
     if (textInput && textInput.style.display === 'block') {
-      finishTextInput()
+      textTool.finishTextInput()
     }
   }
   
@@ -1577,217 +1259,7 @@ document.getElementById('text-btn').addEventListener('click', () => {
 })
 document.getElementById('eraser-btn').addEventListener('click', () => setTool('eraser'))
 
-document.addEventListener('keydown', (e) => {
-  
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
-    return
-  }
 
-  if (standbyManager.isActive()) {
-    const key = e.key.toLowerCase()
-    const isAllowed = 
-      key === ' ' || 
-      key === 'escape' || 
-      key === 'h' ||
-      (e.shiftKey && key === 'c')
-    
-    if (!isAllowed) {
-      return
-    }
-  }
-
-  if (e.ctrlKey || e.metaKey) {
-    switch (e.key.toLowerCase()) {
-      case 'f':
-        e.preventDefault()
-        toggleSearch()
-        break
-      case 'c':
-        if (state.selectedElements.length > 0) {
-          e.preventDefault()
-          copySelectedElements()
-        }
-        break
-      case 'v':
-        if (state.copiedElements && state.copiedElements.length > 0) {
-          e.preventDefault()
-          pasteElements()
-        }
-        break
-      case 'z':
-        if (e.shiftKey) {
-          e.preventDefault()
-          redo()
-        } else {
-          e.preventDefault()
-          undo()
-        }
-        break
-      case 'y':
-        e.preventDefault()
-        redo()
-        break
-      case 'a':
-        if (state.tool === 'select') {
-          e.preventDefault()
-          selectTool.selectAllElements()
-        }
-        break
-      case ',':
-      case ';':
-        e.preventDefault()
-        document.getElementById('menu-btn').click()
-        break
-    }
-    return
-  }
-
-  switch (e.key.toLowerCase()) {
-    case 'p':
-      e.preventDefault()
-      setTool('pencil')
-      break
-    case 'b':
-      e.preventDefault()
-      setTool('marker')
-      break
-    case 't':
-      e.preventDefault()
-      setTool('text')
-      break
-    case 'v':
-      if (!e.ctrlKey && !e.metaKey) {
-        const textInput = document.getElementById('text-input')
-        if (!textInput || textInput.style.display === 'none') {
-          e.preventDefault()
-          setTool('select')
-        }
-      }
-      break
-    case 's':
-      e.preventDefault()
-      
-      const shapesBtn = document.getElementById('shapes-btn')
-      if (shapesBtn) {
-        hideAllTooltips()
-        const shapesPopup = document.getElementById('shapes-popup')
-        if (shapesPopup) {
-          const wasOpen = shapesPopup.classList.contains('show')
-          closeAllPopups()
-          if (!wasOpen) {
-            shapesPopup.classList.add('show')
-          }
-        }
-        if (!shapesPopup.classList.contains('show')) {
-          setTool('shapes')
-        }
-      }
-      break
-    case 'e':
-      e.preventDefault()
-      setTool('eraser')
-      break
-    case 'u':
-      e.preventDefault()
-      undo()
-      break
-    case 'r':
-      e.preventDefault()
-      redo()
-      break
-    case 'delete':
-    case 'backspace':
-      if (e.shiftKey) {
-        e.preventDefault()
-        clearCanvas()
-      } else if (state.tool === 'select' && state.selectedElements.length > 0) {
-        e.preventDefault()
-        selectTool.deleteSelectedElements()
-      }
-      break
-    case 'h':
-      e.preventDefault()
-      document.getElementById('hide-btn').click()
-      break
-    case 'c':
-      if (e.shiftKey) {
-        e.preventDefault()
-        document.getElementById('capture-btn').click()
-      } else if (state.selectedElements.length > 0) {
-        e.preventDefault()
-        copySelectedElements()
-      }
-      break
-    case 'escape':
-      e.preventDefault()
-      const searchOverlay = document.getElementById('search-overlay')
-      if (searchOverlay && searchOverlay.style.display !== 'none') {
-        closeSearch()
-        return
-      }
-      const popups = [
-        document.getElementById('stroke-popup'),
-        document.getElementById('drawing-tools-popup'),
-        document.getElementById('shapes-popup'),
-        document.getElementById('custom-color-popup'),
-        document.getElementById('more-menu-dropdown')
-      ]
-      
-      let hasOpenPopup = false
-      popups.forEach(popup => {
-        if (popup && popup.classList.contains('show')) {
-          hasOpenPopup = true
-          popup.classList.remove('show')
-        }
-      })
-      
-      if (!hasOpenPopup) {
-        ipcRenderer.send('close-notification')
-        setTimeout(() => {
-          document.getElementById('close-btn').click()
-        }, 50)
-      }
-      break
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-      
-      e.preventDefault()
-      const sizes = { '1': 2, '2': 4, '3': 8, '4': 16 }
-      const size = sizes[e.key]
-      if (size) {
-        state.strokeSize = size
-        if (state.tool === 'select' && state.selectedElements.length > 0) {
-          selectTool.updateSelectedStrokeSize(size)
-        }
-        document.querySelectorAll('.stroke-option').forEach(btn => {
-          btn.classList.remove('active')
-          if (parseInt(btn.dataset.size) === size) {
-            btn.classList.add('active')
-          }
-        })
-        localStorage.setItem('stroke-size', size.toString())
-      }
-      break
-    case 'q':
-    case 'w':
-    case 'g':
-      
-      e.preventDefault()
-      const colorMap = { 'q': '#ef4444', 'w': '#3b82f6', 'g': '#10b981' }
-      const color = colorMap[e.key]
-      if (color) {
-        setColor(color)
-        playSound('color')
-      }
-      break
-    case ' ':
-      e.preventDefault()
-      standbyManager.toggle()
-      break
-  }
-})
 
 const shapesBtn = document.getElementById('shapes-btn')
 const shapesPopup = document.getElementById('shapes-popup')
@@ -1823,6 +1295,16 @@ function setActiveShape(shapeType) {
       btn.classList.add('active')
     }
   })
+}
+
+function setShape(shape) {
+  state.shapeType = shape
+  setTool('shapes')
+  setActiveShape(shape)
+  const shapesPopup = document.getElementById('shapes-popup')
+  if (shapesPopup) {
+    shapesPopup.classList.remove('show')
+  }
 }
 
 function updateSelectedShapeFill(fillState) {
@@ -2305,7 +1787,7 @@ if (mainToolbar) {
 }
 
 function updateToolbarMovingState() {
-  const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving') === 'true'
+  const disableToolbarMoving = localStorage.getItem('disable-toolbar-moving') !== 'false'
   if (disableToolbarMoving) {
     mainToolbar.classList.add('toolbar-moving-disabled')
   } else {
@@ -2563,7 +2045,6 @@ ipcRenderer.on('sync-toolbar-settings', (event, settings) => {
   updateReduceClutter()
 })
 
-
 ipcRenderer.on('hardware-acceleration-changed', (event, enabled) => {
   localStorage.setItem('hardware-acceleration', enabled ? 'true' : 'false')
   if (enabled) {
@@ -2596,7 +2077,6 @@ ipcRenderer.on('hardware-acceleration-changed', (event, enabled) => {
     }
   }
 })
-
 
 ipcRenderer.on('accent-color-changed', (event, color) => {
   updateAccentColor(color)
@@ -2664,6 +2144,7 @@ function updateAccentColor(color) {
   const isLight = isLightColor(color)
   const textColor = isLight ? '#000000' : '#ffffff'
   document.documentElement.style.setProperty('--picker-btn-text-color', textColor)
+  document.documentElement.style.setProperty('--accent-text', textColor)
 
   const pickerBtn = document.getElementById('open-color-picker-btn')
   if (pickerBtn) {
@@ -2687,8 +2168,40 @@ const standbyManager = initStandbyManager({
   canvas,
   setTool,
   closeAllPopups,
-  finishTextInput,
+  finishTextInput: () => textTool.finishTextInput(),
   playSound
+})
+
+window.commandMenu = initCommandMenu({
+  setTool,
+  setShape,
+  undo,
+  redo,
+  clearCanvas,
+  standbyManager,
+  triggerCapture,
+  playSound
+})
+
+const commandMenu = window.commandMenu
+
+initShortcutManager({
+  state,
+  standbyManager,
+  selectTool,
+  setTool,
+  undo,
+  redo,
+  clearCanvas,
+  copySelectedElements,
+  pasteElements,
+  toggleCommandMenu: () => commandMenu.toggleCommandMenu(),
+  closeCommandMenu: () => commandMenu.closeCommandMenu(),
+  setColor,
+  setShape,
+  playSound,
+  hideAllTooltips,
+  closeAllPopups
 })
 
 let canvasVisible = true
@@ -2699,10 +2212,20 @@ if (hideBtn) {
     canvas.style.opacity = canvasVisible ? '1' : '0'
     canvas.style.pointerEvents = canvasVisible ? 'auto' : 'none'
     
+    if (selectionCanvas) {
+      selectionCanvas.style.opacity = canvasVisible ? '1' : '0'
+    }
+    if (previewCanvas) {
+      previewCanvas.style.opacity = canvasVisible ? '1' : '0'
+    }
+
     const icon = document.querySelector('#hide-btn .material-symbols-outlined')
     const moreIcon = document.querySelector('#more-hide-btn .material-symbols-outlined')
     if (icon) icon.textContent = canvasVisible ? 'visibility_off' : 'visibility'
     if (moreIcon) moreIcon.textContent = canvasVisible ? 'visibility_off' : 'visibility'
+    
+    const soundType = canvasVisible ? 'visibilityOff' : 'visibilityOn'
+    setTimeout(() => playSound(soundType), 10)
   })
 }
 
@@ -2756,6 +2279,19 @@ async function triggerCapture() {
 document.getElementById('capture-btn').addEventListener('click', triggerCapture)
 
 ipcRenderer.on('trigger-capture', triggerCapture)
+
+ipcRenderer.on('capture-cancelled', () => {
+  const toolbar = document.getElementById('main-toolbar')
+  if (toolbar && toolbarWasVisible) {
+    toolbar.style.display = ''
+  }
+  if (standbyWasActive) {
+    standbyManager.resume()
+  }
+  state.enabled = true
+  canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
+  standbyWasActive = false
+})
 
 ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
   const toolbar = document.getElementById('main-toolbar')
@@ -2875,111 +2411,6 @@ if (closeBtn) {
   })
 }
 
-function formatShortcut(keys) {
-  return keys.map(k => {
-    if (k === 'Control') return 'Ctrl'
-    if (k === 'Meta') return 'Cmd'
-    return k.charAt(0).toUpperCase() + k.slice(1).toLowerCase()
-  }).join('+')
-}
-
-function parseShortcut(str) {
-  return str.split('+').map(k => k.trim())
-}
-
-const shortcutInput = document.getElementById('shortcut-input')
-const resetShortcutBtn = document.getElementById('reset-shortcut')
-let isRecordingShortcut = false
-let currentShortcut = localStorage.getItem('shortcut') || 'Control+Shift+D'
-
-const initialKeys = parseShortcut(currentShortcut)
-shortcutInput.value = formatShortcut(initialKeys)
-
-shortcutInput.addEventListener('click', () => {
-  if (isRecordingShortcut) return
-  
-  isRecordingShortcut = true
-  shortcutInput.classList.add('recording')
-  shortcutInput.value = 'Press keys...'
-  shortcutInput.placeholder = 'Press keys...'
-})
-
-document.addEventListener('keydown', (e) => {
-  if (!isRecordingShortcut) return
-  
-  e.preventDefault()
-  e.stopPropagation()
-  
-  const keys = []
-  if (e.ctrlKey) keys.push('Control')
-  if (e.metaKey) keys.push('Meta')
-  if (e.altKey) keys.push('Alt')
-  if (e.shiftKey) keys.push('Shift')
-  
-  if (!['Control', 'Meta', 'Alt', 'Shift'].includes(e.key)) {
-    keys.push(e.key)
-    
-    const shortcutStr = keys.join('+')
-    currentShortcut = shortcutStr
-    shortcutInput.value = formatShortcut(keys)
-    shortcutInput.classList.remove('recording')
-    isRecordingShortcut = false
-    localStorage.setItem('shortcut', shortcutStr)
-    
-    ipcRenderer.send('update-shortcut', shortcutStr)
-  }
-})
-
-resetShortcutBtn.addEventListener('click', () => {
-  currentShortcut = 'Control+Shift+D'
-  shortcutInput.value = 'Ctrl+Shift+D'
-  localStorage.setItem('shortcut', 'Control+Shift+D')
-  ipcRenderer.send('update-shortcut', 'Control+Shift+D')
-})
-
-function toggleSearch() {
-  const searchOverlay = document.getElementById('search-overlay')
-  const searchInput = document.getElementById('search-input')
-  
-  if (!searchOverlay || !searchInput) return
-  
-  if (searchOverlay.style.display === 'none' || !searchOverlay.style.display) {
-    searchOverlay.style.display = 'flex'
-    setTimeout(() => {
-      searchInput.focus()
-    }, 100)
-  } else {
-    closeSearch()
-  }
-}
-
-function closeSearch() {
-  const searchOverlay = document.getElementById('search-overlay')
-  const searchInput = document.getElementById('search-input')
-  
-  if (searchOverlay) {
-    searchOverlay.style.display = 'none'
-  }
-  if (searchInput) {
-    searchInput.value = ''
-  }
-}
-
-const searchInput = document.getElementById('search-input')
-const closeSearchBtn = document.getElementById('close-search')
-
-if (searchInput) {
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeSearch()
-    }
-  })
-}
-
-if (closeSearchBtn) {
-  closeSearchBtn.addEventListener('click', closeSearch)
-}
-
 ipcRenderer.on('clear', clearCanvas)
 ipcRenderer.on('draw-mode', (_, enabled) => {
   if (enabled) {
@@ -2999,5 +2430,11 @@ ipcRenderer.on('restore-annotations', (_, data) => {
     saveState()
     redrawCanvas()
     updateUndoRedoButtons()
+  }
+})
+
+window.addEventListener('storage', (e) => {
+  if (e.key === 'snap-to-objects-enabled') {
+    state.snapToObjectsEnabled = e.newValue === 'true'
   }
 })

@@ -11,10 +11,98 @@ function initSelectTool(state, ctx, canvas, helpers) {
   ]
   const CURSOR_MAP = { 'nw': 'nw-resize', 'n': 'n-resize', 'ne': 'ne-resize', 'e': 'e-resize',
                        'se': 'se-resize', 's': 's-resize', 'sw': 'sw-resize', 'w': 'w-resize' }
+  
+  let activeGuides = []
+  let fadingGuides = []
+  let fadeStartTime = 0
+  const FADE_DURATION = 2000
+  const SNAP_THRESHOLD = 5
 
   const updateSelection = () => updateSelectionOnly ? updateSelectionOnly() : redrawCanvas()
 
   const getElement = (id) => state.elements.find(e => e.id === id)
+
+  function drawAlignmentGuides(overlayCtx) {
+    if (activeGuides.length === 0 && fadingGuides.length === 0) return
+
+    overlayCtx.save()
+    overlayCtx.lineWidth = 1
+    overlayCtx.setLineDash([4, 4])
+    
+    if (fadingGuides.length > 0) {
+      const elapsed = Date.now() - fadeStartTime
+      const remaining = Math.max(0, 1 - elapsed / FADE_DURATION)
+      
+      if (remaining > 0) {
+        overlayCtx.strokeStyle = '#d946ef'
+        overlayCtx.globalAlpha = 0.6 * remaining
+        overlayCtx.beginPath()
+        fadingGuides.forEach(guide => {
+          if (guide.type === 'x') {
+            overlayCtx.moveTo(guide.pos, 0)
+            overlayCtx.lineTo(guide.pos, overlayCtx.canvas.height)
+          } else {
+            overlayCtx.moveTo(0, guide.pos)
+            overlayCtx.lineTo(overlayCtx.canvas.width, guide.pos)
+          }
+        })
+        overlayCtx.stroke()
+      } else {
+        fadingGuides = []
+      }
+    }
+
+    if (activeGuides.length > 0) {
+      overlayCtx.strokeStyle = '#d946ef'
+      overlayCtx.globalAlpha = 0.6
+      overlayCtx.beginPath()
+      activeGuides.forEach(guide => {
+        if (guide.type === 'x') {
+          overlayCtx.moveTo(guide.pos, 0)
+          overlayCtx.lineTo(guide.pos, overlayCtx.canvas.height)
+        } else {
+          overlayCtx.moveTo(0, guide.pos)
+          overlayCtx.lineTo(overlayCtx.canvas.width, guide.pos)
+        }
+      })
+      overlayCtx.stroke()
+    }
+
+    overlayCtx.restore()
+  }
+
+
+  function handleSelectStop() {
+    if (state.isResizing) {
+    }
+    if (state.isDraggingSelection) {
+      state.isDraggingSelection = false
+      state.dragOffset = null
+      state.dragStartBounds = null
+      
+      if (activeGuides.length > 0) {
+        fadingGuides = [...activeGuides]
+        fadeStartTime = Date.now()
+        activeGuides = []
+        
+        const animate = () => {
+          if (fadingGuides.length > 0) {
+              redrawCanvas()
+              if (Date.now() - fadeStartTime < FADE_DURATION) {
+                  requestAnimationFrame(animate)
+              } else {
+                  fadingGuides = []
+                  redrawCanvas()
+              }
+          }
+        }
+        requestAnimationFrame(animate)
+      }
+      
+      getSelectedElements().forEach(element => cleanupTempState(element))
+      saveState()
+    }
+  }
 
   const getSelectedElements = () => state.selectedElements.map(id => getElement(id)).filter(Boolean)
 
@@ -302,7 +390,32 @@ function initSelectTool(state, ctx, canvas, helpers) {
     overlayCtx.restore()
   }
 
+  function drawAlignmentGuides(overlayCtx) {
+    if (activeGuides.length === 0) return
+
+    overlayCtx.save()
+    overlayCtx.strokeStyle = '#d946ef'
+    overlayCtx.lineWidth = 1
+    overlayCtx.setLineDash([4, 4])
+    overlayCtx.globalAlpha = 0.6
+    overlayCtx.beginPath()
+
+    activeGuides.forEach(guide => {
+      if (guide.type === 'x') {
+        overlayCtx.moveTo(guide.pos, 0)
+        overlayCtx.lineTo(guide.pos, overlayCtx.canvas.height)
+      } else {
+        overlayCtx.moveTo(0, guide.pos)
+        overlayCtx.lineTo(overlayCtx.canvas.width, guide.pos)
+      }
+    })
+
+    overlayCtx.stroke()
+    overlayCtx.restore()
+  }
+
   function drawSelectionIndicators(overlayCtx = ctx) {
+    drawAlignmentGuides(overlayCtx)
     if (state.selectedElements.length === 0) return
     
     overlayCtx.save()
@@ -448,6 +561,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
       return true
     }
     
+    state.dragStartBounds = getCombinedBounds()
+    
     const clickedElement = findElementAt(coords.x, coords.y)
     if (clickedElement) {
       const isSelected = state.selectedElements.includes(clickedElement.id)
@@ -489,12 +604,95 @@ function initSelectTool(state, ctx, canvas, helpers) {
     }
     
     if (state.isDraggingSelection) {
-      if (state.selectedElements.length > 0 && state.dragOffset) {
-        const totalDeltaX = coords.x - state.dragOffset.x
-        const totalDeltaY = coords.y - state.dragOffset.y
-        if (Math.abs(totalDeltaX) > 0.5 || Math.abs(totalDeltaY) > 0.5) {
-          moveSelectedElements(totalDeltaX, totalDeltaY)
+      if (state.selectedElements.length > 0 && state.dragOffset && state.dragStartBounds) {
+        let totalDeltaX = coords.x - state.dragOffset.x
+        let totalDeltaY = coords.y - state.dragOffset.y
+        
+        activeGuides = []
+        if (state.snapToObjectsEnabled) {
+            const dragBounds = state.dragStartBounds
+            
+            let proposedX = dragBounds.x + totalDeltaX
+            let proposedY = dragBounds.y + totalDeltaY
+            
+            let minDiffX = SNAP_THRESHOLD
+            let minDiffY = SNAP_THRESHOLD
+            let snapX = null
+            let snapY = null
+            
+            const myPointsX = [proposedX, proposedX + dragBounds.width / 2, proposedX + dragBounds.width]
+            const myPointsY = [proposedY, proposedY + dragBounds.height / 2, proposedY + dragBounds.height]
+            
+            state.elements.forEach(el => {
+                if (state.selectedElements.includes(el.id)) return
+                const b = getElementBounds(el)
+                if (!b) return
+                
+                const targetX = [b.x, b.x + b.width / 2, b.x + b.width]
+                const targetY = [b.y, b.y + b.height / 2, b.y + b.height]
+                
+                myPointsX.forEach((mx, i) => {
+                    targetX.forEach(tx => {
+                        const diff = Math.abs(mx - tx)
+                        if (diff < minDiffX) {
+                            minDiffX = diff
+                            const origPoint = (i===0 ? dragBounds.x : (i===1 ? dragBounds.x + dragBounds.width/2 : dragBounds.x + dragBounds.width))
+                            snapX = tx - origPoint
+                        }
+                    })
+                })
+                
+                myPointsY.forEach((my, i) => {
+                    targetY.forEach(ty => {
+                        const diff = Math.abs(my - ty)
+                        if (diff < minDiffY) {
+                            minDiffY = diff
+                            const origPoint = (i===0 ? dragBounds.y : (i===1 ? dragBounds.y + dragBounds.height/2 : dragBounds.y + dragBounds.height))
+                            snapY = ty - origPoint
+                        }
+                    })
+                })
+            })
+            
+            if (snapX !== null) {
+                totalDeltaX = snapX
+                const newX = dragBounds.x + snapX
+                const pX = [newX, newX + dragBounds.width/2, newX + dragBounds.width]
+                
+                 state.elements.forEach(el => {
+                    if (state.selectedElements.includes(el.id)) return
+                    const b = getElementBounds(el)
+                    if(!b) return
+                    const tX = [b.x, b.x + b.width / 2, b.x + b.width]
+                    pX.forEach(px => {
+                        tX.forEach(tx => {
+                            if(Math.abs(px - tx) < 1) activeGuides.push({type:'x', pos: tx})
+                        })
+                    })
+                })
+            }
+            
+            if (snapY !== null) {
+                totalDeltaY = snapY
+                const newY = dragBounds.y + snapY
+                const pY = [newY, newY + dragBounds.height/2, newY + dragBounds.height]
+                 state.elements.forEach(el => {
+                    if (state.selectedElements.includes(el.id)) return
+                    const b = getElementBounds(el)
+                    if(!b) return
+                    const tY = [b.y, b.y + b.height / 2, b.y + b.height]
+                    pY.forEach(py => {
+                        tY.forEach(ty => {
+                            if(Math.abs(py - ty) < 1) activeGuides.push({type:'y', pos: ty})
+                        })
+                    })
+                })
+            }
         }
+        
+        activeGuides = activeGuides.filter((v,i,a)=>a.findIndex(t=>(t.type===v.type && t.pos===v.pos))===i)
+
+        moveSelectedElements(totalDeltaX, totalDeltaY)
       }
       return true
     }
@@ -520,6 +718,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
     if (state.isDraggingSelection) {
       state.isDraggingSelection = false
       state.dragOffset = null
+      state.dragStartBounds = null
+      activeGuides = []
       getSelectedElements().forEach(element => cleanupTempState(element))
       saveState()
     }

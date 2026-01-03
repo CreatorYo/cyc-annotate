@@ -1,0 +1,248 @@
+function initCommandMenu(helpers) {
+  const { 
+    setTool, 
+    setShape, 
+    undo, 
+    redo, 
+    clearCanvas, 
+    standbyManager, 
+    triggerCapture, 
+    playSound 
+  } = helpers
+
+  let selectedItemIndex = 0;
+  let filteredItems = [];
+  let lastMouseX = 0;
+  let lastMouseY = 0;
+
+  document.addEventListener('mousemove', (e) => {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }, { passive: true });
+
+  const commandMenuItems = [
+    { name: 'Select', icon: 'arrow_selector_tool', shortcut: 'V', action: () => setTool('select') },
+    { name: 'Pencil', icon: 'edit', shortcut: 'P', action: () => setTool('pencil') },
+    { name: 'Marker', icon: 'brush', shortcut: 'B', action: () => setTool('marker') },
+    { name: 'Text', icon: 'text_fields', shortcut: 'T', action: () => setTool('text') },
+    { name: 'Eraser', icon: 'ink_eraser', shortcut: 'E', action: () => setTool('eraser') },
+    { name: 'Rectangle', icon: 'rectangle', shortcut: 'R', action: () => { setShape('rectangle'); setTool('shapes'); } },
+    { name: 'Circle', icon: 'radio_button_unchecked', shortcut: 'C', action: () => { setShape('circle'); setTool('shapes'); } },
+    { name: 'Line', icon: 'remove', shortcut: 'L', action: () => { setShape('line'); setTool('shapes'); } },
+    { name: 'Arrow', icon: 'arrow_forward', shortcut: 'A', action: () => { setShape('arrow'); setTool('shapes'); } },
+    { name: 'Fill Toggle', icon: 'format_color_fill', shortcut: 'F', action: () => {
+      const fillToggle = document.getElementById('shape-fill-toggle');
+      if (fillToggle) fillToggle.click();
+    }},
+    { name: 'Undo', icon: 'undo', shortcut: 'Ctrl+Z', action: () => undo() },
+    { name: 'Redo', icon: 'redo', shortcut: 'Ctrl+Y', action: () => redo() },
+    { name: 'Clear All', icon: 'delete', shortcut: 'Shift+Del', action: () => clearCanvas() },
+    { name: 'Toggle Visibility', icon: 'visibility_off', shortcut: 'Ctrl+H', action: () => {
+      const hideBtn = document.getElementById('hide-btn');
+      if (hideBtn) hideBtn.click();
+    }},
+    { name: 'Standby Mode', icon: 'pause_circle', shortcut: 'Space', action: () => standbyManager.toggle() },
+    { name: 'Capture', icon: 'camera_alt', shortcut: 'Shift+C', action: () => triggerCapture() },
+    { name: 'Settings', icon: 'settings', shortcut: 'Ctrl+,', action: () => {
+      const menuBtn = document.getElementById('menu-btn');
+      if (menuBtn) menuBtn.click();
+    }},
+    { name: 'Close App', icon: 'close', shortcut: 'Esc', action: () => {
+      const closeBtn = document.getElementById('close-btn');
+      if (closeBtn) closeBtn.click();
+    }}
+  ];
+
+  const commandMenuInput = document.getElementById('command-menu-input');
+  const closeCommandMenuBtn = document.getElementById('close-command-menu');
+  const commandMenuOverlay = document.getElementById('command-menu-overlay');
+  const resultsContainer = document.getElementById('command-menu-results');
+
+  function updateSelection() {
+    const items = resultsContainer.querySelectorAll('.command-menu-item');
+    items.forEach((item, index) => {
+      item.classList.toggle('active', index === selectedItemIndex);
+    });
+
+    const activeItem = resultsContainer.querySelector('.command-menu-item.active');
+    if (activeItem) {
+      activeItem.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    }
+    checkScrollMask();
+  }
+
+  function updateCommandMenu() {
+    if (!commandMenuInput || !resultsContainer) return;
+
+    const rawQuery = commandMenuInput.value;
+    const query = rawQuery.toLowerCase().trim();
+    
+    const newFilteredItems = commandMenuItems.filter(item => 
+      item.name.toLowerCase().includes(query) || 
+      item.shortcut.toLowerCase().includes(query)
+    );
+
+    if (JSON.stringify(newFilteredItems.map(i => i.name)) === JSON.stringify(filteredItems.map(i => i.name))) {
+      updateSelection();
+      return;
+    }
+
+    filteredItems = newFilteredItems;
+
+    if (filteredItems.length > 0) {
+      resultsContainer.style.display = 'block';
+      resultsContainer.innerHTML = filteredItems.map((item, index) => `
+        <div class="command-menu-item ${index === selectedItemIndex ? 'active' : ''}" data-index="${index}">
+          <span class="material-symbols-outlined command-menu-item-icon">${item.icon}</span>
+          <span class="command-menu-item-name">${item.name}</span>
+          <span class="command-menu-item-shortcut">${item.shortcut}</span>
+        </div>
+      `).join('');
+
+      resultsContainer.querySelectorAll('.command-menu-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const index = parseInt(el.dataset.index);
+          applyCommandMenuItem(index);
+        });
+
+        el.addEventListener('mouseenter', (e) => {
+          if (e.clientX === lastMouseX && e.clientY === lastMouseY) return;
+          lastMouseX = e.clientX;
+          lastMouseY = e.clientY;
+          selectedItemIndex = parseInt(el.dataset.index);
+          updateSelection();
+        });
+
+        el.addEventListener('mousemove', (e) => {
+          if (e.clientX === lastMouseX && e.clientY === lastMouseY) return;
+          lastMouseX = e.clientX;
+          lastMouseY = e.clientY;
+          selectedItemIndex = parseInt(el.dataset.index);
+          updateSelection();
+        });
+      });
+      
+      updateSelection();
+    } else if (query !== '') {
+      resultsContainer.style.display = 'block';
+      resultsContainer.innerHTML = `
+        <div class="command-menu-no-results">
+          <span class="material-symbols-outlined">search_off</span>
+          <div class="command-menu-no-results-text">
+            <span>No results found for </span>
+            <span class="command-menu-no-results-quote">"</span><span class="command-menu-query-highlight">${rawQuery.trim()}</span><span class="command-menu-no-results-quote">"</span>
+          </div>
+        </div>
+      `;
+    } else {
+      resultsContainer.style.display = 'none';
+      resultsContainer.innerHTML = '';
+    }
+  }
+
+  function applyCommandMenuItem(index) {
+    const item = filteredItems[index];
+    if (item && item.action) {
+      item.action();
+      closeCommandMenu();
+      playSound('pop');
+    }
+  }
+
+  function toggleCommandMenu() {
+    if (!commandMenuOverlay || !commandMenuInput) return;
+    
+    const isVisible = commandMenuOverlay.style.display === 'flex';
+    
+    if (!isVisible) {
+      commandMenuOverlay.classList.add('show');
+      commandMenuOverlay.style.display = 'flex';
+      commandMenuInput.value = '';
+      selectedItemIndex = 0;
+      updateCommandMenu();
+      checkScrollMask();
+      setTimeout(() => {
+        commandMenuInput.focus();
+      }, 100);
+    } else {
+      closeCommandMenu();
+    }
+  }
+
+  function closeCommandMenu() {
+    if (commandMenuOverlay) {
+      commandMenuOverlay.classList.remove('show');
+      commandMenuOverlay.style.display = 'none';
+    }
+    if (commandMenuInput) {
+      commandMenuInput.value = '';
+    }
+    if (resultsContainer) {
+      resultsContainer.style.display = 'none';
+      resultsContainer.innerHTML = '';
+    }
+    filteredItems = [];
+  }
+
+  function checkScrollMask() {
+    if (!resultsContainer) return;
+    const isAtBottom = resultsContainer.scrollHeight - resultsContainer.scrollTop <= resultsContainer.clientHeight + 10;
+    let shouldHaveMask = resultsContainer.scrollHeight > resultsContainer.clientHeight && !isAtBottom;
+
+    const activeItem = resultsContainer.querySelector('.command-menu-item.active');
+    if (activeItem && shouldHaveMask) {
+      const containerRect = resultsContainer.getBoundingClientRect();
+      const itemRect = activeItem.getBoundingClientRect();
+      if (itemRect.bottom > containerRect.bottom - 45) {
+        shouldHaveMask = false;
+      }
+    }
+
+    resultsContainer.classList.toggle('has-mask', shouldHaveMask);
+  }
+
+  if (commandMenuInput) {
+    commandMenuInput.addEventListener('input', () => {
+      selectedItemIndex = 0;
+      updateCommandMenu();
+      setTimeout(checkScrollMask, 0);
+    });
+
+    commandMenuInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeCommandMenu();
+      } else if (e.key === 'ArrowDown' && filteredItems.length > 0) {
+        e.preventDefault();
+        selectedItemIndex = (selectedItemIndex + 1) % filteredItems.length;
+        updateCommandMenu();
+        checkScrollMask();
+      } else if (e.key === 'ArrowUp' && filteredItems.length > 0) {
+        e.preventDefault();
+        selectedItemIndex = (selectedItemIndex - 1 + filteredItems.length) % filteredItems.length;
+        updateCommandMenu();
+        checkScrollMask();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filteredItems.length > 0) {
+          applyCommandMenuItem(selectedItemIndex);
+        }
+      }
+    });
+  }
+
+  if (resultsContainer) {
+    resultsContainer.addEventListener('scroll', checkScrollMask);
+  }
+
+  if (closeCommandMenuBtn) {
+    closeCommandMenuBtn.addEventListener('click', closeCommandMenu);
+  }
+
+  return {
+    toggleCommandMenu,
+    closeCommandMenu,
+    updateCommandMenu
+  };
+}
+
+module.exports = { initCommandMenu };
