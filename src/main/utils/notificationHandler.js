@@ -1,3 +1,4 @@
+const { DEFAULT_ACCENT_COLOR } = require('../../shared/constants.js')
 const { BrowserWindow, screen, nativeTheme } = require('electron')
 const path = require('path')
 
@@ -54,7 +55,7 @@ function show(title, body, filePath) {
   thisWin.webContents.once('did-finish-load', () => {
     if (!thisWin || thisWin.isDestroyed()) return
     
-    const accentColor = deps.getSetting?.('accent-color', '#3bbbf6') || '#3bbbf6'
+    const accentColor = deps.getSetting?.('accent-color', DEFAULT_ACCENT_COLOR) || DEFAULT_ACCENT_COLOR
     const currentTheme = deps.getSetting?.('theme', 'system') || 'system'
     
     if (currentTheme === 'system') {

@@ -1,5 +1,7 @@
 const { ipcRenderer } = require('electron')
 
+const { DEFAULT_ACCENT_COLOR } = require('../../shared/constants.js')
+
 let osTheme = 'dark'
 
 function getOSTheme() {
@@ -45,7 +47,7 @@ function updateToolbarBackgroundColor() {
   
   if (localStorage.getItem('toolbar-accent-bg') === 'true') {
     const tintedBg = darkenTintColor(
-      localStorage.getItem('accent-color') || '#3bbbf6',
+      localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR,
       getEffectiveTheme(localStorage.getItem('theme') || 'system')
     )
     const el = Object.assign(document.createElement('style'), {

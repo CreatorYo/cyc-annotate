@@ -1,7 +1,8 @@
 const { isLightColor } = require('./colorUtils.js')
+const { DEFAULT_ACCENT_COLOR } = require('../../shared/constants.js')
 
 function updateToggleSwitchColor() {
-  const currentAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
+  const currentAccentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
   const accentIsLight = isLightColor(currentAccentColor)
   
   const style = document.createElement('style')

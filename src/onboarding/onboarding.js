@@ -3,8 +3,7 @@ const { initWindowControls } = require('../shared/window-controls.js')
 
 initWindowControls({ showMinimize: true, showMaximize: false, showClose: true })
 
-const DEFAULT_SHORTCUT = 'Control+Shift+D'
-const DEFAULT_COLOR = '#3bbbf6'
+const { DEFAULT_SHORTCUT, DEFAULT_ACCENT_COLOR: DEFAULT_COLOR } = require('../shared/constants.js')
 
 let currentStep = 0
 let currentShortcut = DEFAULT_SHORTCUT
@@ -261,6 +260,9 @@ if (resetShortcutBtn) {
 
 const colorPicker = document.getElementById('color-picker')
 const colorHex = document.getElementById('color-hex')
+if (colorHex) {
+  colorHex.placeholder = DEFAULT_COLOR
+}
 const colorPreview = document.getElementById('color-preview')
 const resetColorBtn = document.getElementById('reset-color-btn')
 
@@ -394,4 +396,3 @@ updateProgress()
 updateColor(currentColor)
 updateResetColorVisibility()
 updateBottomNav()
-

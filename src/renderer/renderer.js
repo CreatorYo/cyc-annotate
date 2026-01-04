@@ -1,4 +1,5 @@
 const { ipcRenderer } = require('electron')
+const { DEFAULT_ACCENT_COLOR } = require('../shared/constants.js')
 const { initSelectTool } = require('./tools/selectTool.js')
 const { initTextTool } = require('./tools/textTool.js')
 const { initCommandMenu } = require('./tools/commandMenu.js')
@@ -856,7 +857,7 @@ function stopDrawing() {
     
     if (state.tool === 'shapes' && state.shapeStart && state.shapeEnd) {
       const canFill = state.shapeType === 'rectangle' || state.shapeType === 'circle'
-      const shapeElement = createElement('shape', {
+      createElement('shape', {
         shapeType: state.shapeType,
         start: { ...state.shapeStart },
         end: { ...state.shapeEnd },
@@ -1653,7 +1654,7 @@ function initColorPicker() {
     
     playSound('color')
 
-    const accentColor = localStorage.getItem('accent-color') || '#3bbbf6'
+    const accentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
     const isLight = isLightColor(accentColor)
     const textColor = isLight ? '#000000' : '#ffffff'
     document.documentElement.style.setProperty('--picker-btn-text-color', textColor)
@@ -2156,7 +2157,7 @@ function updateAccentColor(color) {
   updateToolbarBackgroundColor()
 }
 
-const savedAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
+const savedAccentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
 updateAccentColor(savedAccentColor)
 
 updateToolbarBackgroundColor()
@@ -2231,6 +2232,22 @@ if (hideBtn) {
 
 let toolbarWasVisible = false
 let standbyWasActive = false
+let commandMenuWasVisible = false
+
+function restoreCaptureState() {
+  if (standbyWasActive) {
+    standbyManager.resume()
+  }
+
+  if (commandMenuWasVisible && window.commandMenu) {
+    window.commandMenu.toggleCommandMenu()
+    commandMenuWasVisible = false
+  }
+
+  state.enabled = true
+  canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
+  standbyWasActive = false
+}
 
 async function triggerCapture() {
   try {
@@ -2239,6 +2256,13 @@ async function triggerCapture() {
     standbyWasActive = state.standbyMode
     if (toolbar && toolbarWasVisible) {
       toolbar.style.display = 'none'
+    }
+
+    const commandMenuOverlay = document.getElementById('command-menu-overlay')
+    commandMenuWasVisible = commandMenuOverlay && (commandMenuOverlay.style.display === 'flex' || commandMenuOverlay.classList.contains('show'))
+    
+    if (commandMenuWasVisible && window.commandMenu) {
+      window.commandMenu.closeCommandMenu()
     }
 
     state.enabled = false
@@ -2250,29 +2274,11 @@ async function triggerCapture() {
 
     ipcRenderer.invoke('open-capture-overlay').catch(async (error) => {
       await ipcRenderer.invoke('show-error-dialog', 'Capture Error', 'Failed to open capture overlay', error.message || 'Please try again.')
-      const toolbar = document.getElementById('main-toolbar')
-      if (toolbar && toolbarWasVisible) {
-        toolbar.style.display = ''
-      }
-      if (standbyWasActive) {
-        standbyManager.resume()
-      }
-      state.enabled = true
-      canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
-      standbyWasActive = false
+      restoreCaptureState()
     })
   } catch (error) {
     await ipcRenderer.invoke('show-error-dialog', 'Capture Error', 'Failed to open capture overlay', error.message || 'Please try again.')
-    const toolbar = document.getElementById('main-toolbar')
-    if (toolbar && toolbarWasVisible) {
-      toolbar.style.display = ''
-    }
-    if (standbyWasActive) {
-      standbyManager.resume()
-    }
-    state.enabled = true
-    canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
-    standbyWasActive = false
+    restoreCaptureState()
   }
 }
 
@@ -2281,16 +2287,7 @@ document.getElementById('capture-btn').addEventListener('click', triggerCapture)
 ipcRenderer.on('trigger-capture', triggerCapture)
 
 ipcRenderer.on('capture-cancelled', () => {
-  const toolbar = document.getElementById('main-toolbar')
-  if (toolbar && toolbarWasVisible) {
-    toolbar.style.display = ''
-  }
-  if (standbyWasActive) {
-    standbyManager.resume()
-  }
-  state.enabled = true
-  canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
-  standbyWasActive = false
+  restoreCaptureState()
 })
 
 ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
@@ -2298,32 +2295,12 @@ ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
   
   if (!desktopDataURL || !bounds) {
     alert('Failed to capture selection. Please try again.')
-    if (toolbar && toolbarWasVisible) {
-      toolbar.style.display = ''
-    }
-    if (standbyWasActive) {
-      standbyManager.resume()
-    }
-    toolbarWasVisible = false
-    state.enabled = true
-    canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
-    standbyWasActive = false
     return
   }
 
-  if (toolbar && toolbarWasVisible) {
-    toolbar.style.display = ''
-  }
+  restoreCaptureState(false)
 
   playSound('capture')
-  
-  if (standbyWasActive) {
-    standbyManager.resume()
-  }
-  
-  state.enabled = true
-  canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
-  standbyWasActive = false
 
   const desktopImg = new Image()
   desktopImg.onload = async () => {

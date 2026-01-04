@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to CYC Annotate</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link rel="stylesheet" href="../../styles/window-controls.css">
   <link rel="stylesheet" href="../../styles/onboarding.css">
 </head>
+
 <body>
-  <div class="window-titlebar" style="-webkit-app-region: drag; position: fixed; top: 0; left: 0; right: 0; height: 32px; z-index: 9999;"></div>
+  <div class="window-titlebar"
+    style="-webkit-app-region: drag; position: fixed; top: 0; left: 0; right: 0; height: 32px; z-index: 9999;"></div>
   <div class="window-controls">
     <button id="window-minimize" class="window-control-btn" title="Minimize" tabindex="-1">
       <span class="material-symbols-outlined">remove</span>
@@ -87,10 +92,12 @@
             <span class="material-symbols-outlined">keyboard</span>
           </div>
           <h1 class="step-title">Set Your Keyboard Shortcut</h1>
-          <p class="step-description">Choose a shortcut to quickly toggle the annotation tool. Press your desired key combination.</p>
+          <p class="step-description">Choose a shortcut to quickly toggle the annotation tool. Press your desired key
+            combination.</p>
           <p class="step-note"><strong>You can always change this later in settings.</strong></p>
           <div class="shortcut-setup">
-            <input type="text" id="shortcut-input" class="shortcut-input" placeholder="Press your shortcut keys..." readonly>
+            <input type="text" id="shortcut-input" class="shortcut-input" placeholder="Press your shortcut keys..."
+              readonly>
             <button class="btn-link" id="reset-shortcut-btn">Reset to Default</button>
           </div>
         </div>
@@ -105,9 +112,9 @@
           <p class="step-description">Select a colour that matches your style. This will be used throughout the app.</p>
           <div class="color-setup">
             <div class="color-preview-wrapper">
-              <button id="color-preview" class="color-preview" style="background: #3bbbf6;"></button>
-              <input type="color" id="color-picker" class="color-picker" value="#3bbbf6">
-              <input type="text" id="color-hex" class="color-hex" value="#3bbbf6" maxlength="7">
+              <button id="color-preview" class="color-preview"></button>
+              <input type="color" id="color-picker" class="color-picker">
+              <input type="text" id="color-hex" class="color-hex" maxlength="7">
             </div>
             <div class="color-presets">
               <div class="color-preset" data-color="#ef4444" style="background: #ef4444;"></div>
@@ -162,7 +169,7 @@
         </div>
       </div>
     </div>
-    
+
     <div class="bottom-nav-bar">
       <button class="btn-secondary" id="bottom-back-btn" style="display: none;">Back</button>
       <button class="btn-primary" id="bottom-next-btn">Get Started</button>
@@ -171,5 +178,5 @@
 
   <script src="onboarding.js"></script>
 </body>
-</html>
 
+</html>

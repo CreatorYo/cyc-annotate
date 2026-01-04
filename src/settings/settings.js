@@ -7,11 +7,10 @@ const { updateToggleSwitchColor } = require('./utils/toggleSwitch.js')
 const { normalizeHex, getColorForPicker, updateAccentColorContrast } = require('./utils/colorUtils.js')
 const SettingsSearch = require('./utils/search')
 
-const DEFAULT_ACCENT_COLOR = '#3bbbf6'
-const DEFAULT_SHORTCUT = 'Control+Shift+D'
+const { DEFAULT_ACCENT_COLOR, DEFAULT_SHORTCUT } = require('../shared/constants.js')
 
 const PRESET_ACCENT_COLORS = [
-  { name: 'Default Blue', color: '#3bbbf6' },
+  { name: 'Default Blue', color: DEFAULT_ACCENT_COLOR },
   { name: 'Turquoise', color: '#40E0D0' },
   { name: 'Lime Green', color: '#AEEA00' },
   { name: 'Orange', color: '#ff8c42' },
@@ -66,7 +65,7 @@ ipcRenderer.on('os-theme-changed', (event, effectiveTheme) => {
   const currentTheme = localStorage.getItem('theme') || 'system'
   if (currentTheme === 'system') {
     document.body.setAttribute('data-theme', effectiveTheme)
-    const savedAccentColor = localStorage.getItem('accent-color') || '#3bbbf6'
+    const savedAccentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
     updateAccentColor(savedAccentColor)
   }
 })
@@ -127,7 +126,7 @@ function updateToolbarBackgroundColor() {
   const useAccentBg = localStorage.getItem('toolbar-accent-bg') === 'true'
   if (useAccentBg) {
     const tintedBg = darkenTintColor(
-      localStorage.getItem('accent-color') || '#3bbbf6',
+      localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR,
       getEffectiveTheme(localStorage.getItem('theme') || 'system')
     )
     const el = Object.assign(document.createElement('style'), {
@@ -162,8 +161,12 @@ const accentColorPreview = document.getElementById('accent-color-preview')
 const accentColorHex = document.getElementById('accent-color-hex')
 const syncInfoIcon = document.getElementById('sync-info-icon')
 
-const savedAccentColor = localStorage.getItem('accent-color') || '#40E0D0'
+const savedAccentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
 updateAccentColor(savedAccentColor)
+
+if (accentColorHex) {
+  accentColorHex.placeholder = DEFAULT_ACCENT_COLOR
+}
 
 if (accentColorPicker) {
   accentColorPicker.value = savedAccentColor
@@ -939,11 +942,11 @@ if (resetEverythingBtn) {
       localStorage.clear()
 
       const defaultTheme = 'system'
-      const defaultAccentColor = '#3bbbf6'
+      const defaultAccentColor = DEFAULT_ACCENT_COLOR
       const defaultLayout = 'vertical'
       const defaultVerticalPosition = 'left'
       const defaultHorizontalPosition = 'bottom'
-      const defaultShortcut = 'Control+Shift+D'
+      const defaultShortcut = DEFAULT_SHORTCUT
       const defaultSounds = true
 
       applyTheme(defaultTheme)
@@ -951,8 +954,6 @@ if (resetEverythingBtn) {
       applyLayout(defaultLayout)
       applyPosition('vertical', defaultVerticalPosition)
       applyPosition('horizontal', defaultHorizontalPosition)
-
-
 
       currentShortcut = defaultShortcut
       if (shortcutInput) shortcutInput.value = formatShortcut(parseShortcut(defaultShortcut))
@@ -1357,7 +1358,7 @@ if (document.readyState === 'loading') {
 window.categoryTitles = categoryTitles
 window.currentCategory = currentCategory
 
-const settingsSearch = new SettingsSearch()
+new SettingsSearch()
 
 const { initWindowControls } = require('../shared/window-controls.js')
 initWindowControls({ showMinimize: true, showMaximize: true, showClose: true })

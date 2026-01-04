@@ -62,4 +62,3 @@ function initWindowControls(options = {}) {
 }
 
 module.exports = { initWindowControls }
-

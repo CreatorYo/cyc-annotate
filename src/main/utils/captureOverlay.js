@@ -1,3 +1,4 @@
+const { DEFAULT_ACCENT_COLOR } = require('../../shared/constants.js')
 const { BrowserWindow, ipcMain, screen, desktopCapturer, nativeImage, Menu } = require('electron')
 const path = require('path')
 const dialogs = require('./dialogs')
@@ -76,7 +77,7 @@ function open() {
     captureOverlayWin.setIgnoreMouseEvents(false)
     
     captureOverlayWin.webContents.once('did-finish-load', () => {
-      const accentColor = deps.getSetting?.('accent-color', '#3bbbf6')
+      const accentColor = deps.getSetting?.('accent-color', DEFAULT_ACCENT_COLOR) || DEFAULT_ACCENT_COLOR
       if (captureOverlayWin && !captureOverlayWin.isDestroyed()) {
         captureOverlayWin.webContents.send('set-accent-color', accentColor)
       }

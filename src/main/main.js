@@ -10,6 +10,7 @@ const { init: initNotificationHandler } = require('./utils/notificationHandler')
 const startupFeature = require('./utils/startupfeature')
 const { init: initCaptureOverlay } = require('./utils/captureOverlay')
 const { init: initIpc } = require('./ipc')
+const { DEFAULT_ACCENT_COLOR, DEFAULT_SHORTCUT } = require('../shared/constants.js')
 
 const iconPathIco = path.join(__dirname, '../../icon.ico')
 const iconPathPng = path.join(__dirname, '../../icon.png')
@@ -24,7 +25,7 @@ let shortcuts = null
 let notificationHandler = null
 let captureOverlay = null
 let visible = false
-let shortcut = 'Control+Shift+D'
+let shortcut = DEFAULT_SHORTCUT
 let standbyModeEnabled = false
 let windowsAccentSyncEnabled = false
 
@@ -391,7 +392,7 @@ function createOnboardingWindow() {
         onboardingWin.webContents.send('theme-changed', currentTheme)
       }
       
-      const currentAccentColor = getSetting('accent-color', '#3bbbf6')
+      const currentAccentColor = getSetting('accent-color', DEFAULT_ACCENT_COLOR)
       onboardingWin.webContents.send('accent-color-changed', currentAccentColor)
     }
   })
@@ -465,12 +466,12 @@ function createMainWindow() {
     win = null
   })
 
-  const savedShortcut = getSetting('shortcut', 'Control+Shift+D')
+  const savedShortcut = getSetting('shortcut', DEFAULT_SHORTCUT)
   if (savedShortcut) {
     shortcut = savedShortcut
   }
   
-  const savedAccentColor = getSetting('accent-color', '#3bbbf6')
+  const savedAccentColor = getSetting('accent-color', DEFAULT_ACCENT_COLOR)
   if (savedAccentColor && win && !win.isDestroyed()) {
     win.webContents.once('did-finish-load', () => {
       win.webContents.executeJavaScript(`localStorage.setItem('accent-color', '${savedAccentColor}')`)
@@ -500,7 +501,7 @@ if (!gotTheLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    const currentShortcut = shortcut || getSetting('shortcut', 'Control+Shift+D')
+    const currentShortcut = shortcut || getSetting('shortcut', DEFAULT_SHORTCUT)
     const formattedShortcut = currentShortcut
       .replace(/Control/g, 'Ctrl')
       .replace(/Meta/g, 'Cmd')

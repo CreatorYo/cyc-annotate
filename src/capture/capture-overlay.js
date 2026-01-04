@@ -1,4 +1,5 @@
 const { ipcRenderer } = require('electron')
+const { DEFAULT_ACCENT_COLOR } = require('../shared/constants.js')
 
 let isSelecting = false
 let startX = 0
@@ -15,7 +16,7 @@ function init() {
     return
   }
 
-  const accentColor = localStorage.getItem('accent-color') || '#3bbbf6'
+  const accentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
   document.documentElement.style.setProperty('--accent-color', accentColor)
 
   document.addEventListener('mousedown', handleMouseDown)
