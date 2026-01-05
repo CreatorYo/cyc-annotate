@@ -14,6 +14,89 @@ function initCommandMenu(helpers) {
   let filteredItems = [];
   let lastMouseX = 0;
   let lastMouseY = 0;
+  let cleanupTimeout = null;
+
+  let isDragging = false, dragStart = {x:0,y:0}, menuStart = {x:0,y:0};
+  const overlay = document.getElementById("command-menu-overlay");
+  const commandMenuContainer = document.querySelector('.command-menu-container');
+  
+  if (commandMenuContainer) {
+    const getGuide = (cls) => document.querySelector('.' + cls) || document.body.appendChild(Object.assign(document.createElement('div'), {className: `snap-guide ${cls}`}));
+    
+    commandMenuContainer.onmousedown = e => {
+      const isInput = e.target.tagName === 'INPUT';
+      if (!isInput) {
+        const input = document.getElementById("command-menu-input");
+        if (input) input.focus();
+      }
+      
+      if (e.target.closest('.command-menu-item, button, input')) return;
+      isDragging = true;
+      commandMenuContainer.classList.add('dragging');
+      
+      const rect = overlay.getBoundingClientRect();
+      const isAbs = overlay.style.left && overlay.style.left.indexOf('px') > -1;
+      const currentLeft = isAbs ? parseFloat(overlay.style.left) : rect.left;
+      const currentTop = isAbs ? parseFloat(overlay.style.top) : rect.top;
+
+      if (!isAbs) { 
+        Object.assign(overlay.style, { transform: 'none', left: currentLeft+'px', top: currentTop+'px' });
+      }
+      
+      dragStart = { x: e.clientX, y: e.clientY };
+      menuStart = { x: currentLeft, y: currentTop };
+      
+      const onMove = e => {
+        if (!isDragging) return;
+        let x = menuStart.x + (e.clientX - dragStart.x), y = menuStart.y + (e.clientY - dragStart.y);
+        const [winW, winH] = [window.innerWidth, window.innerHeight];
+        const screenW = window.screen.width;
+        const width = overlay.offsetWidth, height = overlay.offsetHeight;
+        
+        x = Math.max(0, Math.min(x, winW - width));
+        y = Math.max(0, Math.min(y, winH - height));
+
+        let xTargets = [winW / 2];
+        if (winW > screenW + 100) {
+           xTargets = [screenW / 2, screenW + (winW - screenW) / 2];
+        }
+
+        const snap = (val, targets, guideCls, isVertical) => {
+           const guide = getGuide(guideCls);
+           const size = isVertical ? width : height;
+           const currentCenter = val + size / 2;
+           
+           for (const target of targets) {
+             const compareVal = isVertical ? currentCenter : val;
+             if(Math.abs(compareVal - target) < 20) {
+                guide.classList.add('visible');
+                guide.style[isVertical ? 'left' : 'top'] = target + 'px';
+                return isVertical ? target - size/2 : target;
+             }
+           }
+           guide.classList.remove('visible');
+           return val;
+        };
+        
+        overlay.style.left = snap(x, xTargets, 'snap-guide-v', true) + 'px';
+        overlay.style.top = snap(y, [Math.abs(y - 100) < 20 ? 100 : winH / 2], 'snap-guide-h', false) + 'px';
+      };
+      
+      const onUp = () => {
+        isDragging = false;
+        commandMenuContainer.classList.remove('dragging');
+        document.querySelectorAll('.snap-guide').forEach(g => g.classList.remove('visible'));
+        localStorage.setItem('cmd-pos', JSON.stringify({x: overlay.style.left, y: overlay.style.top}));
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    };
+  }
+
+  const savedPos = JSON.parse(localStorage.getItem('cmd-pos'));
+  if (savedPos) Object.assign(overlay.style, {transform: 'none', left: savedPos.x, top: savedPos.y});
 
   document.addEventListener(
     "mousemove",
@@ -132,6 +215,28 @@ function initCommandMenu(helpers) {
       },
     },
     {
+      name: "Reset Menu Position",
+      icon: "center_focus_strong",
+      shortcut: "",
+      noClose: true,
+      action: () => {
+        const overlay = document.getElementById("command-menu-overlay");
+        const input = document.getElementById("command-menu-input");
+        if (overlay) {
+          Object.assign(overlay.style, {transform: '', left: '', top: ''});
+          localStorage.removeItem('cmd-pos');
+          document.querySelectorAll('.snap-guide').forEach(g => g.classList.remove('visible'));
+          if (input) {
+            input.value = "";
+            input.focus();
+            selectedItemIndex = 0;
+            updateCommandMenu();
+            if (resultsContainer) resultsContainer.scrollTop = 0;
+          }
+        }
+      },
+    },
+    {
       name: "Settings",
       icon: "settings",
       shortcut: "Ctrl+,",
@@ -156,7 +261,7 @@ function initCommandMenu(helpers) {
   const commandMenuOverlay = document.getElementById("command-menu-overlay");
   const resultsContainer = document.getElementById("command-menu-results");
 
-  function updateSelection() {
+  function updateSelection(shouldScroll = true) {
     const items = resultsContainer.querySelectorAll(".command-menu-item");
     items.forEach((item, index) => {
       item.classList.toggle("active", index === selectedItemIndex);
@@ -165,7 +270,7 @@ function initCommandMenu(helpers) {
     const activeItem = resultsContainer.querySelector(
       ".command-menu-item.active"
     );
-    if (activeItem) {
+    if (activeItem && shouldScroll) {
       activeItem.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
     checkScrollMask();
@@ -182,15 +287,6 @@ function initCommandMenu(helpers) {
         item.name.toLowerCase().includes(query) ||
         item.shortcut.toLowerCase().includes(query)
     );
-
-    if (
-      newFilteredItems.length > 0 &&
-      JSON.stringify(newFilteredItems.map((i) => i.name)) ===
-        JSON.stringify(filteredItems.map((i) => i.name))
-    ) {
-      updateSelection();
-      return;
-    }
 
     filteredItems = newFilteredItems;
 
@@ -219,7 +315,7 @@ function initCommandMenu(helpers) {
           lastMouseX = e.clientX;
           lastMouseY = e.clientY;
           selectedItemIndex = parseInt(el.dataset.index);
-          updateSelection();
+          updateSelection(false);
         });
 
         el.addEventListener("mousemove", (e) => {
@@ -227,7 +323,7 @@ function initCommandMenu(helpers) {
           lastMouseX = e.clientX;
           lastMouseY = e.clientY;
           selectedItemIndex = parseInt(el.dataset.index);
-          updateSelection();
+          updateSelection(false);
         });
       });
 
@@ -253,7 +349,9 @@ function initCommandMenu(helpers) {
     const item = filteredItems[index];
     if (item && item.action) {
       item.action();
-      closeCommandMenu();
+      if (!item.noClose) {
+        closeCommandMenu();
+      }
       playSound("pop");
     }
   }
@@ -261,11 +359,15 @@ function initCommandMenu(helpers) {
   function toggleCommandMenu() {
     if (!commandMenuOverlay || !commandMenuInput) return;
 
-    const isVisible = commandMenuOverlay.style.display === "flex";
+    if (cleanupTimeout) {
+      clearTimeout(cleanupTimeout);
+      cleanupTimeout = null;
+    }
+
+    const isVisible = commandMenuOverlay.classList.contains("show");
 
     if (!isVisible) {
       commandMenuOverlay.classList.add("show");
-      commandMenuOverlay.style.display = "flex";
       commandMenuInput.value = "";
       selectedItemIndex = 0;
       updateCommandMenu();
@@ -281,16 +383,19 @@ function initCommandMenu(helpers) {
   function closeCommandMenu() {
     if (commandMenuOverlay) {
       commandMenuOverlay.classList.remove("show");
-      commandMenuOverlay.style.display = "none";
     }
-    if (commandMenuInput) {
-      commandMenuInput.value = "";
-    }
-    if (resultsContainer) {
-      resultsContainer.style.display = "none";
-      resultsContainer.innerHTML = "";
-    }
-    filteredItems = [];
+    
+    cleanupTimeout = setTimeout(() => {
+      if (commandMenuInput) {
+        commandMenuInput.value = "";
+      }
+      if (resultsContainer) {
+        resultsContainer.style.display = "none";
+        resultsContainer.innerHTML = "";
+      }
+      filteredItems = [];
+      cleanupTimeout = null;
+    }, 150);
   }
 
   function checkScrollMask() {
@@ -324,32 +429,37 @@ function initCommandMenu(helpers) {
     });
 
     commandMenuInput.addEventListener("keydown", (e) => {
-      // Priority 1: Navigation keys
+      const itemsCount = filteredItems.length;
+      
       if (e.key === "Escape") {
-        closeCommandMenu();
-        return;
-      } else if (e.key === "ArrowDown" && filteredItems.length > 0) {
         e.preventDefault();
-        selectedItemIndex = (selectedItemIndex + 1) % filteredItems.length;
-        updateCommandMenu();
-        checkScrollMask();
+        if (commandMenuInput.value.length > 0) {
+          commandMenuInput.value = "";
+          selectedItemIndex = 0;
+          updateCommandMenu();
+          if (resultsContainer) resultsContainer.scrollTop = 0;
+        } else {
+          closeCommandMenu();
+        }
         return;
-      } else if (e.key === "ArrowUp" && filteredItems.length > 0) {
+      } else if (e.key === "ArrowDown" && itemsCount > 0) {
         e.preventDefault();
-        selectedItemIndex =
-          (selectedItemIndex - 1 + filteredItems.length) % filteredItems.length;
-        updateCommandMenu();
-        checkScrollMask();
+        selectedItemIndex = (selectedItemIndex + 1) % itemsCount;
+        updateSelection(true);
+        return;
+      } else if (e.key === "ArrowUp" && itemsCount > 0) {
+        e.preventDefault();
+        selectedItemIndex = (selectedItemIndex - 1 + itemsCount) % itemsCount;
+        updateSelection(true);
         return;
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (filteredItems.length > 0) {
+        if (itemsCount > 0) {
           applyCommandMenuItem(selectedItemIndex);
         }
         return;
       }
 
-      // Priority 2: Generic Shortcut Matching
       const eventCtrl = e.ctrlKey || e.metaKey;
       const eventKey = (e.key === 'Delete' || e.key === 'Backspace') ? 'del' : e.key.toLowerCase();
 

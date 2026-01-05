@@ -128,7 +128,8 @@ function createSettingsWindow() {
     icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      autoplayPolicy: 'no-user-gesture-required'
     }
   })
 
@@ -375,7 +376,8 @@ function createOnboardingWindow() {
     icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      autoplayPolicy: 'no-user-gesture-required'
     }
   })
 
@@ -420,7 +422,8 @@ function createMainWindow() {
     icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      autoplayPolicy: 'no-user-gesture-required'
     }
   })
 

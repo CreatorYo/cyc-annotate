@@ -492,9 +492,39 @@ html, body {
   font-size: 28px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 6px;
+  margin-bottom: 0;
   letter-spacing: -0.4px;
   line-height: 1.3;
+}
+
+.category-title-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.labs-info-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 0;
+  vertical-align: middle;
+  transform: translateY(1px);
+}
+
+.labs-info-btn .material-symbols-outlined {
+  font-size: 20px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.labs-info-btn:hover .material-symbols-outlined {
+  opacity: 0.9;
 }
 
 .settings-subtitle {
@@ -579,43 +609,7 @@ html, body {
   line-height: 1.4;
 }
 
-.labs-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
-  margin-bottom: 24px;
-  background: rgba(255, 165, 0, 0.08);
-  border: 1px solid rgba(255, 165, 0, 0.2);
-  border-radius: 10px;
-}
 
-.labs-warning .material-symbols-outlined {
-  color: #ffa500;
-  flex-shrink: 0;
-  margin-top: 2px;
-  font-size: 24px;
-}
-
-.labs-warning-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.labs-warning-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.labs-warning-message {
-  font-size: 13px;
-  color: var(--text-primary);
-  opacity: 0.8;
-  line-height: 1.4;
-}
 
 .settings-section {
   margin-bottom: 40px;

@@ -1,5 +1,6 @@
 function initTextTool(state, canvas, helpers) {
   const { createElement, redrawCanvas, saveState } = helpers
+  let editingBackup = null;
 
   function startTextInput(x, y) {
     const textInput = document.getElementById('text-input')
@@ -9,6 +10,7 @@ function initTextTool(state, canvas, helpers) {
     textInput.style.position = 'fixed'
     textInput.style.left = (canvasRect.left + x) + 'px'
     textInput.style.top = (canvasRect.top + y) + 'px'
+    textInput.style.maxWidth = '2000px'
     textInput.style.zIndex = '2000'
     
     const fontSize = Math.max(32, state.strokeSize * 10)
@@ -79,8 +81,8 @@ function initTextTool(state, canvas, helpers) {
     try {
       let cleaned = expression.trim()
       
-      if (cleaned.endsWith('=')) {
-        cleaned = cleaned.slice(0, -1).trim()
+      if (cleaned.includes('=')) {
+        cleaned = cleaned.split('=')[0].trim()
       }
       
       cleaned = cleaned.replace(/[xX×]/g, '*')
@@ -106,8 +108,10 @@ function initTextTool(state, canvas, helpers) {
 
   function parseFormattedText(element) {
     const segments = []
+    const computedStyle = window.getComputedStyle(element)
+    const defaultColor = computedStyle.color
     
-    function traverse(node, formatting = { bold: false, italic: false, underline: false }) {
+    function traverse(node, formatting = { bold: false, italic: false, underline: false, color: defaultColor }) {
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent
         if (text) {
@@ -123,6 +127,11 @@ function initTextTool(state, canvas, helpers) {
           newFormatting.italic = true
         } else if (tagName === 'u') {
           newFormatting.underline = true
+        } else if (tagName === 'font') {
+          if (node.color) newFormatting.color = node.color
+          if (node.style.color) newFormatting.color = node.style.color
+        } else if (node.style && node.style.color) {
+          newFormatting.color = node.style.color
         } else if (tagName === 'br') {
           segments.push({ text: '\n', formatting: { ...formatting } })
         }
@@ -149,7 +158,8 @@ function initTextTool(state, canvas, helpers) {
         const last = merged[merged.length - 1]
         const formatMatch = last.formatting.bold === segment.formatting.bold &&
                            last.formatting.italic === segment.formatting.italic &&
-                           last.formatting.underline === segment.formatting.underline
+                           last.formatting.underline === segment.formatting.underline &&
+                           last.formatting.color === segment.formatting.color
         
         if (formatMatch) {
           last.text += segment.text
@@ -174,8 +184,33 @@ function initTextTool(state, canvas, helpers) {
     state.textFormatting.underline = document.queryCommandState('underline')
   }
 
+  function applyMathSolving(segments) {
+    const textSolveEnabled = localStorage.getItem('text-solve-enabled') === 'true'
+    if (!textSolveEnabled || segments.length === 0) return
+
+    const fullText = segments.map(s => s.text).join('')
+    const result = evaluateMathExpression(fullText)
+    if (result !== null) {
+      let hasEquals = false
+      for (let i = segments.length - 1; i >= 0; i--) {
+        if (segments[i].text.includes('=')) {
+          const parts = segments[i].text.split('=')
+          segments[i].text = parts[0].replace(/\s+$/, '') + ' = ' + result
+          segments.splice(i + 1)
+          hasEquals = true
+          break
+        }
+      }
+      if (!hasEquals) {
+        const lastSegment = segments[segments.length - 1]
+        lastSegment.text = lastSegment.text.replace(/\s+$/, '') + ' = ' + result
+      }
+    }
+  }
+
   function finishTextInput() {
     const textInput = document.getElementById('text-input')
+    if (!textInput) return
     const textContent = textInput.textContent.trim()
     
     if (state.editingElementId) {
@@ -183,36 +218,23 @@ function initTextTool(state, canvas, helpers) {
       if (element && element.type === 'text') {
         if (textContent) {
           updateTextFormatting()
-          const textSolveEnabled = localStorage.getItem('text-solve-enabled') === 'true'
           let segments = parseFormattedText(textInput)
-            
-          if (textSolveEnabled && segments.length > 0) {
-            const fullText = segments.map(s => s.text).join('')
-            const result = evaluateMathExpression(fullText)
-            if (result !== null) {
-              const trimmedText = fullText.trim()
-              if (trimmedText.endsWith('=')) {
-                const lastSegment = segments[segments.length - 1]
-                lastSegment.text = lastSegment.text.replace(/\s*=$/, ` = ${result}`)
-              } else {
-                const lastSegment = segments[segments.length - 1]
-                lastSegment.text += ` = ${result}`
-              }
-            }
-          }
+          applyMathSolving(segments)
           
           element.segments = segments
+          element.color = textInput.style.color || element.color
           state.editingElementId = null
+          editingBackup = null
           redrawCanvas()
           saveState()
         } else {
           state.elements = state.elements.filter(e => e.id !== state.editingElementId)
           state.selectedElements = state.selectedElements.filter(id => id !== state.editingElementId)
           state.editingElementId = null
+          editingBackup = null
           redrawCanvas()
           saveState()
         }
-        state.editingElementId = null
         textInput.style.display = 'none'
         state.textInput = null
         if (state.textFormatting) {
@@ -224,31 +246,16 @@ function initTextTool(state, canvas, helpers) {
     
     if (textContent && state.textInput) {
       updateTextFormatting()
-      
-      const textSolveEnabled = localStorage.getItem('text-solve-enabled') === 'true'
       let segments = parseFormattedText(textInput)
-        
-      if (textSolveEnabled && segments.length > 0) {
-        const fullText = segments.map(s => s.text).join('')
-        const result = evaluateMathExpression(fullText)
-        if (result !== null) {
-          const trimmedText = fullText.trim()
-          if (trimmedText.endsWith('=')) {
-            const lastSegment = segments[segments.length - 1]
-            lastSegment.text = lastSegment.text.replace(/\s*=$/, ` = ${result}`)
-          } else {
-            const lastSegment = segments[segments.length - 1]
-            lastSegment.text += ` = ${result}`
-          }
-        }
-      }
+      applyMathSolving(segments)
       
       const fontSize = Math.max(32, state.strokeSize * 10)
+      const baseColor = textInput.style.color || state.color
       
       createElement('text', {
         x: state.textInput.x,
         y: state.textInput.y,
-        color: state.color,
+        color: baseColor,
         strokeSize: state.strokeSize,
         fontSize: fontSize,
         segments: segments
@@ -259,6 +266,7 @@ function initTextTool(state, canvas, helpers) {
       state.hasDrawn = true
     }
     
+    editingBackup = null
     textInput.style.display = 'none'
     state.textInput = null
     state.editingElementId = null
@@ -267,7 +275,31 @@ function initTextTool(state, canvas, helpers) {
     }
   }
 
+  function cancelTextInput() {
+    const textInput = document.getElementById('text-input')
+    if (textInput) {
+      textInput.style.display = 'none'
+    }
+
+    if (state.editingElementId && editingBackup) {
+      const element = state.elements.find(e => e.id === state.editingElementId)
+      if (element) {
+        element.segments = editingBackup.segments
+        element.color = editingBackup.color
+      }
+    }
+
+    editingBackup = null
+    state.textInput = null
+    state.editingElementId = null
+    if (state.textFormatting) {
+      state.textFormatting = { bold: false, italic: false, underline: false }
+    }
+    redrawCanvas()
+  }
+
   function editTextElement(element) {
+    editingBackup = JSON.parse(JSON.stringify(element))
     const textInput = document.getElementById('text-input')
     if (!textInput) return
     
@@ -276,6 +308,7 @@ function initTextTool(state, canvas, helpers) {
     textInput.style.position = 'fixed'
     textInput.style.left = (canvasRect.left + element.x) + 'px'
     textInput.style.top = (canvasRect.top + element.y) + 'px'
+    textInput.style.maxWidth = '2000px'
     textInput.style.zIndex = '2000'
     
     const fontSize = element.fontSize || Math.max(32, (element.strokeSize || state.strokeSize) * 10)
@@ -286,14 +319,14 @@ function initTextTool(state, canvas, helpers) {
     textInput.style.lineHeight = '1'
 
     const htmlContent = element.segments ? element.segments.map(s => {
-      let content = s.text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        
+      let content = s.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      const col = s.formatting?.color
       if (s.formatting?.bold) content = `<b>${content}</b>`
       if (s.formatting?.italic) content = `<i>${content}</i>`
       if (s.formatting?.underline) content = `<u>${content}</u>`
+      if (col) {
+        content = `<span style="color: ${col}">${content}</span>`
+      }
       return content
     }).join('') : ''
     
@@ -317,12 +350,80 @@ function initTextTool(state, canvas, helpers) {
       textInput.focus()
       const range = document.createRange()
       range.selectNodeContents(textInput)
+      range.collapse(false) 
       const selection = window.getSelection()
       selection.removeAllRanges()
       selection.addRange(range)
+
+      updateCurrentTextColor(state.color)
     }, 10)
     
     redrawCanvas()
+  }
+
+  function updateCaretColor() {
+    const textInput = document.getElementById('text-input')
+    if (!textInput || textInput.style.display === 'none') return
+
+    const color = document.queryCommandValue('foreColor')
+    if (color && color !== 'rgba(0, 0, 0, 0)') {
+      textInput.style.caretColor = color
+    }
+  }
+
+  function updateCurrentTextColor(color) {
+    const textInput = document.getElementById('text-input')
+    if (textInput && textInput.style.display !== 'none') {
+      if (document.activeElement !== textInput) {
+        textInput.focus()
+      }
+
+      const sel = window.getSelection()
+      const isActiveSelection = sel.rangeCount > 0 && textInput.contains(sel.anchorNode)
+      
+      textInput.style.caretColor = color
+      
+      if (isActiveSelection && !sel.isCollapsed) {
+        document.execCommand('foreColor', false, color)
+        
+        let el = sel.anchorNode.parentElement
+        if (el && el !== textInput && el.tagName === 'FONT') {
+          el.style.color = color
+        }
+        
+        const range = sel.getRangeAt(0)
+        sel.removeAllRanges()
+        sel.addRange(range)
+      } else {
+        if (textInput.textContent.trim().length === 0) {
+          textInput.style.color = color
+          textInput.style.setProperty('--text-color', color)
+        }
+        
+        document.execCommand('foreColor', false, color)
+        textInput.style.caretColor = color
+
+        if (state.editingElementId) {
+          const el = state.elements.find(e => e.id === state.editingElementId)
+          if (el && el.type === 'text' && textInput.textContent.trim().length === 0) {
+            el.color = color
+          }
+        }
+      }
+    }
+  }
+
+  const textInput = document.getElementById('text-input')
+  if (textInput) {
+    ['keyup', 'click', 'input', 'keydown', 'mouseup'].forEach(evt => {
+      textInput.addEventListener(evt, updateCaretColor)
+    })
+    
+    document.addEventListener('selectionchange', () => {
+      if (textInput.style.display !== 'none' && document.activeElement === textInput) {
+        updateCaretColor()
+      }
+    })
   }
 
   return {
@@ -332,7 +433,9 @@ function initTextTool(state, canvas, helpers) {
     parseFormattedText,
     updateTextFormatting,
     finishTextInput,
-    editTextElement
+    cancelTextInput,
+    editTextElement,
+    updateCurrentTextColor
   }
 }
 

@@ -2,6 +2,7 @@ const { ipcRenderer } = require('electron')
 const { DEFAULT_ACCENT_COLOR } = require('../shared/constants.js')
 const { initSelectTool } = require('./tools/selectTool.js')
 const { initTextTool } = require('./tools/textTool.js')
+const { initColorPickerTool } = require('./tools/colorPicker.js')
 const { initCommandMenu } = require('./tools/commandMenu.js')
 const { initThemeManager, updateToolbarBackgroundColor } = require('./utils/themeManager.js')
 const { initTooltips, hideAllTooltips } = require('./utils/tooltipManager.js')
@@ -10,167 +11,23 @@ const { initStandbyManager } = require('./utils/standbyManager.js')
 const { initShortcutManager } = require('./utils/shortcutManager.js')
 const ToolbarPositionManager = require('./utils/toolbarPositionManager')
 
-const canvas = document.getElementById('canvas')
-
-const optimizedRendering = localStorage.getItem('optimized-rendering') === 'true'
-const hardwareAcceleration = localStorage.getItem('hardware-acceleration') === 'true'
-if (hardwareAcceleration) {
-  canvas.style.willChange = 'contents'
-  canvas.style.transform = 'translateZ(0)'
-  canvas.style.backfaceVisibility = 'hidden'
-}
-
-const ctx = canvas.getContext('2d', {
-  willReadFrequently: !optimizedRendering && !hardwareAcceleration,
-  alpha: true
-})
-
-if (optimizedRendering) {
-  ctx.imageSmoothingEnabled = false
-  ctx.imageSmoothingQuality = 'low'
-}
-
-let previewCanvas = null
-let previewCtx = null
-let selectionCanvas = null
-let selectionCtx = null
-
-function resizeCanvas() {
-  canvas.width = window.innerWidth
-  canvas.height = window.innerHeight
-  if (selectionCanvas) {
-    selectionCanvas.width = canvas.width
-    selectionCanvas.height = canvas.height
-  }
-  if (previewCanvas) {
-    previewCanvas.width = canvas.width
-    previewCanvas.height = canvas.height
-  }
-}
-resizeCanvas()
-window.addEventListener('resize', resizeCanvas)
+const CanvasManager = require('./core/CanvasManager.js')
+CanvasManager.init(() => redrawCanvas())
+const canvas = CanvasManager.getCanvas()
+const ctx = CanvasManager.getCtx()
+const optimizedRendering = CanvasManager.isOptimizedRendering()
 
 document.addEventListener('click', initAudioContext, { once: true })
 document.addEventListener('mousedown', initAudioContext, { once: true })
 
-let state = {
-  drawing: false,
-  enabled: true,
-  standbyMode: false,
-  toolBeforeStandby: null,
-  tool: 'pencil',
-  shapeType: 'rectangle',
-  color: '#ef4444', 
-  strokeSize: 4,
-  history: [],
-  historyIndex: -1,
-  maxHistorySize: 50,
-  hasDrawn: false,
-  textInput: null,
-  shapeStart: null,
-  shapeEnd: null,
-  shapeFillEnabled: false,
-  elements: [],
-  selectedElements: [],
-  nextElementId: 1,
-  isSelecting: false,
-  selectionStart: null,
-  selectionEnd: null,
-  isDraggingSelection: false,
-  dragOffset: null,
-  isResizing: false,
-  resizeHandle: null,
-  resizeStartBounds: null,
-  hoveredElementId: null,
-  copiedElements: null,
-  editingElementId: null,
-  snapToObjectsEnabled: localStorage.getItem('snap-to-objects-enabled') === 'true'
-}
+const { init: initInputHandler, updateCursor } = require('./input/InputHandler.js')
+const { state, createElement, saveState, undo, redo } = require('./core/AppState.js')
+const { drawArrow } = require('./utils/DrawingUtils.js')
 
 canvas.style.pointerEvents = 'auto'
 
-let lastX = 0
-let lastY = 0
-
-function createPreviewCanvas() {
-  if (!previewCanvas) {
-    previewCanvas = document.createElement('canvas')
-    previewCanvas.width = canvas.width
-    previewCanvas.height = canvas.height
-    previewCanvas.style.position = 'absolute'
-    previewCanvas.style.top = '0'
-    previewCanvas.style.left = '0'
-    previewCanvas.style.pointerEvents = 'none'
-    previewCanvas.style.zIndex = '999'
-    
-    if (hardwareAcceleration) {
-      previewCanvas.style.willChange = 'contents'
-      previewCanvas.style.transform = 'translateZ(0)'
-      previewCanvas.style.backfaceVisibility = 'hidden'
-    }
-    
-    document.body.appendChild(previewCanvas)
-    previewCtx = previewCanvas.getContext('2d', {
-      willReadFrequently: !optimizedRendering && !hardwareAcceleration,
-      alpha: true
-    })
-    
-    if (optimizedRendering) {
-      previewCtx.imageSmoothingEnabled = false
-      previewCtx.imageSmoothingQuality = 'low'
-    }
-  }
-}
-
-function createSelectionCanvas() {
-  if (!selectionCanvas) {
-    selectionCanvas = document.createElement('canvas')
-    selectionCanvas.width = canvas.width
-    selectionCanvas.height = canvas.height
-    selectionCanvas.style.position = 'absolute'
-    selectionCanvas.style.top = '0'
-    selectionCanvas.style.left = '0'
-    selectionCanvas.style.pointerEvents = 'none'
-    selectionCanvas.style.zIndex = '999'
-    
-    if (hardwareAcceleration) {
-      selectionCanvas.style.willChange = 'contents'
-      selectionCanvas.style.transform = 'translateZ(0)'
-      selectionCanvas.style.backfaceVisibility = 'hidden'
-    }
-    
-    document.body.appendChild(selectionCanvas)
-    selectionCtx = selectionCanvas.getContext('2d', {
-      willReadFrequently: !optimizedRendering && !hardwareAcceleration,
-      alpha: true
-    })
-    
-    if (optimizedRendering) {
-      selectionCtx.imageSmoothingEnabled = false
-      selectionCtx.imageSmoothingQuality = 'low'
-    }
-  } else {
-    selectionCanvas.width = canvas.width
-    selectionCanvas.height = canvas.height
-  }
-}
-
 ctx.lineCap = 'round'
 ctx.lineJoin = 'round'
-
-let currentStroke = null
-let currentStrokePoints = []
-
-function createElement(type, data) {
-  const element = {
-    id: state.nextElementId++,
-    type: type,
-    ...data,
-    createdAt: Date.now()
-  }
-  state.elements.push(element)
-  return element
-}
 
 function redrawCanvas() {
   ctx.save()
@@ -274,8 +131,7 @@ function drawElement(element) {
     
     if (element.segments && element.segments.length > 0) {
       const lineHeight = fontSize * 1.2
-      const maxTextWidth = canvas.width - element.x - 50
-      
+      const maxTextWidth = 2000
       const textYOffset = fontSize * 0.12
       let cursorX = element.x
       let cursorY = element.y + textYOffset
@@ -284,6 +140,7 @@ function drawElement(element) {
         const fontStyle = segment.formatting?.italic ? 'italic' : 'normal'
         const fontWeight = segment.formatting?.bold ? 'bold' : 'normal'
         ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+        ctx.fillStyle = segment.formatting?.color || element.color || '#000000'
         
         const lines = segment.text.split('\n')
         
@@ -312,7 +169,7 @@ function drawElement(element) {
             ctx.fillText(token, cursorX, cursorY)
             
             if (segment.formatting?.underline) {
-              ctx.strokeStyle = element.color || '#000000'
+              ctx.strokeStyle = segment.formatting?.color || element.color || '#000000'
               ctx.lineWidth = Math.max(1, fontSize / 15)
               ctx.beginPath()
               ctx.moveTo(cursorX, cursorY + fontSize * 0.9)
@@ -330,199 +187,10 @@ function drawElement(element) {
   ctx.restore()
 }
 
-function getElementBounds(element) {
-  if (element.type === 'stroke' && element.points && element.points.length > 0) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    element.points.forEach(p => {
-      minX = Math.min(minX, p.x)
-      minY = Math.min(minY, p.y)
-      maxX = Math.max(maxX, p.x)
-      maxY = Math.max(maxY, p.y)
-    })
-    const padding = element.strokeSize / 2 + 2
-    return {
-      x: minX - padding,
-      y: minY - padding,
-      width: maxX - minX + padding * 2,
-      height: maxY - minY + padding * 2
-    }
-  } else if (element.type === 'shape') {
-    const x = Math.min(element.start.x, element.end.x)
-    const y = Math.min(element.start.y, element.end.y)
-    const w = Math.abs(element.end.x - element.start.x)
-    const h = Math.abs(element.end.y - element.start.y)
-    
-    if (element.shapeType === 'arrow') {
-      const headlen = 15
-      const padding = (element.strokeSize || 4) / 2 + 2
-      return {
-        x: x - padding,
-        y: y - padding,
-        width: w + padding * 2 + headlen,
-        height: h + padding * 2 + headlen
-      }
-    }
-    
-    const padding = (element.strokeSize || 4) / 2 + 2
-    return { 
-      x: x - padding, 
-      y: y - padding, 
-      width: w + padding * 2, 
-      height: h + padding * 2 
-    }
-  } else if (element.type === 'text') {
-    const fontSize = element.fontSize || Math.max(12, element.strokeSize * 4)
-    const lineHeight = fontSize * 1.2
-    const maxTextWidth = canvas.width - element.x - 50
-    
-    let maxWidth = 0
-    
-    if (element.id === state.editingElementId) {
-      const textInput = document.getElementById('text-input')
-      if (textInput && textInput.style.display !== 'none') {
-        const rect = textInput.getBoundingClientRect()
-        const canvasRect = canvas.getBoundingClientRect()
-        return {
-          x: element.x,
-          y: element.y,
-          width: rect.width,
-          height: rect.height
-        }
-      }
-    }
-    
-    if (element.segments) {
-      ctx.save()
-      
-      let cursorX = 0
-      let currentLineY = 0
-      
-      element.segments.forEach(seg => {
-        const fontStyle = seg.formatting?.italic ? 'italic' : 'normal'
-        const fontWeight = seg.formatting?.bold ? 'bold' : 'normal'
-        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
-        
-        const lines = seg.text.split('\n')
-        
-        lines.forEach((line, lineIndex) => {
-          if (lineIndex > 0) {
-            maxWidth = Math.max(maxWidth, cursorX)
-            cursorX = 0
-            currentLineY += lineHeight
-          }
-          
-          const tokens = line.split(/(\s+)/)
-          
-          tokens.forEach(token => {
-            if (token.length === 0) return
-            
-            const tokenWidth = ctx.measureText(token).width
-            
-            if (cursorX + tokenWidth > maxTextWidth && cursorX > 0) {
-              maxWidth = Math.max(maxWidth, cursorX)
-              cursorX = 0
-              currentLineY += lineHeight
-              
-              if (token.trim() === '') return
-            }
-            
-            cursorX += tokenWidth
-            maxWidth = Math.max(maxWidth, cursorX)
-          })
-        })
-      })
-      
-      let totalHeight = currentLineY + lineHeight
-      
-      ctx.restore()
-      
-      return {
-        x: element.x - 5,
-        y: element.y - 5,
-        width: maxWidth + 10,
-        height: totalHeight + 5
-      }
-    }
-  }
-  return null
-}
-
-function hitTest(x, y, element) {
-  if (element.type === 'shape' && element.shapeType === 'circle') {
-    const w = Math.abs(element.end.x - element.start.x)
-    const h = Math.abs(element.end.y - element.start.y)
-    const centerX = (element.start.x + element.end.x) / 2
-    const centerY = (element.start.y + element.end.y) / 2
-    const radius = Math.sqrt(w * w + h * h) / 2
-    
-    const dx = x - centerX
-    const dy = y - centerY
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    
-    return distance <= radius
-  }
-  
-  if (element.type === 'shape' && (element.shapeType === 'line' || element.shapeType === 'arrow')) {
-    const strokeSize = element.strokeSize || 4
-    const threshold = strokeSize / 2 + 5
-    
-    const x1 = element.start.x
-    const y1 = element.start.y
-    const x2 = element.end.x
-    const y2 = element.end.y
-    
-    const A = x - x1
-    const B = y - y1
-    const C = x2 - x1
-    const D = y2 - y1
-    
-    const dot = A * C + B * D
-    const lenSq = C * C + D * D
-    let param = -1
-    
-    if (lenSq !== 0) {
-      param = dot / lenSq
-    }
-    
-    let xx, yy
-    
-    if (param < 0) {
-      xx = x1
-      yy = y1
-    } else if (param > 1) {
-      xx = x2
-      yy = y2
-    } else {
-      xx = x1 + param * C
-      yy = y1 + param * D
-    }
-    
-    const dx = x - xx
-    const dy = y - yy
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    
-    return distance <= threshold
-  }
-  
-  const bounds = getElementBounds(element)
-  if (!bounds) return false
-  
-  return x >= bounds.x && x <= bounds.x + bounds.width &&
-         y >= bounds.y && y <= bounds.y + bounds.height
-}
-
-function findElementAt(x, y) {
-  for (let i = state.elements.length - 1; i >= 0; i--) {
-    const element = state.elements[i]
-    if (hitTest(x, y, element)) {
-      return element
-    }
-  }
-  return null
-}
+const { getElementBounds, hitTest, findElementAt } = require('./utils/CollisionUtils.js')
 
 function updateSelectionOverlay() {
-  createSelectionCanvas()
+  const { selectionCtx, selectionCanvas } = CanvasManager.createSelectionCanvas()
   if (!selectionCtx) return
   
   selectionCtx.save()
@@ -549,36 +217,105 @@ const selectTool = initSelectTool(state, ctx, canvas, {
   findElementAt,
   redrawCanvas: () => redrawCanvas(),
   updateSelectionOnly: () => updateSelectionOnly(),
-  saveState: () => saveState(),
+  saveState: () => saveState(updateUndoRedoButtons),
   playSound: (type) => playSound(type)
 })
 
 const textTool = initTextTool(state, canvas, {
   createElement,
   redrawCanvas: () => redrawCanvas(),
-  saveState: () => saveState(),
+  saveState: () => saveState(updateUndoRedoButtons),
   updateSelectionOnly: () => updateSelectionOnly()
 })
 
+const colorTool = initColorPickerTool({
+  state,
+  selectTool,
+  textTool,
+  playSound,
+  hideAllTooltips,
+  closeAllPopups,
+  DEFAULT_ACCENT_COLOR
+})
+const { setColor, initColorPicker, setInitialColorBorder, isLightColor } = colorTool
 
-function saveState() {
-  if (state.historyIndex < state.history.length - 1) {
-    state.history = state.history.slice(0, state.historyIndex + 1)
-  }
+setInitialColorBorder()
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initColorPicker, 200) 
+  })
+} else {
+  setTimeout(initColorPicker, 200)
+}
 
-  const elementState = {
-    elements: JSON.parse(JSON.stringify(state.elements)),
-    nextElementId: state.nextElementId
-  }
-  state.history.push(elementState)
-  state.historyIndex++
+initInputHandler({
+  selectTool,
+  textTool,
+  redrawCanvas: () => redrawCanvas(),
+  updateSelectionOnly: () => updateSelectionOnly(),
+  playSound
+})
 
-  if (state.history.length > state.maxHistorySize) {
-    state.history.shift()
-    state.historyIndex--
+function setTool(tool) {
+  state.tool = tool
+
+  if (tool !== 'text' && tool !== 'select') {
+    const textInput = document.getElementById('text-input')
+    if (textInput && textInput.style.display === 'block') {
+      textTool.finishTextInput()
+    }
   }
   
-  updateUndoRedoButtons()
+  if (tool !== 'select') {
+    selectTool.clearSelection()
+  }
+  
+  if (tool !== 'shapes') {
+    state.shapeStart = null
+    state.shapeEnd = null
+    state.drawing = false
+  }
+  
+  document.querySelectorAll('[data-tool]').forEach(btn => {
+    btn.classList.remove('active')
+  })
+  document.querySelector(`[data-tool="${tool}"]`)?.classList.add('active')
+  
+  updateShapeFillToggleState()
+
+  document.querySelectorAll('.drawing-tool-option').forEach(btn => {
+    btn.classList.remove('active')
+    if (btn.dataset.tool === tool) {
+      btn.classList.add('active')
+      
+      const icon = document.getElementById('pencil-btn')?.querySelector('.material-symbols-outlined')
+      if (icon) {
+        if (tool === 'select') {
+          icon.textContent = 'arrow_selector_tool'
+        } else if (tool === 'pencil') {
+          icon.textContent = 'edit'
+        } else if (tool === 'marker') {
+          icon.textContent = 'brush'
+        }
+      }
+    }
+  })
+
+  if (tool === 'select' || tool === 'pencil' || tool === 'marker') {
+    const pencilBtn = document.getElementById('pencil-btn')
+    if (pencilBtn) {
+      pencilBtn.classList.add('active')
+    }
+  }
+  
+  if (tool === 'shapes') {
+    const shapesBtn = document.getElementById('shapes-btn')
+    if (shapesBtn) {
+      shapesBtn.classList.add('active')
+    }
+  }
+  
+  updateCursor()
 }
 
 function updateUndoRedoButtons() {
@@ -623,43 +360,34 @@ function updateUndoRedoButtons() {
   }
 }
 
-function undo() {
-  if (state.historyIndex <= 0 || state.history.length === 0) {
-    updateUndoRedoButtons()
-    return
+function handleUndo() {
+  if (state.historyIndex > 0) {
+    undo(
+      () => { 
+        selectTool.clearSelection()
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        redrawCanvas()
+        checkIfHasDrawn()
+        playSound('undo')
+      },
+      updateUndoRedoButtons
+    )
   }
-  
-  state.historyIndex--
-  const elementState = state.history[state.historyIndex]
-  if (elementState) {
-    state.elements = JSON.parse(JSON.stringify(elementState.elements))
-    state.nextElementId = elementState.nextElementId || state.nextElementId
-    selectTool.clearSelection()
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    redrawCanvas()
-  }
-  checkIfHasDrawn()
-  setTimeout(() => playSound('undo'), 10)
-  updateUndoRedoButtons()
 }
 
-function redo() {
+function handleRedo() {
   if (state.historyIndex < state.history.length - 1) {
-    state.historyIndex++
-    const elementState = state.history[state.historyIndex]
-    if (elementState) {
-      state.elements = JSON.parse(JSON.stringify(elementState.elements))
-      state.nextElementId = elementState.nextElementId || state.nextElementId
-      selectTool.clearSelection()
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      redrawCanvas()
-    }
-    checkIfHasDrawn()
-    setTimeout(() => playSound('redo'), 10)
+    redo(
+      () => {
+        selectTool.clearSelection()
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        redrawCanvas()
+        checkIfHasDrawn()
+        playSound('redo')
+      },
+      updateUndoRedoButtons
+    )
   }
-  updateUndoRedoButtons()
 }
 
 function checkIfHasDrawn() {
@@ -674,536 +402,12 @@ function checkIfHasDrawn() {
   state.hasDrawn = false
 }
 
-saveState()
+saveState(updateUndoRedoButtons)
 
-function getCanvasCoordinates(e) {
-  const rect = canvas.getBoundingClientRect()
-  return {
-    x: (e.clientX || e.touches?.[0]?.clientX) - rect.left,
-    y: (e.clientY || e.touches?.[0]?.clientY) - rect.top
-  }
-}
+const { copySelectedElements, pasteElements } = require('./tools/clipboardTool.js')
 
-function startDrawing(e) {
-  if (!state.enabled || state.standbyMode) return
-
-  e.preventDefault()
-  
-  const textInput = document.getElementById('text-input')
-  if (textInput && textInput.style.display === 'block') {
-    textTool.finishTextInput()
-  }
-  
-  if (state.tool === 'select') {
-    const coords = getCanvasCoordinates(e)
-    if (selectTool.handleSelectStart(e, coords)) {
-      return
-    }
-  }
-  
-  if (state.tool === 'text') {
-    const coords = getCanvasCoordinates(e)
-    textTool.startTextInput(coords.x, coords.y)
-    return
-  }
-  
-  if (state.tool === 'shapes') {
-    const coords = getCanvasCoordinates(e)
-    state.shapeStart = coords
-    state.drawing = true
-    createPreviewCanvas()
-    return
-  }
-  
-  const coords = getCanvasCoordinates(e)
-  state.drawing = true
-  lastX = coords.x
-  lastY = coords.y
-  
-  if (state.tool === 'pencil' || state.tool === 'marker') {
-    currentStroke = {
-      type: 'stroke',
-      tool: state.tool,
-      color: state.color,
-      strokeSize: state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize,
-      alpha: 1.0,
-      compositeOperation: 'source-over',
-      points: [{ x: coords.x, y: coords.y }]
-    }
-    currentStrokePoints = [{ x: coords.x, y: coords.y }]
-  }
-  
-  if (state.tool === 'eraser') {
-    ctx.globalCompositeOperation = 'destination-out'
-    ctx.beginPath()
-    ctx.moveTo(coords.x, coords.y)
-  } else {
-    ctx.globalCompositeOperation = 'source-over'
-    ctx.beginPath()
-    ctx.moveTo(coords.x, coords.y)
-  }
-}
-
-let isDrawing = false
-let drawFrame = null
-
-function constrainToStraightLine(startX, startY, endX, endY) {
-  const dx = Math.abs(endX - startX)
-  const dy = Math.abs(endY - startY)
-  if (dx < 5 && dy < 5) return { x: endX, y: endY }
-  
-  const ratio = dx > dy ? dy / dx : dx / dy
-  if (ratio > 0.414) {
-    const len = Math.max(dx, dy)
-    return { x: startX + Math.sign(endX - startX) * len, y: startY + Math.sign(endY - startY) * len }
-  }
-  return dx > dy ? { x: endX, y: startY } : { x: startX, y: endY }
-}
-
-function draw(e) {
-  if (!state.enabled || state.standbyMode) return
-  
-  let coords = getCanvasCoordinates(e)
-  
-  if (state.tool === 'select') {
-    const cursor = selectTool.getCursorForSelect(coords)
-    if (cursor) canvas.style.cursor = cursor
-    
-    if (selectTool.handleSelectDraw(coords)) {
-      return
-    }
-  }
-  
-  if (!state.drawing) return
-  
-  if (state.tool === 'shapes') {
-    if (e.shiftKey && state.shapeStart) {
-      const isSquare = state.shapeType === 'rectangle' || state.shapeType === 'circle'
-      if (isSquare) {
-        const size = Math.max(Math.abs(coords.x - state.shapeStart.x), Math.abs(coords.y - state.shapeStart.y))
-        state.shapeEnd = { x: state.shapeStart.x + Math.sign(coords.x - state.shapeStart.x) * size, y: state.shapeStart.y + Math.sign(coords.y - state.shapeStart.y) * size }
-      } else {
-        state.shapeEnd = constrainToStraightLine(state.shapeStart.x, state.shapeStart.y, coords.x, coords.y)
-      }
-    } else {
-      state.shapeEnd = coords
-    }
-    if (drawFrame) cancelAnimationFrame(drawFrame)
-    drawFrame = requestAnimationFrame(() => drawShapePreview())
-    return
-  }
-  
-
-  if (!isDrawing) {
-    isDrawing = true
-    drawFrame = requestAnimationFrame(() => {
-      if (state.tool === 'pencil' || state.tool === 'marker') {
-        currentStrokePoints.push({ x: coords.x, y: coords.y })
-        
-        createPreviewCanvas()
-        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
-        previewCtx.strokeStyle = state.color
-        previewCtx.lineWidth = state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize
-        previewCtx.globalAlpha = 1.0
-        previewCtx.lineCap = 'round'
-        previewCtx.lineJoin = 'round'
-        previewCtx.beginPath()
-        if (currentStrokePoints.length > 0) {
-          previewCtx.moveTo(currentStrokePoints[0].x, currentStrokePoints[0].y)
-          for (let i = 1; i < currentStrokePoints.length; i++) {
-            previewCtx.lineTo(currentStrokePoints[i].x, currentStrokePoints[i].y)
-          }
-          previewCtx.stroke()
-        }
-      } else if (state.tool === 'eraser') {
-        ctx.globalCompositeOperation = 'destination-out'
-        ctx.lineWidth = state.strokeSize * 2
-        ctx.globalAlpha = 1.0
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-        ctx.beginPath()
-        ctx.moveTo(lastX, lastY)
-        ctx.lineTo(coords.x, coords.y)
-        ctx.stroke()
-        ctx.globalCompositeOperation = 'source-over'
-      }
-      
-      lastX = coords.x
-      lastY = coords.y
-      state.hasDrawn = true
-      isDrawing = false
-    })
-  }
-}
-
-function stopDrawing() {
-  if (state.tool === 'select') {
-    selectTool.handleSelectStop()
-    state.shapeStart = null
-    state.shapeEnd = null
-    return
-  }
-  
-  if (state.drawing) {
-    if (drawFrame) {
-      cancelAnimationFrame(drawFrame)
-      drawFrame = null
-    }
-    isDrawing = false
-
-    if (state.tool === 'eraser') {
-      ctx.globalCompositeOperation = 'source-over'
-    }
-    
-    if (state.tool === 'shapes' && state.shapeStart && state.shapeEnd) {
-      const canFill = state.shapeType === 'rectangle' || state.shapeType === 'circle'
-      createElement('shape', {
-        shapeType: state.shapeType,
-        start: { ...state.shapeStart },
-        end: { ...state.shapeEnd },
-        color: state.color,
-        strokeSize: state.strokeSize,
-        filled: canFill && state.shapeFillEnabled
-      })
-      clearPreview()
-      redrawCanvas()
-      saveState()
-      state.hasDrawn = true
-    } else if (state.tool === 'pencil' || state.tool === 'marker') {
-      if (currentStroke && currentStrokePoints.length > 1) {
-        currentStroke.points = [...currentStrokePoints]
-        createElement('stroke', currentStroke)
-        clearPreview()
-        redrawCanvas()
-        saveState()
-        state.hasDrawn = true
-      } else {
-        clearPreview()
-      }
-      currentStroke = null
-      currentStrokePoints = []
-    } else if (state.tool !== 'text') {
-      saveState()
-    }
-    state.drawing = false
-    state.shapeStart = null
-    state.shapeEnd = null
-  }
-}
-
-function drawShapePreview() {
-  if (!previewCtx || !state.shapeStart || !state.shapeEnd) return
-  
-  previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
-  previewCtx.strokeStyle = state.color
-  previewCtx.fillStyle = state.color
-  previewCtx.lineWidth = state.strokeSize
-  previewCtx.globalAlpha = 0.7
-  
-  const x = Math.min(state.shapeStart.x, state.shapeEnd.x)
-  const y = Math.min(state.shapeStart.y, state.shapeEnd.y)
-  const w = Math.abs(state.shapeEnd.x - state.shapeStart.x)
-  const h = Math.abs(state.shapeEnd.y - state.shapeStart.y)
-  
-  const canFill = state.shapeType === 'rectangle' || state.shapeType === 'circle'
-  const shouldFill = canFill && state.shapeFillEnabled
-  
-  if (state.shapeType === 'rectangle') {
-    if (shouldFill) {
-      previewCtx.fillRect(x, y, w, h)
-    } else {
-      previewCtx.strokeRect(x, y, w, h)
-    }
-  } else if (state.shapeType === 'circle') {
-    const centerX = (state.shapeStart.x + state.shapeEnd.x) / 2
-    const centerY = (state.shapeStart.y + state.shapeEnd.y) / 2
-    const radius = Math.sqrt(w * w + h * h) / 2
-    previewCtx.beginPath()
-    previewCtx.arc(centerX, centerY, radius, 0, Math.PI * 2)
-    if (shouldFill) {
-      previewCtx.fill()
-    } else {
-      previewCtx.stroke()
-    }
-  } else if (state.shapeType === 'line') {
-    previewCtx.beginPath()
-    previewCtx.moveTo(state.shapeStart.x, state.shapeStart.y)
-    previewCtx.lineTo(state.shapeEnd.x, state.shapeEnd.y)
-    previewCtx.stroke()
-  } else if (state.shapeType === 'arrow') {
-    drawArrow(previewCtx, state.shapeStart.x, state.shapeStart.y, state.shapeEnd.x, state.shapeEnd.y)
-  }
-}
-
-function drawArrow(ctx, x1, y1, x2, y2) {
-  const headlen = 15
-  const angle = Math.atan2(y2 - y1, x2 - x1)
-  
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
-  ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6))
-  ctx.moveTo(x2, y2)
-  ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6))
-  ctx.stroke()
-}
-
-
-function clearPreview() {
-  if (previewCtx) {
-    previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
-  }
-}
-
-function copySelectedElements() {
-  if (state.selectedElements.length === 0) return
-  
-  const elementsToCopy = state.elements.filter(e => state.selectedElements.includes(e.id))
-  if (elementsToCopy.length > 0) {
-    state.copiedElements = JSON.parse(JSON.stringify(elementsToCopy))
-    playSound('copy')
-  }
-}
-
-const DUPLICATE_WARNING_THRESHOLD = 10
-
-async function pasteElements() {
-  if (!state.copiedElements || state.copiedElements.length === 0) return
-  
-  if (state.copiedElements.length >= DUPLICATE_WARNING_THRESHOLD) {
-    const confirmed = await ipcRenderer.invoke('show-duplicate-warning', state.copiedElements.length)
-    if (!confirmed) return
-  }
-  
-  const offsetX = 50
-  const offsetY = 50
-  
-  state.selectedElements = []
-  
-  state.copiedElements.forEach(copiedElement => {
-    const newElement = JSON.parse(JSON.stringify(copiedElement))
-    newElement.id = state.nextElementId++
-    
-    if (newElement.type === 'stroke' && newElement.points) {
-      newElement.points.forEach(p => {
-        p.x += offsetX
-        p.y += offsetY
-      })
-    } else if (newElement.type === 'shape') {
-      newElement.start.x += offsetX
-      newElement.start.y += offsetY
-      newElement.end.x += offsetX
-      newElement.end.y += offsetY
-    } else if (newElement.type === 'text') {
-      newElement.x += offsetX
-      newElement.y += offsetY
-    }
-    
-    state.elements.push(newElement)
-    state.selectedElements.push(newElement.id)
-  })
-  
-  redrawCanvas()
-  saveState()
-  playSound('paste')
-}
-
-canvas.addEventListener('mousedown', startDrawing)
-canvas.addEventListener('mousemove', draw)
-canvas.addEventListener('mouseup', stopDrawing)
-canvas.addEventListener('mouseout', stopDrawing)
-
-function handleDoubleClick(e) {
-  if (state.tool !== 'select') return
-  
-  const coords = getCanvasCoordinates(e)
-  const clickedElement = findElementAt(coords.x, coords.y)
-  
-  if (clickedElement && clickedElement.type === 'text') {
-    if (!state.selectedElements.includes(clickedElement.id)) {
-      selectTool.clearSelection()
-      selectTool.selectElement(clickedElement.id)
-    }
-    
-    textTool.editTextElement(clickedElement)
-  }
-}
-
-canvas.addEventListener('dblclick', handleDoubleClick)
-
-
-canvas.addEventListener('touchstart', (e) => {
-  e.preventDefault()
-  startDrawing(e)
-})
-canvas.addEventListener('touchmove', (e) => {
-  e.preventDefault()
-  draw(e)
-})
-canvas.addEventListener('touchend', (e) => {
-  e.preventDefault()
-  stopDrawing()
-})
-
-const textInput = document.getElementById('text-input')
-let textInputFinished = false
-
-textInput.addEventListener('blur', () => {
-  
-  if (!textInputFinished) {
-    setTimeout(() => {
-      textTool.finishTextInput()
-      textInputFinished = false
-    }, 100)
-  }
-})
-
-textInput.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-    if (e.key.toLowerCase() === 'b') {
-      e.preventDefault()
-      e.stopPropagation()
-      document.execCommand('bold', false, null)
-      textTool.updateTextFormatting()
-      return
-    } else if (e.key.toLowerCase() === 'i') {
-      e.preventDefault()
-      e.stopPropagation()
-      document.execCommand('italic', false, null)
-      textTool.updateTextFormatting()
-      return
-    } else if (e.key.toLowerCase() === 'u') {
-      e.preventDefault()
-      e.stopPropagation()
-      document.execCommand('underline', false, null)
-      textTool.updateTextFormatting()
-      return
-    }
-  }
-  
-  if (e.key === 'Enter') {
-    if (e.shiftKey) return
-    e.preventDefault()
-    e.stopPropagation()
-    textInputFinished = true
-    textTool.finishTextInput()
-  } else if (e.key === 'Escape') {
-    e.preventDefault()
-    e.stopPropagation()
-    textInput.style.display = 'none'
-    state.textInput = null
-    textInputFinished = false
-  }
-})
-
-textInput.addEventListener('input', () => {
-  if (state.editingElementId) {
-    updateSelectionOverlay()
-  }
-})
-
-function setTool(tool) {
-  state.tool = tool
-
-  if (tool !== 'text' && tool !== 'select') {
-    const textInput = document.getElementById('text-input')
-    if (textInput && textInput.style.display === 'block') {
-      textTool.finishTextInput()
-    }
-  }
-  
-  if (tool !== 'select') {
-    selectTool.clearSelection()
-  }
-  
-  if (tool !== 'shapes') {
-    state.shapeStart = null
-    state.shapeEnd = null
-    state.drawing = false
-  }
-  
-  document.querySelectorAll('[data-tool]').forEach(btn => {
-    btn.classList.remove('active')
-  })
-  document.querySelector(`[data-tool="${tool}"]`)?.classList.add('active')
-  
-  updateShapeFillToggleState()
-
-  document.querySelectorAll('.drawing-tool-option').forEach(btn => {
-    btn.classList.remove('active')
-    if (btn.dataset.tool === tool) {
-      btn.classList.add('active')
-      
-      const icon = pencilBtn?.querySelector('.material-symbols-outlined')
-      if (icon) {
-        if (tool === 'select') {
-          icon.textContent = 'arrow_selector_tool'
-        } else if (tool === 'pencil') {
-          icon.textContent = 'edit'
-        } else if (tool === 'marker') {
-          icon.textContent = 'brush'
-        }
-      }
-    }
-  })
-
-  if (tool === 'select' || tool === 'pencil' || tool === 'marker') {
-    if (pencilBtn) {
-      pencilBtn.classList.add('active')
-    }
-  }
-  
-  if (tool === 'shapes') {
-    const shapesBtn = document.getElementById('shapes-btn')
-    if (shapesBtn) {
-      shapesBtn.classList.add('active')
-    }
-  }
-  
-  if (tool === 'select') {
-  }
-  
-  updateCursor()
-}
-
-function updateCursor() {
-  const tool = state.tool
-  
-  if (state.drawing || state.isDraggingSelection || state.isResizing || state.isSelecting) {
-    return
-  }
-  
-  if (tool === 'pencil') {
-    const pencilCursor = 'data:image/svg+xml;base64,' + btoa(`
-      <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
-        <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-128l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z"/>
-      </svg>
-    `)
-    canvas.style.cursor = `url("${pencilCursor}") 2 22, auto`
-  } else if (tool === 'marker') {
-    const markerCursor = 'data:image/svg+xml;base64,' + btoa(`
-      <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
-        <path d="M240-120q-45 0-89-22t-71-58q26 0 53-20.5t27-59.5q0-50 35-85t85-35q50 0 85 35t35 85q0 66-47 113t-113 47Zm0-80q33 0 56.5-23.5T320-280q0-17-11.5-28.5T280-320q-17 0-28.5 11.5T240-280q0 23-5.5 42T220-202q5 2 10 2h10Zm230-160L360-470l358-358q11-11 27.5-11.5T774-828l54 54q12 12 12 28t-12 28L470-360Zm-190 80Z"/>
-      </svg>
-    `)
-    canvas.style.cursor = `url("${markerCursor}") 2 22, auto`
-  } else if (tool === 'eraser') {
-    const eraseCursor = 'data:image/svg+xml;base64,' + btoa(`
-      <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
-        <path d="M690-240h190v80H610l80-80Zm-500 80-85-85q-23-23-23.5-57t22.5-58l440-456q23-24 56.5-24t56.5 23l199 199q23 23 23 57t-23 57L520-160H190Zm296-80 314-322-198-198-442 456 64 64h262Zm-6-240Z"/>
-      </svg>
-    `)
-    canvas.style.cursor = `url("${eraseCursor}") 12 12, auto`
-  } else if (tool === 'text') {
-    canvas.style.cursor = 'text'
-  } else if (tool === 'select') {
-    canvas.style.cursor = 'default'
-  } else {
-    canvas.style.cursor = 'crosshair'
-  }
-}
-
-window.addEventListener('focus', updateCursor)
+const handleCopy = () => copySelectedElements(state, playSound)
+const handlePaste = () => pasteElements(state, redrawCanvas, saveState, playSound)
 
 const drawingToolsPopup = document.getElementById('drawing-tools-popup')
 const pencilBtn = document.getElementById('pencil-btn')
@@ -1259,8 +463,6 @@ document.getElementById('text-btn').addEventListener('click', () => {
   }
 })
 document.getElementById('eraser-btn').addEventListener('click', () => setTool('eraser'))
-
-
 
 const shapesBtn = document.getElementById('shapes-btn')
 const shapesPopup = document.getElementById('shapes-popup')
@@ -1471,283 +673,13 @@ document.querySelectorAll('.stroke-option').forEach(btn => {
 
 setStrokeSize(2)
 
-function isLightColor(color) {
-  
-  const hex = color.replace('#', '')
-  const r = parseInt(hex.substr(0, 2), 16)
-  const g = parseInt(hex.substr(2, 2), 16)
-  const b = parseInt(hex.substr(4, 2), 16)
-
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  return luminance > 0.5
-}
-
-function updateCustomColorButton(color) {
-  const customBtn = document.getElementById('custom-color-btn')
-  if (customBtn && color) {
-    
-    document.documentElement.style.setProperty('--custom-color-bg', color)
-
-    customBtn.removeAttribute('style')
-
-    customBtn.style.setProperty('background-color', color, 'important')
-    customBtn.style.setProperty('background', color, 'important')
-    customBtn.style.backgroundColor = color
-    customBtn.style.background = color
-
-    customBtn.setAttribute('data-custom-color', color)
-
-    const icon = customBtn.querySelector('.material-symbols-outlined')
-    if (icon) {
-      const theme = document.body.getAttribute('data-theme') || 'dark'
-      
-      let iconColor
-      if (theme === 'light') {
-        iconColor = isLightColor(color) ? '#000000' : '#ffffff'
-      } else {
-        
-        iconColor = isLightColor(color) ? '#000000' : '#ffffff'
-      }
-      icon.style.color = iconColor
-      icon.style.setProperty('color', iconColor, 'important')
-    }
-
-    void customBtn.offsetWidth
-  }
-}
-
-let isCustomColorActive = false
-let customColorValue = null
-
-function setColor(color, isCustom = false) {
-  state.color = color
-
-  if (state.tool === 'select' && state.selectedElements.length > 0) {
-    selectTool.updateSelectedColor(color)
-  }
-
-  document.documentElement.style.setProperty('--selected-color', color)
-  
-  const r = parseInt(color.substr(1, 2), 16)
-  const g = parseInt(color.substr(3, 2), 16)
-  const b = parseInt(color.substr(5, 2), 16)
-  const shadowColor = `rgba(${r}, ${g}, ${b}, 0.3)`
-  document.documentElement.style.setProperty('--selected-color-shadow', shadowColor)
-  
-  document.querySelectorAll('.color-swatch').forEach(swatch => {
-    swatch.classList.remove('active')
-  })
-
-  document.querySelectorAll('.color-option').forEach(option => {
-    option.classList.remove('active')
-  })
-
-  const presetSwatch = document.querySelector(`.color-swatch[data-color="${color}"]`)
-  const presetOption = document.querySelector(`.color-option[data-color="${color}"]`)
-  
-  if ((presetSwatch || presetOption) && !isCustom) {
-    
-    if (presetSwatch) {
-      presetSwatch.classList.add('active')
-      presetSwatch.style.setProperty('border-color', color, 'important')
-    }
-    if (presetOption) {
-      presetOption.classList.add('active')
-      presetOption.style.setProperty('border-color', color, 'important')
-    }
-    isCustomColorActive = false
-    customColorValue = null
-    
-    if (presetOption) {
-      localStorage.setItem('last-preset-color', color)
-      
-      localStorage.setItem('custom-color', color)
-      localStorage.setItem('is-custom-color-active', 'false')
-      updateCustomColorButton(color)
-    }
-    
-  } else {
-    isCustomColorActive = true
-    customColorValue = color
-    localStorage.setItem('custom-color', color)
-    localStorage.setItem('is-custom-color-active', 'true')
-    const customBtn = document.getElementById('custom-color-btn')
-    if (customBtn) {
-      customBtn.classList.add('active')
-      updateCustomColorButton(color)
-    }
-  }
-}
-
-const savedCustomColor = localStorage.getItem('custom-color')
-const isCustomActive = localStorage.getItem('is-custom-color-active') === 'true'
-
-if (savedCustomColor && isCustomActive) {
-  isCustomColorActive = true
-  customColorValue = savedCustomColor
-  state.color = savedCustomColor
-  updateCustomColorButton(savedCustomColor)
-  const customBtn = document.getElementById('custom-color-btn')
-  if (customBtn) {
-    customBtn.classList.add('active')
-  }
-  setColor(savedCustomColor, true)
-} else {
-  
-  const initialColor = state.color
-  const isPreset = document.querySelector(`.color-swatch[data-color="${initialColor}"]`) !== null || 
-                   document.querySelector(`.color-option[data-color="${initialColor}"]`) !== null
-  if (!isPreset) {
-    isCustomColorActive = true
-    customColorValue = initialColor
-    updateCustomColorButton(initialColor)
-  }
-}
-
-document.querySelectorAll('.color-swatch[data-color]').forEach(swatch => {
-  swatch.addEventListener('click', () => {
-    playSound('color')
-    setColor(swatch.dataset.color, false) 
-  })
-})
-
-function setInitialColorBorder() {
-  const initialColor = state.color
-  const activeSwatch = document.querySelector(`.color-swatch[data-color="${initialColor}"]`)
-  if (activeSwatch && !activeSwatch.classList.contains('custom-color')) {
-    activeSwatch.classList.add('active')
-    activeSwatch.style.setProperty('border-color', initialColor, 'important')
-    
-    document.documentElement.style.setProperty('--selected-color', initialColor)
-    const r = parseInt(initialColor.substr(1, 2), 16)
-    const g = parseInt(initialColor.substr(3, 2), 16)
-    const b = parseInt(initialColor.substr(5, 2), 16)
-    const shadowColor = `rgba(${r}, ${g}, ${b}, 0.3)`
-    document.documentElement.style.setProperty('--selected-color-shadow', shadowColor)
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setInitialColorBorder)
-} else {
-  setInitialColorBorder()
-}
-
-function initColorPicker() {
-  const colorPickerInput = document.getElementById('color-picker-input')
-  if (!colorPickerInput) {
-    setTimeout(initColorPicker, 100)
-    return
-  }
-
-  const colorToShow = (isCustomColorActive && customColorValue) ? customColorValue : state.color
-  colorPickerInput.value = colorToShow
-
-  colorPickerInput.addEventListener('change', (e) => {
-    const hexColor = e.target.value
-    localStorage.setItem('custom-color', hexColor)
-    localStorage.setItem('is-custom-color-active', 'true')
-    updateCustomColorButton(hexColor)
-    setTimeout(() => updateCustomColorButton(hexColor), 10)
-    setColor(hexColor, true)
-    setTimeout(() => updateCustomColorButton(hexColor), 50)
-    
-    playSound('color')
-
-    const accentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
-    const isLight = isLightColor(accentColor)
-    const textColor = isLight ? '#000000' : '#ffffff'
-    document.documentElement.style.setProperty('--picker-btn-text-color', textColor)
-    const pickerBtn = document.getElementById('open-color-picker-btn')
-    if (pickerBtn) {
-      pickerBtn.style.color = textColor
-    }
-  })
-
-  const customColorBtn = document.getElementById('custom-color-btn')
-  const customColorPopup = document.getElementById('custom-color-popup')
-  const openColorPickerBtn = document.getElementById('open-color-picker-btn')
-  
-  if (customColorBtn && customColorPopup) {
-    customColorBtn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      e.preventDefault()
-      hideAllTooltips()
-      
-      const wasOpen = customColorPopup.classList.contains('show')
-      closeAllPopups()
-      if (!wasOpen) {
-        customColorPopup.classList.add('show')
-      }
-    })
-
-    if (openColorPickerBtn) {
-      openColorPickerBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        e.preventDefault()
-        
-        customColorPopup.classList.remove('show')
-        
-        const colorToShow = (isCustomColorActive && customColorValue) ? customColorValue : state.color
-        colorPickerInput.value = colorToShow
-        
-        colorPickerInput.click()
-      })
-    }
-  }
-
-  setTimeout(() => {
-    document.querySelectorAll('.color-option').forEach(option => {
-      const color = option.dataset.color
-
-      if (color) {
-        option.addEventListener('mouseenter', () => {
-          option.style.setProperty('border-color', color, 'important')
-        })
-        
-        option.addEventListener('mouseleave', () => {
-          if (!option.classList.contains('active')) {
-            option.style.removeProperty('border-color')
-          }
-        })
-      }
-      
-      option.addEventListener('click', (e) => {
-        e.stopPropagation()
-        if (color) {
-          playSound('color')
-          setColor(color, false) 
-          
-          localStorage.setItem('last-preset-color', color)
-          localStorage.setItem('custom-color', color)
-          localStorage.setItem('is-custom-color-active', 'false')
-          
-          updateCustomColorButton(color)
-          
-          if (customColorPopup) {
-            customColorPopup.classList.remove('show')
-          }
-        }
-      })
-    })
-  }, 100)
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(initColorPicker, 200) 
-  })
-} else {
-  setTimeout(initColorPicker, 200)
-}
-
 function clearCanvas() {
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   state.elements = []
   state.selectedElements = []
   state.nextElementId = 1
   state.hasDrawn = false
-  saveState()
+  saveState(updateUndoRedoButtons)
   updateUndoRedoButtons()
   redrawCanvas()
   
@@ -1761,8 +693,8 @@ document.getElementById('clear-btn').addEventListener('click', (e) => {
   clearCanvas()
 })
 
-document.getElementById('undo-btn').addEventListener('click', undo)
-document.getElementById('redo-btn').addEventListener('click', redo)
+document.getElementById('undo-btn').addEventListener('click', handleUndo)
+document.getElementById('redo-btn').addEventListener('click', handleRedo)
 
 updateUndoRedoButtons()
 
@@ -1782,8 +714,11 @@ if (mainToolbar) {
   
   toolbarPositionManager.setLayout(savedLayout)
   
-  mainToolbar.addEventListener('mousedown', () => {
+  mainToolbar.addEventListener('mousedown', (e) => {
     ipcRenderer.send('focus-window')
+    if (state.tool === 'text' && !e.target.closest('#text-input')) {
+      e.preventDefault()
+    }
   })
 }
 
@@ -1857,7 +792,7 @@ function checkSettingsBadge() {
   if (autoSaveEnabled && saveDirectory) {
     ipcRenderer.invoke('check-directory-exists', saveDirectory).then(exists => {
       updateSettingsBadge(!exists)
-    })
+    }).catch(err => console.error('Failed to check directory:', err))
   } else {
     updateSettingsBadge(false)
   }
@@ -1878,7 +813,7 @@ setInterval(() => {
   if (autoSaveEnabled && saveDirectory) {
     ipcRenderer.invoke('check-directory-exists', saveDirectory).then(exists => {
       updateSettingsBadge(!exists)
-    })
+    }).catch(err => console.error('Failed to check directory:', err))
   }
 }, 5000)
 
@@ -1949,14 +884,14 @@ function initMoreMenu() {
   
   if (moreUndoBtn) {
     moreUndoBtn.addEventListener('click', () => {
-      undo()
+      handleUndo()
       moreMenuDropdown.classList.remove('show')
     })
   }
   
   if (moreRedoBtn) {
     moreRedoBtn.addEventListener('click', () => {
-      redo()
+      handleRedo()
       moreMenuDropdown.classList.remove('show')
     })
   }
@@ -2052,32 +987,36 @@ ipcRenderer.on('hardware-acceleration-changed', (event, enabled) => {
     canvas.style.willChange = 'contents'
     canvas.style.transform = 'translateZ(0)'
     canvas.style.backfaceVisibility = 'hidden'
-    if (previewCanvas) {
-      previewCanvas.style.willChange = 'contents'
-      previewCanvas.style.transform = 'translateZ(0)'
-      previewCanvas.style.backfaceVisibility = 'hidden'
+    const pCanvas = CanvasManager.getPreviewCanvas()
+    if (pCanvas) {
+      pCanvas.style.willChange = 'contents'
+      pCanvas.style.transform = 'translateZ(0)'
+      pCanvas.style.backfaceVisibility = 'hidden'
     }
-    if (selectionCanvas) {
-      selectionCanvas.style.willChange = 'contents'
-      selectionCanvas.style.transform = 'translateZ(0)'
-      selectionCanvas.style.backfaceVisibility = 'hidden'
+    const sCanvas = CanvasManager.getSelectionCanvas()
+    if (sCanvas) {
+      sCanvas.style.willChange = 'contents'
+      sCanvas.style.transform = 'translateZ(0)'
+      sCanvas.style.backfaceVisibility = 'hidden'
     }
   } else {
     canvas.style.willChange = ''
     canvas.style.transform = ''
     canvas.style.backfaceVisibility = ''
-    if (previewCanvas) {
-      previewCanvas.style.willChange = ''
-      previewCanvas.style.transform = ''
-      previewCanvas.style.backfaceVisibility = ''
+    const pCanvas = CanvasManager.getPreviewCanvas()
+    if (pCanvas) {
+      pCanvas.style.willChange = ''
+      pCanvas.style.transform = ''
+      pCanvas.style.backfaceVisibility = ''
     }
-    if (selectionCanvas) {
-      selectionCanvas.style.willChange = ''
-      selectionCanvas.style.transform = ''
-      selectionCanvas.style.backfaceVisibility = ''
+    const sCanvas = CanvasManager.getSelectionCanvas()
+    if (sCanvas) {
+      sCanvas.style.willChange = ''
+      sCanvas.style.transform = ''
+      sCanvas.style.backfaceVisibility = ''
     }
   }
-})
+});
 
 ipcRenderer.on('accent-color-changed', (event, color) => {
   updateAccentColor(color)
@@ -2129,9 +1068,10 @@ initThemeManager()
 
 function updateAccentColor(color) {
   document.documentElement.style.setProperty('--accent-color', color)
-  const r = parseInt(color.substr(1, 2), 16)
-  const g = parseInt(color.substr(3, 2), 16)
-  const b = parseInt(color.substr(5, 2), 16)
+  const r = parseInt(color.slice(1, 3), 16)
+  const g = parseInt(color.slice(3, 5), 16)
+  const b = parseInt(color.slice(5, 7), 16)
+  document.documentElement.style.setProperty('--accent-color-rgb', `${r}, ${g}, ${b}`)
   
   const hoverR = Math.max(0, r - 30)
   const hoverG = Math.max(0, g - 30)
@@ -2176,8 +1116,8 @@ const standbyManager = initStandbyManager({
 window.commandMenu = initCommandMenu({
   setTool,
   setShape,
-  undo,
-  redo,
+  undo: handleUndo,
+  redo: handleRedo,
   clearCanvas,
   standbyManager,
   triggerCapture,
@@ -2191,11 +1131,11 @@ initShortcutManager({
   standbyManager,
   selectTool,
   setTool,
-  undo,
-  redo,
+  undo: handleUndo,
+  redo: handleRedo,
   clearCanvas,
-  copySelectedElements,
-  pasteElements,
+  copySelectedElements: handleCopy,
+  pasteElements: handlePaste,
   toggleCommandMenu: () => commandMenu.toggleCommandMenu(),
   closeCommandMenu: () => commandMenu.closeCommandMenu(),
   setColor,
@@ -2213,11 +1153,13 @@ if (hideBtn) {
     canvas.style.opacity = canvasVisible ? '1' : '0'
     canvas.style.pointerEvents = canvasVisible ? 'auto' : 'none'
     
-    if (selectionCanvas) {
-      selectionCanvas.style.opacity = canvasVisible ? '1' : '0'
+    const sCanvas = CanvasManager.getSelectionCanvas()
+    if (sCanvas) {
+      sCanvas.style.opacity = canvasVisible ? '1' : '0'
     }
-    if (previewCanvas) {
-      previewCanvas.style.opacity = canvasVisible ? '1' : '0'
+    const pCanvas = CanvasManager.getPreviewCanvas()
+    if (pCanvas) {
+      pCanvas.style.opacity = canvasVisible ? '1' : '0'
     }
 
     const icon = document.querySelector('#hide-btn .material-symbols-outlined')
@@ -2225,8 +1167,8 @@ if (hideBtn) {
     if (icon) icon.textContent = canvasVisible ? 'visibility_off' : 'visibility'
     if (moreIcon) moreIcon.textContent = canvasVisible ? 'visibility_off' : 'visibility'
     
-    const soundType = canvasVisible ? 'visibilityOff' : 'visibilityOn'
-    setTimeout(() => playSound(soundType), 10)
+    const soundType = canvasVisible ? 'visibilityOn' : 'visibilityOff'
+    playSound(soundType)
   })
 }
 
@@ -2235,6 +1177,11 @@ let standbyWasActive = false
 let commandMenuWasVisible = false
 
 function restoreCaptureState() {
+  const toolbar = document.getElementById('main-toolbar')
+  if (toolbar && toolbarWasVisible) {
+    toolbar.style.display = ''
+  }
+
   if (standbyWasActive) {
     standbyManager.resume()
   }
@@ -2246,6 +1193,8 @@ function restoreCaptureState() {
 
   state.enabled = true
   canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
+  
+  toolbarWasVisible = false
   standbyWasActive = false
 }
 
@@ -2286,12 +1235,9 @@ document.getElementById('capture-btn').addEventListener('click', triggerCapture)
 
 ipcRenderer.on('trigger-capture', triggerCapture)
 
-ipcRenderer.on('capture-cancelled', () => {
-  restoreCaptureState()
-})
+ipcRenderer.on('capture-cancelled', restoreCaptureState)
 
 ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
-  const toolbar = document.getElementById('main-toolbar')
   
   if (!desktopDataURL || !bounds) {
     alert('Failed to capture selection. Please try again.')
@@ -2336,37 +1282,22 @@ ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
         ipcRenderer.send('save-screenshot', dataURL, `annotation-${Date.now()}.png`)
       }
       annotationImage.onerror = () => {
-        toolbarWasVisible = false
+        restoreCaptureState()
       }
       annotationImage.src = annotationImg
     } catch (error) {
       await ipcRenderer.invoke('show-error-dialog', 'Processing Error', 'Error processing capture', error.message)
-      toolbarWasVisible = false
+      restoreCaptureState()
     }
   }
   desktopImg.onerror = () => {
     alert('Failed to load desktop screenshot. Please try again.')
-    toolbarWasVisible = false
+    restoreCaptureState()
   }
   desktopImg.src = desktopDataURL
 })
 
-ipcRenderer.on('capture-cancelled', () => {
-  const toolbar = document.getElementById('main-toolbar')
-  if (toolbar && toolbarWasVisible) {
-    toolbar.style.display = ''
-  }
-  if (standbyWasActive) {
-    standbyManager.resume()
-  }
-  toolbarWasVisible = false
-  state.enabled = true
-  canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
-  standbyWasActive = false
-})
-
 ipcRenderer.on('screenshot-saved', () => {
-  toolbarWasVisible = false
 })
 
 ipcRenderer.on('close-toolbar-on-esc', () => {
@@ -2391,7 +1322,10 @@ if (closeBtn) {
 ipcRenderer.on('clear', clearCanvas)
 ipcRenderer.on('draw-mode', (_, enabled) => {
   if (enabled) {
-    setTimeout(() => playSound('pop'), 200)
+    initAudioContext()
+    setTimeout(() => {
+      playSound('pop')
+    }, 50)
   }
   state.enabled = enabled
   canvas.style.pointerEvents = enabled ? 'auto' : 'none'

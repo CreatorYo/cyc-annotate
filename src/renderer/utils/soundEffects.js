@@ -1,137 +1,45 @@
 let ctx = null
 let masterGain = null
-let queue = []
+const bufferCache = new Map()
 let isResuming = false
+let resumePromise = null
 
 function init() {
-  if (ctx) return ctx
+  if (ctx && ctx.state !== 'closed') return ctx
   try {
     ctx = new (window.AudioContext || window.webkitAudioContext)()
     masterGain = ctx.createGain()
     masterGain.gain.value = 1.0
     masterGain.connect(ctx.destination)
-    ctx.onstatechange = processQueue
-    
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {})
+    bufferCache.clear()
+    ctx.onstatechange = () => {
+      if (ctx && ctx.state === 'suspended' && !isResuming) ensureRunning()
     }
   } catch (e) {
+    console.error('SoundEffects: Fatal error initializing AudioContext', e)
     ctx = null
   }
   return ctx
 }
 
-function resume() {
-  if (!ctx || isResuming) return
-  if (ctx.state === 'running') {
-    processQueue()
-    return
-  }
+async function ensureRunning() {
+  const context = init()
+  if (!context) return false
+  if (context.state === 'running') return true
+  if (isResuming) return resumePromise
   isResuming = true
-  ctx.resume().then(() => {
-    isResuming = false
-    if (ctx && ctx.state === 'running') processQueue()
-  }).catch(() => {
-    isResuming = false
-    setTimeout(resume, 30)
-  })
-}
-
-function processQueue() {
-  if (!ctx || ctx.state !== 'running' || !masterGain) return
-  while (queue.length > 0) {
-    const fn = queue.shift()
-    try { fn() } catch (e) {}
-  }
-}
-
-function ensureReady(fn) {
-  init()
-  if (!ctx) return
-  
-  if (ctx.state === 'suspended') {
-    ctx.resume().then(() => {
-      if (ctx.state === 'running' && masterGain) {
-        try { fn() } catch (e) {}
-      } else {
-        queue.push(fn)
-      }
-    }).catch(() => {
-      queue.push(fn)
-    })
-  } else if (ctx.state === 'running' && masterGain) {
-    try { fn() } catch (e) {}
-  } else {
-    queue.push(fn)
-    resume()
-  }
-}
-
-function warmUp() {
-  init()
-  resume()
-}
-
-const events = ['click', 'keydown', 'mousedown', 'touchstart', 'pointerdown', 'focus']
-events.forEach(e => document.addEventListener(e, warmUp, { passive: true }))
-window.addEventListener('load', warmUp)
-setTimeout(warmUp, 50)
-setTimeout(warmUp, 200)
-setTimeout(warmUp, 500)
-
-function createSound(duration, volume, generator) {
-  ensureReady(() => {
-    if (!ctx || !masterGain) return
-    
-    const sr = ctx.sampleRate
-    const len = Math.max(44, Math.round(sr * duration))
-    const buf = ctx.createBuffer(1, len, sr)
-    const data = buf.getChannelData(0)
-    
-    let peak = 0
-    for (let i = 0; i < len; i++) {
-      const v = generator(i / sr)
-      data[i] = v
-      const abs = Math.abs(v)
-      if (abs > peak) peak = abs
-    }
-    
-    if (peak > 0.01) {
-      const scale = 0.95 / peak
-      for (let i = 0; i < len; i++) data[i] *= scale
-    }
-    
-    const src = ctx.createBufferSource()
-    const gain = ctx.createGain()
-    
-    src.buffer = buf
-    src.connect(gain)
-    gain.connect(masterGain)
-    
-    const now = ctx.currentTime
-    gain.gain.setValueAtTime(volume, now)
-    gain.gain.setValueAtTime(volume, now + duration * 0.8)
-    gain.gain.linearRampToValueAtTime(0.001, now + duration)
-    
+  resumePromise = (async () => {
     try {
-      src.start(now)
-      src.stop(now + duration + 0.05)
-    } catch (e) {
-      try {
-        src.start(0)
-        src.stop(duration + 0.05)
-      } catch (e2) {
-        try { gain.disconnect() } catch (e3) {}
-        try { src.disconnect() } catch (e3) {}
-        return
-      }
+      await context.resume()
+      return context.state === 'running'
+    } catch (err) {
+      return false
+    } finally {
+      isResuming = false
+      resumePromise = null
     }
-    
-    src.onended = () => {
-      try { gain.disconnect() } catch (e) {}
-      try { src.disconnect() } catch (e) {}
-    }
-  })
+  })()
+  return resumePromise
 }
 
 function sin(f, t) { return Math.sin(6.2831853 * f * t) }
@@ -211,38 +119,87 @@ const SOUNDS = {
   }]
 }
 
-function playSound(type) {
+function getBuffer(type) {
+  if (bufferCache.has(type)) return bufferCache.get(type)
+  const context = init()
+  if (!context) return null
+  const sound = SOUNDS[type]
+  if (!sound) return null
+  const [duration, , generator] = sound
+  const sr = context.sampleRate
+  const len = Math.max(44, Math.round(sr * duration))
+  const buf = context.createBuffer(1, len, sr)
+  const data = buf.getChannelData(0)
+  let peak = 0
+  for (let i = 0; i < len; i++) {
+    const v = generator(i / sr)
+    data[i] = v
+    const abs = Math.abs(v)
+    if (abs > peak) peak = abs
+  }
+  if (peak > 0.01) {
+    const scale = 0.95 / peak
+    for (let i = 0; i < len; i++) data[i] *= scale
+  }
+  bufferCache.set(type, buf)
+  return buf
+}
+
+async function playSound(type) {
+  const soundsEnabledSetting = localStorage.getItem('sounds-enabled') !== 'false'
   const el = document.getElementById('sounds-enabled')
   if (el && el.checked === false) return
-  
-  init()
-  if (ctx && ctx.state === 'suspended') {
-    ctx.resume().catch(() => {})
-  }
-  
-  const s = SOUNDS[type]
-  if (s) {
-    let attempts = 0
-    const maxAttempts = 3
+  if (!el && !soundsEnabledSetting) return
+  const sound = SOUNDS[type]
+  if (!sound) return
+
+  await ensureRunning()
+  if (!ctx || !masterGain) return
+
+  const buffer = getBuffer(type)
+  if (!buffer) return
+
+  try {
+    const source = ctx.createBufferSource()
+    const gainNode = ctx.createGain()
+    source.buffer = buffer
+    source.connect(gainNode)
+    gainNode.connect(masterGain)
+    const now = ctx.currentTime
+    const [duration, volume] = sound
     
-    const tryPlay = () => {
-      attempts++
-      try {
-        createSound(s[0], s[1], s[2])
-      } catch (e) {
-        if (attempts < maxAttempts) {
-          setTimeout(tryPlay, 50 * attempts)
-        }
-      }
+    gainNode.gain.setValueAtTime(volume, now) 
+    gainNode.gain.setValueAtTime(volume, now + duration * 0.8)
+    gainNode.gain.linearRampToValueAtTime(0.001, now + duration)
+    
+    source.start(now)
+    source.stop(now + duration + 0.1)
+    source.onended = () => {
+      try { gainNode.disconnect(); source.disconnect(); } catch (e) {}
     }
-    
-    tryPlay()
+  } catch (err) {
+    console.error(`SoundEffects: Error playing "${type}"`, err)
   }
 }
 
-function initAudioContext() {
-  init()
-  warmUp()
-}
+function warmUp() { ensureRunning() }
+function initAudioContext() { init(); warmUp(); }
+
+const events = ['click', 'keydown', 'mousedown', 'touchstart', 'pointerdown', 'focus']
+events.forEach(e => document.addEventListener(e, warmUp, { passive: true }))
+
+setInterval(() => {
+  if (ctx && ctx.state === 'suspended') {
+    ensureRunning()
+  } else if (!ctx || ctx.state === 'closed') {
+    init()
+  }
+}, 30000)
+
+setTimeout(() => {
+  if (init()) {
+    Object.keys(SOUNDS).forEach(type => getBuffer(type))
+  }
+}, 500)
 
 module.exports = { initAudioContext, playSound }
