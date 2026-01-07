@@ -8,6 +8,10 @@ function initShortcutsIpc(context) {
     setSetting('shortcut', newShortcut);
     registerShortcut();
   });
+
+  ipcMain.on('reset-shortcut-held', () => {
+    context.resetShortcutHeld();
+  });
 }
 
 module.exports = initShortcutsIpc;

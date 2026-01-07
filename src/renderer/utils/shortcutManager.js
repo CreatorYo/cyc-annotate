@@ -170,14 +170,7 @@ function init(deps) {
         e.preventDefault()
         setTool('eraser')
         break
-      case 'u':
-        e.preventDefault()
-        undo()
-        break
-      case 'r':
-        e.preventDefault()
-        redo()
-        break
+
       case 'delete':
       case 'backspace':
         if (e.shiftKey) {
@@ -264,6 +257,10 @@ function init(deps) {
         standbyManager.toggle()
         break
     }
+  })
+
+  document.addEventListener('keyup', (e) => {
+    ipcRenderer.send('reset-shortcut-held')
   })
 }
 

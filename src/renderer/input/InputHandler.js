@@ -210,14 +210,14 @@ function startDrawing(e) {
   
   const ctx = CanvasManager.getCtx()
 
-  if (state.tool === 'pencil' || state.tool === 'marker') {
+  if (state.tool === 'pencil' || state.tool === 'marker' || state.tool === 'eraser') {
     currentStroke = {
       type: 'stroke',
       tool: state.tool,
-      color: state.color,
-      strokeSize: state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize,
+      color: state.tool === 'eraser' ? 'rgba(0,0,0,1)' : state.color,
+      strokeSize: state.tool === 'eraser' ? state.strokeSize * 2 : (state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize),
       alpha: 1.0,
-      compositeOperation: 'source-over',
+      compositeOperation: state.tool === 'eraser' ? 'destination-out' : 'source-over',
       points: [{ x: coords.x, y: coords.y }]
     }
     currentStrokePoints = [{ x: coords.x, y: coords.y }]
@@ -225,13 +225,11 @@ function startDrawing(e) {
   
   if (state.tool === 'eraser') {
     ctx.globalCompositeOperation = 'destination-out'
-    ctx.beginPath()
-    ctx.moveTo(coords.x, coords.y)
   } else {
     ctx.globalCompositeOperation = 'source-over'
-    ctx.beginPath()
-    ctx.moveTo(coords.x, coords.y)
   }
+  ctx.beginPath()
+  ctx.moveTo(coords.x, coords.y)
 }
 
 function draw(e) {
@@ -290,7 +288,8 @@ function draw(e) {
           }
           previewCtx.stroke()
         }
-      } else if (state.tool === 'eraser') {
+      } else if (state.tool === 'eraser' && currentStrokePoints) {
+        currentStrokePoints.push({ x: coords.x, y: coords.y })
         ctx.globalCompositeOperation = 'destination-out'
         ctx.lineWidth = state.strokeSize * 2
         ctx.globalAlpha = 1.0
@@ -345,7 +344,7 @@ function stopDrawing() {
       redrawCanvas()
       saveState()
       state.hasDrawn = true
-    } else if (state.tool === 'pencil' || state.tool === 'marker') {
+    } else if (state.tool === 'pencil' || state.tool === 'marker' || state.tool === 'eraser') {
       if (currentStroke && currentStrokePoints.length > 1) {
         currentStroke.points = [...currentStrokePoints]
         createElement('stroke', currentStroke)

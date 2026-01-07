@@ -27,6 +27,7 @@ let captureOverlay = null
 let visible = false
 let shortcut = DEFAULT_SHORTCUT
 let standbyModeEnabled = false
+let isShortcutKeyHeld = false
 let windowsAccentSyncEnabled = false
 
 function initWindowUtilsModule() {
@@ -41,6 +42,8 @@ function initWindowUtilsModule() {
 function initShortcutsModule() {
   shortcuts = initShortcuts({
     onShortcutPressed: () => {
+      if (isShortcutKeyHeld) return
+      isShortcutKeyHeld = true
       if (win && !win.isDestroyed()) toggleOverlay()
     }
   })
@@ -204,7 +207,8 @@ initIpc({
   getOsVersion,
   getWindowsAccentColor,
   getWindowsAccentSyncEnabled: () => windowsAccentSyncEnabled,
-  setWindowsAccentSyncEnabled: (v) => { windowsAccentSyncEnabled = v }
+  setWindowsAccentSyncEnabled: (v) => { windowsAccentSyncEnabled = v },
+  resetShortcutHeld: () => { isShortcutKeyHeld = false }
 })
 
 async function saveAnnotationsForRelaunch() {
@@ -253,6 +257,7 @@ function showOverlay() {
     return
   }
   if (visible) return
+  isShortcutKeyHeld = true
   visible = true
 
   try {
@@ -340,6 +345,7 @@ function toggleOverlay() {
   if (visible) {
     hideOverlay()
   } else {
+    isShortcutKeyHeld = false
     showOverlay()
   }
 }
@@ -467,6 +473,10 @@ function createMainWindow() {
 
   win.on('closed', () => {
     win = null
+  })
+
+  win.on('hide', () => {
+    isShortcutKeyHeld = false
   })
 
   const savedShortcut = getSetting('shortcut', DEFAULT_SHORTCUT)

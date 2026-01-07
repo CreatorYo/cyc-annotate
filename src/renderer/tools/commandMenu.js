@@ -16,87 +16,119 @@ function initCommandMenu(helpers) {
   let lastMouseY = 0;
   let cleanupTimeout = null;
 
-  let isDragging = false, dragStart = {x:0,y:0}, menuStart = {x:0,y:0};
+  let isDragging = false,
+    dragStart = { x: 0, y: 0 },
+    menuStart = { x: 0, y: 0 };
   const overlay = document.getElementById("command-menu-overlay");
-  const commandMenuContainer = document.querySelector('.command-menu-container');
-  
+  const commandMenuContainer = document.querySelector(
+    ".command-menu-container"
+  );
+
   if (commandMenuContainer) {
-    const getGuide = (cls) => document.querySelector('.' + cls) || document.body.appendChild(Object.assign(document.createElement('div'), {className: `snap-guide ${cls}`}));
-    
-    commandMenuContainer.onmousedown = e => {
-      const isInput = e.target.tagName === 'INPUT';
+    const getGuide = (cls) =>
+      document.querySelector("." + cls) ||
+      document.body.appendChild(
+        Object.assign(document.createElement("div"), {
+          className: `snap-guide ${cls}`,
+        })
+      );
+
+    commandMenuContainer.onmousedown = (e) => {
+      const isInput = e.target.tagName === "INPUT";
       if (!isInput) {
         const input = document.getElementById("command-menu-input");
         if (input) input.focus();
       }
-      
-      if (e.target.closest('.command-menu-item, button, input')) return;
+
+      if (e.target.closest(".command-menu-item, button, input")) return;
       isDragging = true;
-      commandMenuContainer.classList.add('dragging');
-      
+      commandMenuContainer.classList.add("dragging");
+
       const rect = overlay.getBoundingClientRect();
-      const isAbs = overlay.style.left && overlay.style.left.indexOf('px') > -1;
+      const isAbs = overlay.style.left && overlay.style.left.indexOf("px") > -1;
       const currentLeft = isAbs ? parseFloat(overlay.style.left) : rect.left;
       const currentTop = isAbs ? parseFloat(overlay.style.top) : rect.top;
 
-      if (!isAbs) { 
-        Object.assign(overlay.style, { transform: 'none', left: currentLeft+'px', top: currentTop+'px' });
+      if (!isAbs) {
+        Object.assign(overlay.style, {
+          transform: "none",
+          left: currentLeft + "px",
+          top: currentTop + "px",
+        });
       }
-      
+
       dragStart = { x: e.clientX, y: e.clientY };
       menuStart = { x: currentLeft, y: currentTop };
-      
-      const onMove = e => {
+
+      const onMove = (e) => {
         if (!isDragging) return;
-        let x = menuStart.x + (e.clientX - dragStart.x), y = menuStart.y + (e.clientY - dragStart.y);
+        let x = menuStart.x + (e.clientX - dragStart.x),
+          y = menuStart.y + (e.clientY - dragStart.y);
         const [winW, winH] = [window.innerWidth, window.innerHeight];
         const screenW = window.screen.width;
-        const width = overlay.offsetWidth, height = overlay.offsetHeight;
-        
+        const width = overlay.offsetWidth,
+          height = overlay.offsetHeight;
+
         x = Math.max(0, Math.min(x, winW - width));
         y = Math.max(0, Math.min(y, winH - height));
 
         let xTargets = [winW / 2];
         if (winW > screenW + 100) {
-           xTargets = [screenW / 2, screenW + (winW - screenW) / 2];
+          xTargets = [screenW / 2, screenW + (winW - screenW) / 2];
         }
 
         const snap = (val, targets, guideCls, isVertical) => {
-           const guide = getGuide(guideCls);
-           const size = isVertical ? width : height;
-           const currentCenter = val + size / 2;
-           
-           for (const target of targets) {
-             const compareVal = isVertical ? currentCenter : val;
-             if(Math.abs(compareVal - target) < 20) {
-                guide.classList.add('visible');
-                guide.style[isVertical ? 'left' : 'top'] = target + 'px';
-                return isVertical ? target - size/2 : target;
-             }
-           }
-           guide.classList.remove('visible');
-           return val;
+          const guide = getGuide(guideCls);
+          const size = isVertical ? width : height;
+          const currentCenter = val + size / 2;
+
+          for (const target of targets) {
+            const compareVal = isVertical ? currentCenter : val;
+            if (Math.abs(compareVal - target) < 20) {
+              guide.classList.add("visible");
+              guide.style[isVertical ? "left" : "top"] = target + "px";
+              return isVertical ? target - size / 2 : target;
+            }
+          }
+          guide.classList.remove("visible");
+          return val;
         };
-        
-        overlay.style.left = snap(x, xTargets, 'snap-guide-v', true) + 'px';
-        overlay.style.top = snap(y, [Math.abs(y - 100) < 20 ? 100 : winH / 2], 'snap-guide-h', false) + 'px';
+
+        overlay.style.left = snap(x, xTargets, "snap-guide-v", true) + "px";
+        overlay.style.top =
+          snap(
+            y,
+            [Math.abs(y - 100) < 20 ? 100 : winH / 2],
+            "snap-guide-h",
+            false
+          ) + "px";
       };
-      
+
       const onUp = () => {
         isDragging = false;
-        commandMenuContainer.classList.remove('dragging');
-        document.querySelectorAll('.snap-guide').forEach(g => g.classList.remove('visible'));
-        localStorage.setItem('cmd-pos', JSON.stringify({x: overlay.style.left, y: overlay.style.top}));
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
+        commandMenuContainer.classList.remove("dragging");
+        document
+          .querySelectorAll(".snap-guide")
+          .forEach((g) => g.classList.remove("visible"));
+        localStorage.setItem(
+          "cmd-pos",
+          JSON.stringify({ x: overlay.style.left, y: overlay.style.top })
+        );
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
       };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
     };
   }
 
-  const savedPos = JSON.parse(localStorage.getItem('cmd-pos'));
-  if (savedPos) Object.assign(overlay.style, {transform: 'none', left: savedPos.x, top: savedPos.y});
+  const savedPos = JSON.parse(localStorage.getItem("cmd-pos"));
+  if (savedPos)
+    Object.assign(overlay.style, {
+      transform: "none",
+      left: savedPos.x,
+      top: savedPos.y,
+    });
 
   document.addEventListener(
     "mousemove",
@@ -183,18 +215,32 @@ function initCommandMenu(helpers) {
         if (fillToggle) fillToggle.click();
       },
     },
-    { name: "Undo", icon: "undo", shortcut: "Ctrl+Z", action: () => undo() },
-    { name: "Redo", icon: "redo", shortcut: "Ctrl+Y", action: () => redo() },
+    {
+      name: "Undo",
+      icon: "undo",
+      shortcut: "Ctrl+Z",
+      hasInternalSound: true,
+      action: () => undo(),
+    },
+    {
+      name: "Redo",
+      icon: "redo",
+      shortcut: "Ctrl+Y",
+      hasInternalSound: true,
+      action: () => redo(),
+    },
     {
       name: "Clear All",
       icon: "delete",
       shortcut: "Shift+Del",
+      hasInternalSound: true,
       action: () => clearCanvas(),
     },
     {
       name: "Toggle Visibility",
       icon: "visibility_off",
       shortcut: "Ctrl+H",
+      hasInternalSound: true,
       action: () => {
         const hideBtn = document.getElementById("hide-btn");
         if (hideBtn) hideBtn.click();
@@ -204,6 +250,7 @@ function initCommandMenu(helpers) {
       name: "Standby Mode",
       icon: "pause_circle",
       shortcut: "Space",
+      hasInternalSound: true,
       action: () => standbyManager.toggle(),
     },
     {
@@ -223,9 +270,11 @@ function initCommandMenu(helpers) {
         const overlay = document.getElementById("command-menu-overlay");
         const input = document.getElementById("command-menu-input");
         if (overlay) {
-          Object.assign(overlay.style, {transform: '', left: '', top: ''});
-          localStorage.removeItem('cmd-pos');
-          document.querySelectorAll('.snap-guide').forEach(g => g.classList.remove('visible'));
+          Object.assign(overlay.style, { transform: "", left: "", top: "" });
+          localStorage.removeItem("cmd-pos");
+          document
+            .querySelectorAll(".snap-guide")
+            .forEach((g) => g.classList.remove("visible"));
           if (input) {
             input.value = "";
             input.focus();
@@ -240,6 +289,7 @@ function initCommandMenu(helpers) {
       name: "Settings",
       icon: "settings",
       shortcut: "Ctrl+,",
+      hasInternalSound: true,
       action: () => {
         const menuBtn = document.getElementById("menu-btn");
         if (menuBtn) menuBtn.click();
@@ -352,7 +402,9 @@ function initCommandMenu(helpers) {
       if (!item.noClose) {
         closeCommandMenu();
       }
-      playSound("pop");
+      if (!item.hasInternalSound) {
+        playSound("pop");
+      }
     }
   }
 
@@ -384,7 +436,7 @@ function initCommandMenu(helpers) {
     if (commandMenuOverlay) {
       commandMenuOverlay.classList.remove("show");
     }
-    
+
     cleanupTimeout = setTimeout(() => {
       if (commandMenuInput) {
         commandMenuInput.value = "";
@@ -430,7 +482,7 @@ function initCommandMenu(helpers) {
 
     commandMenuInput.addEventListener("keydown", (e) => {
       const itemsCount = filteredItems.length;
-      
+
       if (e.key === "Escape") {
         e.preventDefault();
         if (commandMenuInput.value.length > 0) {
@@ -461,16 +513,31 @@ function initCommandMenu(helpers) {
       }
 
       const eventCtrl = e.ctrlKey || e.metaKey;
-      const eventKey = (e.key === 'Delete' || e.key === 'Backspace') ? 'del' : e.key.toLowerCase();
+      const eventKey =
+        e.key === "Delete" || e.key === "Backspace"
+          ? "del"
+          : e.key.toLowerCase();
 
-      const item = commandMenuItems.find(i => {
+      const item = commandMenuItems.find((i) => {
         if (!i.shortcut) return false;
-        const p = i.shortcut.toLowerCase().split('+');
+        const p = i.shortcut.toLowerCase().split("+");
         const k = p.pop();
-        return k === eventKey && p.includes('ctrl') === eventCtrl && p.includes('shift') === e.shiftKey && p.includes('alt') === e.altKey;
+        return (
+          k === eventKey &&
+          p.includes("ctrl") === eventCtrl &&
+          p.includes("shift") === e.shiftKey &&
+          p.includes("alt") === e.altKey
+        );
       });
 
-      if (item && ((e.ctrlKey || e.metaKey || e.altKey) || e.key.length > 1 || item.shortcut === 'Shift+C')) {
+      if (
+        item &&
+        (e.ctrlKey ||
+          e.metaKey ||
+          e.altKey ||
+          e.key.length > 1 ||
+          item.shortcut === "Shift+C")
+      ) {
         e.preventDefault();
         item.action();
       }
