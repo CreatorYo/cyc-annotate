@@ -234,8 +234,7 @@ const colorTool = initColorPickerTool({
   textTool,
   playSound,
   hideAllTooltips,
-  closeAllPopups,
-  DEFAULT_ACCENT_COLOR
+  closeAllPopups
 })
 const { setColor, initColorPicker, setInitialColorBorder, isLightColor } = colorTool
 
@@ -626,7 +625,8 @@ function closeAllPopups() {
     document.getElementById('drawing-tools-popup'),
     document.getElementById('shapes-popup'),
     document.getElementById('custom-color-popup'),
-    document.getElementById('more-menu-dropdown')
+    document.getElementById('more-menu-dropdown'),
+    document.getElementById('custom-color-picker')
   ]
   popups.forEach(popup => {
     if (popup) {

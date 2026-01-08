@@ -202,7 +202,8 @@ function init(deps) {
           document.getElementById('drawing-tools-popup'),
           document.getElementById('shapes-popup'),
           document.getElementById('custom-color-popup'),
-          document.getElementById('more-menu-dropdown')
+          document.getElementById('more-menu-dropdown'),
+          document.getElementById('custom-color-picker')
         ]
         
         let hasOpenPopup = false

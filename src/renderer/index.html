@@ -231,6 +231,38 @@
             </button>
           </div>
         </div>
+
+        <div id="custom-color-picker" class="custom-color-picker-popup">
+          <div id="picker-drag-handle" class="picker-drag-handle">
+            <div class="drag-bar"></div>
+          </div>
+          <div class="custom-picker-content">
+            <div class="picker-main-area">
+              <div class="sv-picker-container">
+                <div id="sv-picker" class="sv-picker"></div>
+                <div id="sv-cursor" class="picker-cursor"></div>
+              </div>
+              <div class="hue-picker-container">
+                <div id="hue-picker" class="hue-picker"></div>
+                <div id="hue-cursor" class="hue-cursor"></div>
+              </div>
+            </div>
+            <div class="picker-footer">
+              <div class="input-group">
+                <span class="input-label">HEX</span>
+                <div class="hex-input-wrapper-inner">
+                  <input type="text" id="hex-input" class="hex-input" spellcheck="false" placeholder="#000000">
+                  <button id="eyedropper-btn" class="eyedropper-btn">
+                    <span class="material-symbols-outlined">colorize</span>
+                  </button>
+                </div>
+              </div>
+              <div class="preview-group">
+                <div id="color-preview" class="color-preview"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -307,7 +339,6 @@
 
   <div id="text-input" class="text-input" contenteditable="true" style="display: none;"></div>
 
-  <input type="color" id="color-picker-input" style="display: none;">
 
   <div id="command-menu-overlay" class="command-menu-overlay" style="display: none;">
     <div class="command-menu-container">
