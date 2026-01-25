@@ -329,6 +329,7 @@ let currentHorizontalPosition =
   localStorage.getItem("toolbar-position-horizontal") || "bottom";
 
 window.applyPosition = applyPosition;
+window.applyLayout = applyLayout;
 
 const layoutDropdown = document.getElementById("layout-dropdown");
 const layoutDropdownTrigger = document.getElementById(
@@ -502,6 +503,21 @@ if (textSolveCheckbox) {
 
   textSolveCheckbox.addEventListener("change", (e) => {
     localStorage.setItem("text-solve-enabled", e.target.checked);
+  });
+}
+
+const elementEraserCheckbox = document.getElementById("element-eraser-enabled");
+if (elementEraserCheckbox) {
+  const elementEraserEnabled = localStorage.getItem("element-eraser-enabled");
+  if (elementEraserEnabled !== null) {
+    elementEraserCheckbox.checked = elementEraserEnabled !== "false";
+  } else {
+    elementEraserCheckbox.checked = true;
+  }
+
+  elementEraserCheckbox.addEventListener("change", (e) => {
+    localStorage.setItem("element-eraser-enabled", e.target.checked);
+    ipcRenderer.send("element-eraser-changed", e.target.checked);
   });
 }
 

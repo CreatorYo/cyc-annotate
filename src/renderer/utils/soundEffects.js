@@ -145,7 +145,7 @@ function getBuffer(type) {
   return buf
 }
 
-async function playSound(type) {
+async function playSound(type, retryCount = 0) {
   const soundsEnabledSetting = localStorage.getItem('sounds-enabled') !== 'false'
   const el = document.getElementById('sounds-enabled')
   if (el && el.checked === false) return
@@ -153,19 +153,42 @@ async function playSound(type) {
   const sound = SOUNDS[type]
   if (!sound) return
 
-  await ensureRunning()
-  if (!ctx || !masterGain) return
-
-  const buffer = getBuffer(type)
-  if (!buffer) return
-
   try {
+    if (!ctx || ctx.state === 'closed') {
+      init()
+    }
+
+    const wasSuspended = (ctx && ctx.state === 'suspended')
+    if (wasSuspended || !ctx) {
+      await ensureRunning()
+    }
+    
+    if (!ctx || ctx.state !== 'running') {
+      if (retryCount < 2) {
+        ctx = null
+        init()
+        return setTimeout(() => playSound(type, retryCount + 1), 50)
+      }
+      return
+    }
+
+    if (!masterGain) {
+      masterGain = ctx.createGain()
+      masterGain.gain.value = 1.0
+      masterGain.connect(ctx.destination)
+    }
+
+    const buffer = getBuffer(type)
+    if (!buffer) return
+
     const source = ctx.createBufferSource()
     const gainNode = ctx.createGain()
+    
     source.buffer = buffer
     source.connect(gainNode)
     gainNode.connect(masterGain)
-    const now = ctx.currentTime
+    
+    const now = ctx.currentTime + 0.02
     const [duration, volume] = sound
     
     gainNode.gain.setValueAtTime(volume, now) 
@@ -173,12 +196,24 @@ async function playSound(type) {
     gainNode.gain.linearRampToValueAtTime(0.001, now + duration)
     
     source.start(now)
-    source.stop(now + duration + 0.1)
+    source.stop(now + duration + 0.2)
+    
     source.onended = () => {
-      try { gainNode.disconnect(); source.disconnect(); } catch (e) {}
+      try { 
+        gainNode.disconnect() 
+        source.disconnect() 
+      } catch (e) {}
     }
+
   } catch (err) {
-    console.error(`SoundEffects: Error playing "${type}"`, err)
+    console.warn(`SoundEffects: Failed to play "${type}" (attempt ${retryCount})`, err)
+    
+    if (retryCount < 2) {
+      if (ctx && ctx.state === 'suspended') {
+        try { await ctx.resume() } catch(e) {}
+      }
+      setTimeout(() => playSound(type, retryCount + 1), 50)
+    }
   }
 }
 

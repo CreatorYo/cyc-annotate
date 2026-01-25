@@ -751,6 +751,11 @@ ipcRenderer.on('horizontal-position-changed', (event, position) => {
   }
 })
 
+ipcRenderer.on('element-eraser-changed', (event, enabled) => {
+  state.elementEraserEnabled = enabled
+  localStorage.setItem('element-eraser-enabled', enabled)
+})
+
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   initSettings()
 } else {

@@ -122,6 +122,14 @@ function initSettingsIpc(context) {
       win.webContents.send('sounds-changed', enabled);
     }
   });
+
+  ipcMain.on('element-eraser-changed', (event, enabled) => {
+    setSetting('element-eraser-enabled', enabled);
+    const win = getWin();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('element-eraser-changed', enabled);
+    }
+  });
 }
 
 module.exports = initSettingsIpc;

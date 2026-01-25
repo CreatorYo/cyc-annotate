@@ -29,7 +29,8 @@ const state = {
   hoveredElementId: null,
   copiedElements: null,
   editingElementId: null,
-  snapToObjectsEnabled: localStorage.getItem('snap-to-objects-enabled') === 'true'
+  snapToObjectsEnabled: localStorage.getItem('snap-to-objects-enabled') === 'true',
+  elementEraserEnabled: localStorage.getItem('element-eraser-enabled') !== 'false'
 }
 
 function createElement(type, data) {

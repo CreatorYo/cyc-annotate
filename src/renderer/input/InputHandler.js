@@ -13,6 +13,7 @@ let currentStroke = null
 let currentStrokePoints = []
 let lastX = 0
 let lastY = 0
+let elementsDeleted = false
 
 function init(dependencies) {
   selectTool = dependencies.selectTool
@@ -172,6 +173,28 @@ function drawShapePreview() {
   }
 }
 
+function checkForEraserHit(coords) {
+  const element = findElementAt(coords.x, coords.y)
+  if (element) {
+    const index = state.elements.findIndex(e => e.id === element.id)
+    if (index !== -1) {
+      state.elements.splice(index, 1)
+      
+      const selIndex = state.selectedElements.indexOf(element.id)
+      if (selIndex !== -1) {
+        state.selectedElements.splice(selIndex, 1)
+        if (selectTool && typeof selectTool.clearSelection === 'function') {
+           selectTool.clearSelection() 
+        }
+      }
+      
+      redrawCanvas()
+      elementsDeleted = true
+      playSound('trash')
+    }
+  }
+}
+
 function startDrawing(e) {
   if (!state.enabled || state.standbyMode) return
 
@@ -207,10 +230,11 @@ function startDrawing(e) {
   state.drawing = true
   lastX = coords.x
   lastY = coords.y
+  elementsDeleted = false
   
   const ctx = CanvasManager.getCtx()
 
-  if (state.tool === 'pencil' || state.tool === 'marker' || state.tool === 'eraser') {
+  if (state.tool === 'pencil' || state.tool === 'marker' || (state.tool === 'eraser' && !state.elementEraserEnabled)) {
     currentStroke = {
       type: 'stroke',
       tool: state.tool,
@@ -223,7 +247,11 @@ function startDrawing(e) {
     currentStrokePoints = [{ x: coords.x, y: coords.y }]
   }
   
-  if (state.tool === 'eraser') {
+  if (state.tool === 'eraser' && state.elementEraserEnabled) {
+    checkForEraserHit(coords)
+  }
+  
+  if (state.tool === 'eraser' && !state.elementEraserEnabled) {
     ctx.globalCompositeOperation = 'destination-out'
   } else {
     ctx.globalCompositeOperation = 'source-over'
@@ -288,7 +316,7 @@ function draw(e) {
           }
           previewCtx.stroke()
         }
-      } else if (state.tool === 'eraser' && currentStrokePoints) {
+      } else if (state.tool === 'eraser' && currentStrokePoints && !state.elementEraserEnabled) {
         currentStrokePoints.push({ x: coords.x, y: coords.y })
         ctx.globalCompositeOperation = 'destination-out'
         ctx.lineWidth = state.strokeSize * 2
@@ -300,6 +328,8 @@ function draw(e) {
         ctx.lineTo(coords.x, coords.y)
         ctx.stroke()
         ctx.globalCompositeOperation = 'source-over'
+      } else if (state.tool === 'eraser' && state.elementEraserEnabled) {
+        checkForEraserHit(coords)
       }
       
       lastX = coords.x
@@ -326,7 +356,7 @@ function stopDrawing() {
     }
     isDrawing = false
 
-    if (state.tool === 'eraser') {
+    if (state.tool === 'eraser' && !state.elementEraserEnabled) {
       ctx.globalCompositeOperation = 'source-over'
     }
     
@@ -344,7 +374,7 @@ function stopDrawing() {
       redrawCanvas()
       saveState()
       state.hasDrawn = true
-    } else if (state.tool === 'pencil' || state.tool === 'marker' || state.tool === 'eraser') {
+    } else if (state.tool === 'pencil' || state.tool === 'marker' || (state.tool === 'eraser' && !state.elementEraserEnabled)) {
       if (currentStroke && currentStrokePoints.length > 1) {
         currentStroke.points = [...currentStrokePoints]
         createElement('stroke', currentStroke)
@@ -357,6 +387,12 @@ function stopDrawing() {
       }
       currentStroke = null
       currentStrokePoints = []
+    } else if (state.tool === 'eraser' && state.elementEraserEnabled) {
+      if (elementsDeleted) {
+        saveState()
+        state.hasDrawn = true
+        elementsDeleted = false
+      }
     } else if (state.tool !== 'text') {
       saveState()
     }
