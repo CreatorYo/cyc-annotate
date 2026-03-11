@@ -1,9 +1,11 @@
 const { state, createElement, saveState } = require('../core/AppState.js')
 const CanvasManager = require('../core/CanvasManager.js')
-const {findElementAt } = require('../utils/CollisionUtils.js')
+const { findElementAt } = require('../utils/drawings/CollisionUtils.js')
+const { drawArrow } = require('../utils/drawings/DrawingUtils.js')
 
 let selectTool
 let textTool
+let stickyNoteTool
 let redrawCanvas
 let playSound
 
@@ -18,6 +20,7 @@ let elementsDeleted = false
 function init(dependencies) {
   selectTool = dependencies.selectTool
   textTool = dependencies.textTool
+  stickyNoteTool = dependencies.stickyNoteTool
   redrawCanvas = dependencies.redrawCanvas
   playSound = dependencies.playSound
 
@@ -28,6 +31,60 @@ function init(dependencies) {
   canvas.addEventListener('mouseup', stopDrawing)
   canvas.addEventListener('mouseout', stopDrawing)
   canvas.addEventListener('dblclick', handleDoubleClick)
+  canvas.addEventListener('contextmenu', (e) => {
+    if (state.tool === 'select') {
+      e.preventDefault();
+    }
+  })
+  
+  document.addEventListener('click', (e) => {
+    if (state.contextMenuElement && !state.contextMenuElement.contains(e.target)) {
+      if (selectTool && selectTool.hideContextMenu) {
+        selectTool.hideContextMenu();
+      }
+    }
+  })
+  
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !state.isSpacePressed) {
+      if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.contentEditable === 'true') {
+        return;
+      }
+      state.isSpacePressed = true;
+      updateCursor();
+      e.preventDefault();
+    }
+  })
+    
+
+
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') {
+      state.isSpacePressed = false;
+      state.isPanning = false;
+      updateCursor();
+    }
+  })
+  canvas.addEventListener('wheel', (e) => {
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    
+    const element = findElementAt(x, y)
+    if (element && element.type === 'stickyNote') {
+      e.preventDefault()
+      
+      if (element.scrollOffset === undefined) element.scrollOffset = 0
+      
+      const scrollSpeed = 20
+      const delta = e.deltaY > 0 ? scrollSpeed : -scrollSpeed
+      
+      element.scrollOffset += delta
+      if (element.scrollOffset < 0) element.scrollOffset = 0
+      
+      redrawCanvas()
+    }
+  }, { passive: false })
   
   canvas.addEventListener('touchstart', (e) => {
     e.preventDefault()
@@ -91,14 +148,29 @@ function init(dependencies) {
       }
     })
   }
+
+  const stickyInput = document.getElementById('sticky-note-input')
+  if (stickyInput) {
+    stickyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        e.stopPropagation()
+        stickyNoteTool.finishStickyNoteInput()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        stickyNoteTool.cancelStickyNoteInput()
+      }
+    })
+  }
 }
 
 function getCanvasCoordinates(e) {
   const canvas = CanvasManager.getCanvas()
   const rect = canvas.getBoundingClientRect()
   return {
-    x: (e.clientX || e.touches?.[0]?.clientX) - rect.left,
-    y: (e.clientY || e.touches?.[0]?.clientY) - rect.top
+    x: ((e.clientX || e.touches?.[0]?.clientX) - rect.left) - state.panX,
+    y: ((e.clientY || e.touches?.[0]?.clientY) - rect.top) - state.panY
   }
 }
 
@@ -114,17 +186,6 @@ function constrainToStraightLine(startX, startY, endX, endY) {
   return dx > dy ? { x: endX, y: startY } : { x: startX, y: endY }
 }
 
-function drawArrow(ctx, x1, y1, x2, y2) {
-  const headlen = 15
-  const angle = Math.atan2(y2 - y1, x2 - x1)
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
-  ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6))
-  ctx.moveTo(x2, y2)
-  ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6))
-  ctx.stroke()
-}
 
 function clearPreview() {
   const { previewCtx, previewCanvas } = CanvasManager.createPreviewCanvas()
@@ -138,7 +199,11 @@ function drawShapePreview() {
   const { previewCtx, previewCanvas } = CanvasManager.createPreviewCanvas()
   if (!previewCtx) return
 
+  previewCtx.save()
+  previewCtx.setTransform(1, 0, 0, 1, 0, 0)
   previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
+  previewCtx.translate(state.panX, state.panY)
+
   previewCtx.strokeStyle = state.color
   previewCtx.fillStyle = state.color
   previewCtx.lineWidth = state.strokeSize
@@ -171,6 +236,8 @@ function drawShapePreview() {
   } else if (state.shapeType === 'arrow') {
     drawArrow(previewCtx, state.shapeStart.x, state.shapeStart.y, state.shapeEnd.x, state.shapeEnd.y)
   }
+  
+  previewCtx.restore()
 }
 
 function checkForEraserHit(coords) {
@@ -198,11 +265,25 @@ function checkForEraserHit(coords) {
 function startDrawing(e) {
   if (!state.enabled || state.standbyMode) return
 
+  if (state.isSpacePressed) {
+    state.isPanning = true;
+    lastX = e.clientX || e.touches?.[0]?.clientX;
+    lastY = e.clientY || e.touches?.[0]?.clientY;
+    updateCursor();
+    return;
+  }
+
   e.preventDefault()
   
   const textInput = document.getElementById('text-input')
   if (textInput && textInput.style.display === 'block') {
     textTool.finishTextInput()
+  }
+
+  const stickyContainer = document.getElementById('sticky-note-input-container')
+  if (stickyContainer && stickyContainer.style.display === 'flex') {
+    stickyNoteTool.finishStickyNoteInput()
+    if (state.tool === 'sticky-note') return
   }
   
   if (state.tool === 'select') {
@@ -215,6 +296,12 @@ function startDrawing(e) {
   if (state.tool === 'text') {
     const coords = getCanvasCoordinates(e)
     textTool.startTextInput(coords.x, coords.y)
+    return
+  }
+  
+  if (state.tool === 'sticky-note') {
+    const coords = getCanvasCoordinates(e)
+    stickyNoteTool.startStickyNoteInput(coords.x, coords.y)
     return
   }
   
@@ -263,6 +350,23 @@ function startDrawing(e) {
 function draw(e) {
   if (!state.enabled || state.standbyMode) return
   
+  if (state.isPanning) {
+    const currentX = e.clientX || e.touches?.[0]?.clientX;
+    const currentY = e.clientY || e.touches?.[0]?.clientY;
+    
+    state.panX += currentX - lastX;
+    state.panY += currentY - lastY;
+    
+    lastX = currentX;
+    lastY = currentY;
+    
+    if (textTool && textTool.updateInputPosition) textTool.updateInputPosition();
+    if (stickyNoteTool && stickyNoteTool.updateStickyNotePosition) stickyNoteTool.updateStickyNotePosition();
+
+    redrawCanvas();
+    return;
+  }
+
   let coords = getCanvasCoordinates(e)
   const canvas = CanvasManager.getCanvas()
   const ctx = CanvasManager.getCtx()
@@ -299,10 +403,20 @@ function draw(e) {
     isDrawing = true
     drawFrame = requestAnimationFrame(() => {
       if (state.tool === 'pencil' || state.tool === 'marker') {
-        currentStrokePoints.push({ x: coords.x, y: coords.y })
+        if (e.shiftKey && currentStrokePoints.length > 0) {
+          const start = currentStrokePoints[0];
+          const constrained = constrainToStraightLine(start.x, start.y, coords.x, coords.y);
+          currentStrokePoints = [start, constrained];
+        } else {
+          currentStrokePoints.push({ x: coords.x, y: coords.y })
+        }
         
         const { previewCtx, previewCanvas } = CanvasManager.createPreviewCanvas()
+        previewCtx.save()
+        previewCtx.setTransform(1, 0, 0, 1, 0, 0)
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
+        previewCtx.translate(state.panX, state.panY)
+
         previewCtx.strokeStyle = state.color
         previewCtx.lineWidth = state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize
         previewCtx.globalAlpha = 1.0
@@ -316,6 +430,7 @@ function draw(e) {
           }
           previewCtx.stroke()
         }
+        previewCtx.restore()
       } else if (state.tool === 'eraser' && currentStrokePoints && !state.elementEraserEnabled) {
         currentStrokePoints.push({ x: coords.x, y: coords.y })
         ctx.globalCompositeOperation = 'destination-out'
@@ -342,6 +457,13 @@ function draw(e) {
 
 function stopDrawing() {
   const ctx = CanvasManager.getCtx()
+  
+  if (state.isPanning) {
+    state.isPanning = false;
+    updateCursor();
+    return;
+  }
+
   if (state.tool === 'select') {
     selectTool.handleSelectStop()
     state.shapeStart = null
@@ -407,6 +529,13 @@ function handleDoubleClick(e) {
   if (state.tool !== 'select') return
   
   const coords = getCanvasCoordinates(e)
+  
+  const resizeHandle = selectTool.getResizeHandleAt(coords.x, coords.y)
+  if (resizeHandle === 'rotation') {
+    selectTool.resetRotation()
+    return
+  }
+
   const clickedElement = findElementAt(coords.x, coords.y)
   
   if (clickedElement && clickedElement.type === 'text') {
@@ -416,6 +545,13 @@ function handleDoubleClick(e) {
     }
     
     textTool.editTextElement(clickedElement)
+  } else if (clickedElement && clickedElement.type === 'stickyNote') {
+    if (!state.selectedElements.includes(clickedElement.id)) {
+      selectTool.clearSelection()
+      selectTool.selectElement(clickedElement.id)
+    }
+    
+    stickyNoteTool.editStickyNote(clickedElement)
   }
 }
 
@@ -450,10 +586,16 @@ function updateCursor() {
     canvas.style.cursor = `url("${eraseCursor}") 12 12, auto`
   } else if (tool === 'text') {
     canvas.style.cursor = 'text'
+  } else if (tool === 'sticky-note') {
+    canvas.style.cursor = 'cell'
   } else if (tool === 'select') {
     canvas.style.cursor = 'default'
   } else {
     canvas.style.cursor = 'crosshair'
+  }
+
+  if (state.isSpacePressed) {
+    canvas.style.cursor = state.isPanning ? 'grabbing' : 'grab'
   }
 }
 

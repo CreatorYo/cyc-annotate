@@ -1,4 +1,4 @@
-const state = {
+const state = { 
   drawing: false,
   enabled: true,
   standbyMode: false,
@@ -24,13 +24,31 @@ const state = {
   isDraggingSelection: false,
   dragOffset: null,
   isResizing: false,
+  isRotating: false,
   resizeHandle: null,
   resizeStartBounds: null,
   hoveredElementId: null,
   copiedElements: null,
+  rotationStartAngle: 0,
+  initialRotation: 0,
   editingElementId: null,
   snapToObjectsEnabled: localStorage.getItem('snap-to-objects-enabled') === 'true',
-  elementEraserEnabled: localStorage.getItem('element-eraser-enabled') !== 'false'
+  elementEraserEnabled: localStorage.getItem('element-eraser-enabled') !== 'false',
+  stickyNoteInToolbar: localStorage.getItem('sticky-note-in-toolbar') === 'true',
+  gridEnabled: false,
+  gridSize: 50,
+  timerEnabled: false,
+  clockEnabled: false,
+  whiteboardPageColor: localStorage.getItem('last-wb-page-color') || '#fffacd',
+  whiteboardGridMode: 'none',
+  pickingWhiteboardColor: false,
+  currentBoardId: null,
+  currentBoardTitle: 'Untitled Whiteboard',
+  saveStatus: 'saved',
+  panX: 0,
+  panY: 0,
+  isPanning: false,
+  isSpacePressed: false
 }
 
 function createElement(type, data) {
@@ -38,7 +56,8 @@ function createElement(type, data) {
     id: state.nextElementId++,
     type: type,
     ...data,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    _dirty: true
   }
   state.elements.push(element)
   return element
@@ -50,7 +69,7 @@ function saveState(updateUndoRedoCallback) {
   }
 
   const elementState = {
-    elements: JSON.parse(JSON.stringify(state.elements)),
+    elements: structuredClone(state.elements),
     nextElementId: state.nextElementId
   }
   state.history.push(elementState)
@@ -64,17 +83,21 @@ function saveState(updateUndoRedoCallback) {
   if (updateUndoRedoCallback) {
     updateUndoRedoCallback()
   }
+  state.saveStatus = 'unsaved'
+  if (state.triggerInstantSave) state.triggerInstantSave()
 }
 
 function undo(redrawCallback, updateUndoRedoCallback) {
   if (state.historyIndex > 0) {
     state.historyIndex--
     const historyState = state.history[state.historyIndex]
-    state.elements = JSON.parse(JSON.stringify(historyState.elements))
+    state.elements = structuredClone(historyState.elements)
     state.nextElementId = historyState.nextElementId
     state.selectedElements = []
     if (redrawCallback) redrawCallback()
     if (updateUndoRedoCallback) updateUndoRedoCallback()
+    state.saveStatus = 'unsaved'
+    if (state.triggerInstantSave) state.triggerInstantSave()
   }
 }
 
@@ -82,11 +105,13 @@ function redo(redrawCallback, updateUndoRedoCallback) {
   if (state.historyIndex < state.history.length - 1) {
     state.historyIndex++
     const historyState = state.history[state.historyIndex]
-    state.elements = JSON.parse(JSON.stringify(historyState.elements))
+    state.elements = structuredClone(historyState.elements)
     state.nextElementId = historyState.nextElementId
     state.selectedElements = []
     if (redrawCallback) redrawCallback()
     if (updateUndoRedoCallback) updateUndoRedoCallback()
+    state.saveStatus = 'unsaved'
+    if (state.triggerInstantSave) state.triggerInstantSave()
   }
 }
 

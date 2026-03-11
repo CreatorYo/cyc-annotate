@@ -84,6 +84,61 @@ function initDialogsIpc(context) {
   ipcMain.handle('show-warning-dialog', async (event, title, message, detail) => {
     await dialogs.showWarningDialog(getWin(), title, message, detail);
   });
+
+  ipcMain.handle('show-open-dialog', async (event, options) => {
+    const { dialog } = require('electron');
+    return await dialog.showOpenDialog(getSettingsWin(), options);
+  });
+
+  ipcMain.handle('show-info-dialog', async (event, title, message, detail) => {
+    const { dialog } = require('electron');
+    await dialog.showMessageBox(getSettingsWin(), {
+      type: 'info',
+      title: title || 'Information',
+      message: message || '',
+      detail: detail || '',
+      buttons: ['OK'],
+      defaultId: 0
+    });
+  });
+
+  ipcMain.handle('show-toolbar-reposition-dialog', async (event, toolbarSide) => {
+    const dismissedDialogs = getSetting('dismissed-dialogs', {});
+    if (dismissedDialogs['toolbar-collision']) {
+      return true;
+    }
+
+    const result = await dialogs.showToolbarRepositionDialog(getWin(), toolbarSide);
+    
+    if (result.dontShowAgain && result.confirmed) {
+      dismissedDialogs['toolbar-collision'] = true;
+      setSetting('dismissed-dialogs', dismissedDialogs);
+      const settingsWin = getSettingsWin();
+      if (settingsWin && !settingsWin.isDestroyed()) {
+        settingsWin.webContents.send('dismissed-dialogs-updated');
+      }
+    }
+    
+    return result.confirmed;
+  });
+
+  ipcMain.handle('show-confirmation-dialog', async (event, options) => {
+    const { dialog, BrowserWindow } = require('electron');
+    const senderWin = BrowserWindow.fromWebContents(event.sender);
+    const win = senderWin && !senderWin.isDestroyed() ? senderWin : getWin();
+    
+    const result = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Confirmation',
+      message: options.title || 'Are you sure?',
+      detail: options.message || '',
+      buttons: options.buttons || ['Cancel', 'Confirm'],
+      defaultId: 1,
+      cancelId: 0,
+      noLink: true
+    });
+    return result.response === 1;
+  });
 }
 
 module.exports = initDialogsIpc;

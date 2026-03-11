@@ -26,20 +26,6 @@ function initWindowControls(options = {}) {
       windowMaximizeBtn.addEventListener('click', () => {
         ipcRenderer.send('window-maximize')
       })
-      
-      ipcRenderer.on('window-maximized', () => {
-        const icon = document.getElementById('maximize-icon')
-        if (icon) {
-          icon.textContent = 'filter_none'
-        }
-      })
-      
-      ipcRenderer.on('window-unmaximized', () => {
-        const icon = document.getElementById('maximize-icon')
-        if (icon) {
-          icon.textContent = 'crop_square'
-        }
-      })
     } else if (windowMaximizeBtn) {
       windowMaximizeBtn.style.display = 'none'
     }

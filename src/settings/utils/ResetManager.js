@@ -54,8 +54,28 @@ async function resetEverything() {
     resetCheckbox('toolbar-accent-bg-enabled', false)
     updateToolbarBackgroundColor()
 
-    resetCheckbox('disable-toolbar-moving', true, 'disable-toolbar-moving-changed')
+    resetCheckbox('toolbar-dragging-enabled', true, 'toolbar-dragging-changed')
+    resetCheckbox('sticky-note-in-toolbar', false, 'sticky-note-in-toolbar-changed')
     resetCheckbox('standby-in-toolbar', false, 'standby-in-toolbar-changed')
+    
+    const SOUND_TYPES = [
+      'trash', 'pop', 'undo', 'redo', 'capture', 'color', 'copy', 'paste', 
+      'selectAll', 'standbyOn', 'standbyOff', 'visibilityOn', 'visibilityOff', 'timerAlarm'
+    ]
+    
+    SOUND_TYPES.forEach(soundType => {
+      const pathSpan = document.getElementById(`${soundType}-sound-path`)
+      if (pathSpan) {
+        pathSpan.textContent = 'Default sound'
+        pathSpan.classList.remove('has-custom-path')
+      }
+      localStorage.removeItem(`custom-sound-${soundType}`)
+      ipcRenderer.send('reset-custom-sound', soundType)
+    })
+    
+    if (window.applyCustomSoundsFilters) {
+      window.applyCustomSoundsFilters()
+    }
     
     localStorage.setItem('sync-windows-accent', 'false')
     ipcRenderer.send('toggle-windows-accent-sync', false)
@@ -77,13 +97,14 @@ function resetCheckbox(id, value, ipcChannel = null) {
   const checkbox = document.getElementById(id)
   if (checkbox) {
     checkbox.checked = value
-    localStorage.setItem(id.replace('-enabled', ''), value)
     
     let storageKey = id
+    
     if (id === 'reduce-clutter-enabled') storageKey = 'reduce-clutter'
     if (id === 'toolbar-accent-bg-enabled') storageKey = 'toolbar-accent-bg'
+    if (id === 'sounds-enabled') storageKey = 'sounds-enabled'
     
-    localStorage.setItem(storageKey, value)
+    localStorage.setItem(storageKey, value ? 'true' : 'false')
     
     if (ipcChannel) {
       ipcRenderer.send(ipcChannel, value)

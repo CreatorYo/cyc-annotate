@@ -51,3 +51,33 @@
 .window-control-btn#window-maximize .material-symbols-outlined {
   font-size: 14px;
 }
+
+.whiteboard-mode .window-control-btn {
+  color: var(--wb-icon-color, #1e1e1e) !important;
+}
+
+.whiteboard-mode .window-control-btn:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+}
+
+.whiteboard-mode .window-close-btn:hover {
+  background: #e11d48 !important;
+  color: #ffffff !important;
+}
+
+.window-control-btn.active {
+  background: var(--hover-bg);
+  opacity: 1;
+}
+
+.whiteboard-mode .window-control-btn.active {
+  background: rgba(0, 0, 0, 0.15) !important;
+}
+
+.wb-title-options-btn:focus,
+.wb-icon-btn:focus,
+.whiteboard-mode .window-control-btn:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+

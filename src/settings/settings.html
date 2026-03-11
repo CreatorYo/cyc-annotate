@@ -7,8 +7,8 @@
   <title>Settings - CYC Annotate</title>
   <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <link rel="stylesheet" href="../../styles/window-controls.css">
-  <link rel="stylesheet" href="../../styles/settings.css">
+  <link rel="stylesheet" href="../../styles/base/window-controls.css">
+  <link rel="stylesheet" href="../../styles/pages/settings.css">
 </head>
 
 <body data-theme="dark">
@@ -201,7 +201,6 @@
                   <span class="material-symbols-outlined arrow">expand_more</span>
                 </button>
                 <div class="dropdown-menu-menu" id="position-dropdown-menu">
-                  <!-- Dynamically populated -->
                 </div>
               </div>
             </div>
@@ -249,17 +248,31 @@
                   </div>
                 </div>
               </div>
+              <div class="setting-sub-item" id="sticky-note-in-toolbar-wrapper"
+                data-keywords="sticky note toolbar reduce clutter visible">
+                <div class="setting-row">
+                  <div class="setting-label-wrapper" data-toggle-for="sticky-note-in-toolbar">
+                    <label>Show Sticky Note in Toolbar</label>
+                    <span class="setting-description">Keep sticky note directly on toolbar without moving it into
+                      submenu</span>
+                  </div>
+                  <div class="toggle-switch">
+                    <input type="checkbox" id="sticky-note-in-toolbar">
+                    <label for="sticky-note-in-toolbar" class="toggle-label"></label>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div class="setting-item" data-keywords="toolbar move drag disable lock position">
+            <div class="setting-item" data-keywords="toolbar move drag enable unlock position">
               <div class="setting-row">
-                <div class="setting-label-wrapper" data-toggle-for="disable-toolbar-moving">
-                  <label>Disable Toolbar Moving</label>
-                  <span class="setting-description">Prevent the toolbar from being moved by dragging</span>
+                <div class="setting-label-wrapper" data-toggle-for="toolbar-dragging-enabled">
+                  <label>Enable Toolbar Moving</label>
+                  <span class="setting-description">Show drag handle to move toolbar freely</span>
                 </div>
                 <div class="toggle-switch">
-                  <input type="checkbox" id="disable-toolbar-moving" checked>
-                  <label for="disable-toolbar-moving" class="toggle-label"></label>
+                  <input type="checkbox" id="toolbar-dragging-enabled">
+                  <label for="toolbar-dragging-enabled" class="toggle-label"></label>
                 </div>
               </div>
             </div>
@@ -296,6 +309,302 @@
                 <div class="toggle-switch">
                   <input type="checkbox" id="sounds-enabled" checked>
                   <label for="sounds-enabled" class="toggle-label"></label>
+                </div>
+              </div>
+
+
+              <div id="custom-sounds-section" class="setting-sub-item collapsible-section"
+                data-keywords="custom sound effects audio music replace">
+                <button class="collapsible-header" id="custom-sounds-toggle">
+                  <span class="material-symbols-outlined expand-icon">expand_more</span>
+                  <div class="collapsible-title-wrapper">
+                    <span class="collapsible-title">Custom Sound Effects</span>
+                    <span class="setting-description">Use your own sound effects instead of the default ones</span>
+                  </div>
+                </button>
+                <div class="collapsible-content" id="custom-sounds-content">
+                  <div class="custom-sounds-controls-bar">
+                    <div class="custom-sounds-search-box">
+                      <div class="custom-sounds-search-wrapper">
+                        <span class="material-symbols-outlined search-icon">search</span>
+                        <input type="text" id="custom-sounds-search" placeholder="Search sounds..." autocomplete="off">
+                      </div>
+                    </div>
+                    <div class="filter-pills" id="custom-sounds-filter">
+                      <div class="filter-glider"></div>
+                      <button class="filter-pill active" data-filter="all">All</button>
+                      <button class="filter-pill" data-filter="custom">Custom</button>
+                      <button class="filter-pill" data-filter="default">Default</button>
+                    </div>
+                  </div>
+                  <div class="custom-sounds-list">
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">delete</span>
+                        <span>Clear/Trash</span>
+                      </div>
+                      <span id="trash-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="trash-sound-btn" class="icon-btn" data-sound-type="trash" title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="trash-sound-reset" class="icon-btn reset-action" data-sound-type="trash"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">touch_app</span>
+                        <span>Click/Pop</span>
+                      </div>
+                      <span id="pop-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="pop-sound-btn" class="icon-btn" data-sound-type="pop" title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="pop-sound-reset" class="icon-btn reset-action" data-sound-type="pop"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">undo</span>
+                        <span>Undo</span>
+                      </div>
+                      <span id="undo-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="undo-sound-btn" class="icon-btn" data-sound-type="undo" title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="undo-sound-reset" class="icon-btn reset-action" data-sound-type="undo"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">redo</span>
+                        <span>Redo</span>
+                      </div>
+                      <span id="redo-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="redo-sound-btn" class="icon-btn" data-sound-type="redo" title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="redo-sound-reset" class="icon-btn reset-action" data-sound-type="redo"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">camera_alt</span>
+                        <span>Capture</span>
+                      </div>
+                      <span id="capture-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="capture-sound-btn" class="icon-btn" data-sound-type="capture" title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="capture-sound-reset" class="icon-btn reset-action" data-sound-type="capture"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">palette</span>
+                        <span>Colour Change</span>
+                      </div>
+                      <span id="color-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="color-sound-btn" class="icon-btn" data-sound-type="color" title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="color-sound-reset" class="icon-btn reset-action" data-sound-type="color"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">content_copy</span>
+                        <span>Copy</span>
+                      </div>
+                      <span id="copy-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="copy-sound-btn" class="icon-btn" data-sound-type="copy" title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="copy-sound-reset" class="icon-btn reset-action" data-sound-type="copy"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">content_paste</span>
+                        <span>Paste</span>
+                      </div>
+                      <span id="paste-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="paste-sound-btn" class="icon-btn" data-sound-type="paste" title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="paste-sound-reset" class="icon-btn reset-action" data-sound-type="paste"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">select_all</span>
+                        <span>Select All</span>
+                      </div>
+                      <span id="selectAll-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="selectAll-sound-btn" class="icon-btn" data-sound-type="selectAll"
+                          title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="selectAll-sound-reset" class="icon-btn reset-action" data-sound-type="selectAll"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">pause_circle</span>
+                        <span>Standby On</span>
+                      </div>
+                      <span id="standbyOn-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="standbyOn-sound-btn" class="icon-btn" data-sound-type="standbyOn"
+                          title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="standbyOn-sound-reset" class="icon-btn reset-action" data-sound-type="standbyOn"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">play_circle</span>
+                        <span>Standby Off</span>
+                      </div>
+                      <span id="standbyOff-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="standbyOff-sound-btn" class="icon-btn" data-sound-type="standbyOff"
+                          title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="standbyOff-sound-reset" class="icon-btn reset-action" data-sound-type="standbyOff"
+                          title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">visibility</span>
+                        <span>Visibility On</span>
+                      </div>
+                      <span id="visibilityOn-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="visibilityOn-sound-btn" class="icon-btn" data-sound-type="visibilityOn"
+                          title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="visibilityOn-sound-reset" class="icon-btn reset-action"
+                          data-sound-type="visibilityOn" title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">visibility_off</span>
+                        <span>Visibility Off</span>
+                      </div>
+                      <span id="visibilityOff-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="visibilityOff-sound-btn" class="icon-btn" data-sound-type="visibilityOff"
+                          title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="visibilityOff-sound-reset" class="icon-btn reset-action"
+                          data-sound-type="visibilityOff" title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="custom-sound-row">
+                      <div class="sound-info">
+                        <span class="material-symbols-outlined">timer</span>
+                        <span>Timer Alarm</span>
+                      </div>
+                      <span id="timerAlarm-sound-path" class="sound-path-display">Default sound</span>
+                      <div class="sound-actions">
+                        <button id="timerAlarm-sound-btn" class="icon-btn" data-sound-type="timerAlarm"
+                          title="Choose File">
+                          <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="timerAlarm-sound-reset" class="icon-btn reset-action"
+                          data-sound-type="timerAlarm" title="Reset to default">
+                          <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="test-sounds-section">
+                      <div class="split-btn-container">
+                        <button id="test-all-sounds-btn" class="test-sounds-btn main-btn">
+                          <span class="material-symbols-outlined">volume_up</span>
+                          <span>Test All Sounds</span>
+                        </button>
+                        <button id="apply-all-sounds-toggle" class="test-sounds-btn toggle-btn">
+                          <span class="material-symbols-outlined">expand_more</span>
+                        </button>
+                        <div id="apply-all-sounds-menu" class="split-btn-menu">
+                          <button class="menu-item" id="apply-current-to-all">
+                            <span class="material-symbols-outlined">library_music</span>
+                            <span>Apply one sound to all</span>
+                          </button>
+                          <div class="menu-divider"></div>
+                          <button class="menu-item danger" id="reset-all-custom-sounds">
+                            <span class="material-symbols-outlined">restart_alt</span>
+                            <span>Reset to Defaults</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -355,7 +664,8 @@
               <div class="setting-row">
                 <div class="setting-label-wrapper" data-toggle-for="text-solve-enabled">
                   <label>Text and Solve</label>
-                  <span class="setting-description">Automatically solve math expressions in text (e.g., 1+1 = 2)</span>
+                  <span class="setting-description">Automatically solve math expressions in text (e.g., 1+1 =
+                    2)</span>
                 </div>
                 <div class="toggle-switch">
                   <input type="checkbox" id="text-solve-enabled">

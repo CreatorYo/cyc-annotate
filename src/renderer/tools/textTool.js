@@ -8,8 +8,8 @@ function initTextTool(state, canvas, helpers) {
 
     textInput.style.display = 'block'
     textInput.style.position = 'fixed'
-    textInput.style.left = (canvasRect.left + x) + 'px'
-    textInput.style.top = (canvasRect.top + y) + 'px'
+    textInput.style.left = (canvasRect.left + x + state.panX) + 'px'
+    textInput.style.top = (canvasRect.top + y + state.panY) + 'px'
     textInput.style.maxWidth = '2000px'
     textInput.style.zIndex = '2000'
     
@@ -223,6 +223,7 @@ function initTextTool(state, canvas, helpers) {
           
           element.segments = segments
           element.color = textInput.style.color || element.color
+          element._dirty = true
           state.editingElementId = null
           editingBackup = null
           redrawCanvas()
@@ -306,8 +307,8 @@ function initTextTool(state, canvas, helpers) {
     const canvasRect = canvas.getBoundingClientRect()
     textInput.style.display = 'block'
     textInput.style.position = 'fixed'
-    textInput.style.left = (canvasRect.left + element.x) + 'px'
-    textInput.style.top = (canvasRect.top + element.y) + 'px'
+    textInput.style.left = (canvasRect.left + element.x + state.panX) + 'px'
+    textInput.style.top = (canvasRect.top + element.y + state.panY) + 'px'
     textInput.style.maxWidth = '2000px'
     textInput.style.zIndex = '2000'
     
@@ -435,7 +436,15 @@ function initTextTool(state, canvas, helpers) {
     finishTextInput,
     cancelTextInput,
     editTextElement,
-    updateCurrentTextColor
+    updateCurrentTextColor,
+    updateInputPosition: () => {
+      const textInput = document.getElementById('text-input')
+      if (textInput && textInput.style.display !== 'none' && state.textInput) {
+        const canvasRect = canvas.getBoundingClientRect()
+        textInput.style.left = (canvasRect.left + state.textInput.x + state.panX) + 'px'
+        textInput.style.top = (canvasRect.top + state.textInput.y + state.panY) + 'px'
+      }
+    }
   }
 }
 

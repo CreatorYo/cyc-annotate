@@ -18,6 +18,7 @@ const iconPath = fs.existsSync(iconPathIco) ? iconPathIco : iconPathPng
 
 let win
 let settingsWin
+let whiteboardWindows = []
 let onboardingWin = null
 let systemTray = null
 let windowUtils = null
@@ -44,6 +45,7 @@ function initShortcutsModule() {
     onShortcutPressed: () => {
       if (isShortcutKeyHeld) return
       isShortcutKeyHeld = true
+      
       if (win && !win.isDestroyed()) toggleOverlay()
     }
   })
@@ -113,18 +115,10 @@ function setSetting(key, value) {
   } catch (e) {}
 }
 
-function createSettingsWindow() {
-  if (settingsWin && !settingsWin.isDestroyed()) {
-    if (settingsWin.isMinimized()) settingsWin.restore()
-    settingsWin.focus()
-    return
-  }
-
-  settingsWin = new BrowserWindow({
-    width: 1000,
-    height: 700,
-    minWidth: 800,
-    minHeight: 550,
+function createBaseWindow(options) {
+  const defaultOptions = {
+    width: 800,
+    height: 600,
     frame: false,
     autoHideMenuBar: true,
     show: false,
@@ -134,32 +128,48 @@ function createSettingsWindow() {
       contextIsolation: false,
       autoplayPolicy: 'no-user-gesture-required'
     }
+  }
+
+  const win = new BrowserWindow({ ...defaultOptions, ...options })
+  
+  if (options.file) {
+    win.loadFile(options.file)
+  }
+
+  disableDefaultShortcuts(win)
+
+  win.once('ready-to-show', () => {
+    win.show()
+    win.focus()
   })
 
-  settingsWin.loadFile('src/settings/settings.html')
-  disableDefaultShortcuts(settingsWin)
+  return win
+}
+
+function createSettingsWindow() {
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    if (settingsWin.isMinimized()) settingsWin.restore()
+    settingsWin.focus()
+    return
+  }
+
+  settingsWin = createBaseWindow({
+    width: 1000,
+    height: 700,
+    minWidth: 800,
+    minHeight: 550,
+    file: 'src/settings/settings.html'
+  })
 
   settingsWin.webContents.once('did-finish-load', () => {
     if (settingsWin && !settingsWin.isDestroyed()) {
       const currentTheme = getSetting('theme', 'system')
-      if (currentTheme === 'system') {
-        const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-        settingsWin.webContents.send('os-theme-changed', effectiveTheme)
-      } else {
-        settingsWin.webContents.send('theme-changed', currentTheme)
-      }
-    }
-  })
-
-  settingsWin.once('ready-to-show', () => {
-    settingsWin.show()
-    settingsWin.focus()
-    if (settingsWin && !settingsWin.isDestroyed()) {
-      const showTrayIcon = getSetting('show-tray-icon', true)
-      const launchOnStartup = getSetting('launch-on-startup', false)
+      const effectiveTheme = currentTheme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : currentTheme
+      settingsWin.webContents.send(currentTheme === 'system' ? 'os-theme-changed' : 'theme-changed', effectiveTheme)
+      
       settingsWin.webContents.send('sync-system-settings', {
-        showTrayIcon,
-        launchOnStartup
+        showTrayIcon: getSetting('show-tray-icon', true),
+        launchOnStartup: getSetting('launch-on-startup', false)
       })
     }
   })
@@ -167,17 +177,41 @@ function createSettingsWindow() {
   settingsWin.on('closed', () => {
     settingsWin = null
     if (win && !win.isDestroyed()) {
-      const standbyInToolbar = getSetting('standby-in-toolbar', false)
-      const reduceClutter = getSetting('reduce-clutter', true)
-      win.webContents.send('sync-toolbar-settings', { standbyInToolbar, reduceClutter })
+      win.webContents.send('sync-toolbar-settings', { 
+        standbyInToolbar: getSetting('standby-in-toolbar', false), 
+        reduceClutter: getSetting('reduce-clutter', true) 
+      })
     }
   })
 }
+
+function createWhiteboardWindow() {
+  const newWhiteboardWin = createBaseWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    backgroundColor: '#fffacd',
+    file: 'src/renderer/whiteboard.html'
+  })
+
+  whiteboardWindows.push(newWhiteboardWin)
+
+  newWhiteboardWin.on('closed', () => {
+    whiteboardWindows = whiteboardWindows.filter(w => w !== newWhiteboardWin)
+    if (whiteboardWindows.length === 0 && win && !win.isDestroyed()) {
+      win.webContents.send('whiteboard-active', false)
+    }
+  })
+}
+
 
 initIpc({
   app,
   getWin: () => win,
   getSettingsWin: () => settingsWin,
+  getWhiteboardWin: () => whiteboardWindows.length > 0 ? whiteboardWindows[whiteboardWindows.length - 1] : null,
+  getWhiteboardWindows: () => whiteboardWindows,
   getOnboardingWin: () => onboardingWin,
   getVisible: () => visible,
   setVisible: (v) => { visible = v },
@@ -193,6 +227,7 @@ initIpc({
   createMainWindow,
   createOnboardingWindow,
   createSettingsWindow,
+  createWhiteboardWindow,
   restoreMouseEvents,
   showDesktopNotification,
   getSystemTray: () => systemTray,
@@ -251,7 +286,31 @@ function destroyTray() {
   systemTray?.destroy()
 }
 
-function showOverlay() {
+async function showOverlay() {
+  if (whiteboardWindows.length > 0) {
+    const validWindows = whiteboardWindows.filter(w => w && !w.isDestroyed())
+    if (validWindows.length > 0) {
+      const dismissedDialogs = getSetting('dismissed-dialogs', {})
+      if (!dismissedDialogs['switch-to-overlay-warning']) {
+        const result = await dialogs.showSwitchToOverlayWarning(validWindows[0])
+        
+        if (!result.confirmed) {
+          return
+        }
+
+        if (result.dontShowAgain) {
+          dismissedDialogs['switch-to-overlay-warning'] = true
+          setSetting('dismissed-dialogs', dismissedDialogs)
+          if (settingsWin && !settingsWin.isDestroyed()) {
+            settingsWin.webContents.send('dismissed-dialogs-updated')
+          }
+        }
+      }
+      
+      validWindows.forEach(w => w.close())
+    }
+  }
+
   if (!win || win.isDestroyed()) {
     dialogs.showWarningDialog(null, 'Window Error', 'Window not available for show')
     return
@@ -337,7 +396,7 @@ function hideOverlay() {
   }
 }
 
-function toggleOverlay() {
+async function toggleOverlay() {
   if (!win || win.isDestroyed()) {
     dialogs.showWarningDialog(null, 'Window Error', 'Window not available for toggle')
     return
@@ -345,9 +404,9 @@ function toggleOverlay() {
   if (visible) {
     hideOverlay()
   } else {
-    isShortcutKeyHeld = false
-    showOverlay()
+    await showOverlay()
   }
+  isShortcutKeyHeld = false
 }
 
 function registerShortcut() {
@@ -367,47 +426,26 @@ function createOnboardingWindow() {
     return
   }
 
-  onboardingWin = new BrowserWindow({
+  onboardingWin = createBaseWindow({
     width: 700,
     height: 550,
     minWidth: 700,
     maxWidth: 700,
     minHeight: 550,
     maxHeight: 550,
-    frame: false,
-    autoHideMenuBar: true,
-    show: false,
     resizable: false,
     maximizable: false,
-    icon: iconPath,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      autoplayPolicy: 'no-user-gesture-required'
-    }
+    file: 'src/onboarding/onboarding.html'
   })
-
-  onboardingWin.loadFile('src/onboarding/onboarding.html')
-  disableDefaultShortcuts(onboardingWin)
 
   onboardingWin.webContents.once('did-finish-load', () => {
     if (onboardingWin && !onboardingWin.isDestroyed()) {
       const currentTheme = getSetting('theme', 'system')
-      if (currentTheme === 'system') {
-        const effectiveTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-        onboardingWin.webContents.send('os-theme-changed', effectiveTheme)
-      } else {
-        onboardingWin.webContents.send('theme-changed', currentTheme)
-      }
+      const effectiveTheme = currentTheme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : currentTheme
+      onboardingWin.webContents.send(currentTheme === 'system' ? 'os-theme-changed' : 'theme-changed', effectiveTheme)
       
-      const currentAccentColor = getSetting('accent-color', DEFAULT_ACCENT_COLOR)
-      onboardingWin.webContents.send('accent-color-changed', currentAccentColor)
+      onboardingWin.webContents.send('accent-color-changed', getSetting('accent-color', DEFAULT_ACCENT_COLOR))
     }
-  })
-
-  onboardingWin.once('ready-to-show', () => {
-    onboardingWin.show()
-    onboardingWin.focus()
   })
 
   onboardingWin.on('closed', () => {
@@ -433,7 +471,7 @@ function createMainWindow() {
     }
   })
 
-  win.loadFile('src/renderer/index.html')
+  win.loadFile('src/renderer/toolbar.html')
   standbyModeEnabled = false
   disableDefaultShortcuts(win)
 
@@ -513,7 +551,12 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (event, commandLine) => {
+    if (commandLine.includes('--new-whiteboard')) {
+      createWhiteboardWindow()
+      return
+    }
+
     const currentShortcut = shortcut || getSetting('shortcut', DEFAULT_SHORTCUT)
     const formattedShortcut = currentShortcut
       .replace(/Control/g, 'Ctrl')
@@ -547,6 +590,17 @@ if (!gotTheLock) {
     if (process.platform === 'win32') {
       app.setAppUserModelId('creatoryocreations.cycannotate')
       
+      app.setUserTasks([
+        {
+          program: process.execPath,
+          arguments: '--new-whiteboard',
+          iconPath: process.execPath,
+          iconIndex: 0,
+          title: 'New Whiteboard Window',
+          description: 'Opens a new whiteboard window'
+        }
+      ])
+
       if (systemPreferences.on) {
         systemPreferences.on('accent-color-changed', () => {
           if (windowsAccentSyncEnabled) {

@@ -44,6 +44,7 @@ async function pasteElements(state, redrawCanvas, saveState, playSound) {
       newElement.y += offsetY
     }
     
+    newElement._dirty = true
     state.elements.push(newElement)
     state.selectedElements.push(newElement.id)
   })

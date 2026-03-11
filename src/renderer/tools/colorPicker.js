@@ -63,9 +63,27 @@ function initColorPickerTool(deps) {
   }
 
   function isLightColor(color) {
-    const rgb = hexToRgb(color)
-    if (!rgb) return false
-    return (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255 > 0.5
+    if (!color) return false
+    
+    let r, g, b
+    if (typeof color === 'string' && color.startsWith('rgb')) {
+      const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      if (match) {
+        r = parseInt(match[1])
+        g = parseInt(match[2])
+        b = parseInt(match[3])
+      } else {
+        return false
+      }
+    } else {
+      const rgb = hexToRgb(color)
+      if (!rgb) return false
+      r = rgb.r
+      g = rgb.g
+      b = rgb.b
+    }
+    
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
   }
 
   function normalizeHex(hex) {
@@ -142,6 +160,16 @@ function initColorPickerTool(deps) {
     }
     if (textTool) {
       textTool.updateCurrentTextColor(upperColor)
+    }
+    if (deps.stickyNoteTool && deps.stickyNoteTool.updateActiveNoteColor) {
+      deps.stickyNoteTool.updateActiveNoteColor(upperColor)
+    }
+
+    if (state.pickingWhiteboardColor) {
+      state.whiteboardPageColor = upperColor
+      document.body.style.setProperty('--wb-page-color', upperColor)
+      const redraw = deps.redrawCanvas || (global.redrawCanvas)
+      if (redraw) redraw()
     }
 
     updateThemeColors(upperColor)
@@ -317,9 +345,11 @@ function initColorPickerTool(deps) {
 
     const openCustomPicker = () => {
       const wasOpen = customPickerPopup.classList.contains('show')
-      if (wasOpen) customPickerPopup.style.transition = 'opacity 0.1s ease, transform 0.1s ease, visibility 0s linear 0.1s'
       closeAllPopups()
-      if (!wasOpen) {
+      if (wasOpen) {
+        customPickerPopup.style.transition = 'opacity 0.1s ease, transform 0.1s ease, visibility 0s linear 0.1s'
+        customPickerPopup.classList.remove('show')
+      } else {
         syncPickerWithColor(isCustomColorActive ? (customColorValue || state.color) : state.color)
         customPickerPopup.style.transition = 'opacity 0.1s ease, transform 0.1s ease, visibility 0s'
         void customPickerPopup.offsetWidth
@@ -332,6 +362,7 @@ function initColorPickerTool(deps) {
         e.stopPropagation(); e.preventDefault()
         const wasOpen = customColorPopup.classList.contains('show')
         hideAllTooltips(); closeAllPopups()
+        if (customPickerPopup) customPickerPopup.classList.remove('show')
         if (!wasOpen) customColorPopup.classList.add('show')
       })
       customColorBtn.addEventListener('contextmenu', (e) => {

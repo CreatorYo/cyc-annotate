@@ -4,36 +4,30 @@ function initWindowsIpc(context) {
   const { getWin, getSettingsWin, getOnboardingWin, setVisible, getWindowUtils } = context;
 
   ipcMain.on('window-minimize', (event) => {
-    const senderId = event.sender.id;
-    const settingsWin = getSettingsWin();
-    const onboardingWin = getOnboardingWin();
-    if (settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.id === senderId) {
-      settingsWin.minimize();
-    } else if (onboardingWin && !onboardingWin.isDestroyed() && onboardingWin.webContents.id === senderId) {
-      onboardingWin.minimize();
+    const { BrowserWindow } = require('electron');
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && !win.isDestroyed()) {
+      win.minimize();
     }
   });
 
   ipcMain.on('window-maximize', (event) => {
-    const senderId = event.sender.id;
-    const settingsWin = getSettingsWin();
-    if (settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.id === senderId) {
-      if (settingsWin.isMaximized()) {
-        settingsWin.unmaximize();
+    const { BrowserWindow } = require('electron');
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && !win.isDestroyed()) {
+      if (win.isMaximized()) {
+        win.unmaximize();
       } else {
-        settingsWin.maximize();
+        win.maximize();
       }
     }
   });
 
   ipcMain.on('window-close', (event) => {
-    const senderId = event.sender.id;
-    const settingsWin = getSettingsWin();
-    const onboardingWin = getOnboardingWin();
-    if (settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.id === senderId) {
-      settingsWin.close();
-    } else if (onboardingWin && !onboardingWin.isDestroyed() && onboardingWin.webContents.id === senderId) {
-      onboardingWin.close();
+    const { BrowserWindow } = require('electron');
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && !win.isDestroyed()) {
+      win.close();
     }
   });
 
@@ -103,6 +97,28 @@ function initWindowsIpc(context) {
       win.webContents.send('horizontal-position-changed', position);
     }
   });
+
+  const handleOpenWhiteboard = () => {
+    const { createWhiteboardWindow, hideOverlay } = context;
+    if (createWhiteboardWindow) {
+      if (hideOverlay) {
+        hideOverlay();
+      }
+      createWhiteboardWindow();
+    }
+  };
+
+  ipcMain.on('open-whiteboard', handleOpenWhiteboard);
+  ipcMain.on('open-new-whiteboard-window', handleOpenWhiteboard);
+
+  ipcMain.on('whiteboard-closed', () => {
+    const win = getWin();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('whiteboard-active', false);
+    }
+  });
 }
+
+
 
 module.exports = initWindowsIpc;

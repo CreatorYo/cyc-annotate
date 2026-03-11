@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whiteboard - CYC Annotate</title>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet" href="../../styles/base/window-controls.css">
+  <link rel="stylesheet" href="../../styles/pages/toolbar.css">
+  <link rel="stylesheet" href="../../styles/components/command-menu.css">
+  <link rel="stylesheet" href="../../styles/components/widgets.css">
+  <link rel="stylesheet" href="../../styles/pages/whiteboard.css">
+  <link href="https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/open-dyslexic-regular.min.css" rel="stylesheet">
+  <script>
+    (function() {
+      const savedColor = localStorage.getItem('last-wb-page-color') || '#fffacd';
+      document.documentElement.style.setProperty('--wb-page-color', savedColor);
+      const isDark = savedColor === '#1a1a1a';
+      document.documentElement.style.setProperty('--wb-icon-color', isDark ? '#ffffff' : '#1e1e1e');
+    })();
+  </script>
+</head>
+
+<body data-theme="system" class="whiteboard-mode">
+  <div id="whiteboard-ui" style="opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+    <div class="whiteboard-header">
+      <button id="wb-menu-btn" class="wb-icon-btn" title="My Whiteboards">
+        <span class="material-symbols-outlined">menu</span>
+      </button>
+      <div class="wb-title-section">
+        <div class="wb-title-container">
+          <input type="text" id="wb-title-input" class="wb-title-input" value="Untitled Whiteboard" placeholder="Untitled Whiteboard" spellcheck="false">
+          <button id="wb-title-options-btn" class="wb-title-options-btn" title="Board Options">
+            <span class="material-symbols-outlined">expand_more</span>
+          </button>
+          <div id="wb-title-dropdown" class="wb-title-dropdown" style="display: none;">
+            <button class="wb-dropdown-item" id="wb-rename-board-btn">
+              <span class="material-symbols-outlined">edit</span>
+              <span>Rename</span>
+            </button>
+            <div class="wb-dropdown-divider"></div>
+            <button class="wb-dropdown-item danger" id="wb-delete-current-board-btn">
+              <span class="material-symbols-outlined">delete</span>
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>
+        <span id="wb-save-status" class="wb-save-status"></span>
+      </div>
+      <div class="window-drag-area" style="-webkit-app-region: drag; flex: 1; height: 100%; align-self: stretch;"></div>
+      <div class="window-controls">
+        <button id="whiteboard-settings-btn" class="window-control-btn" title="Whiteboard Settings" tabindex="-1">
+          <span class="material-symbols-outlined">expand_more</span>
+        </button>
+        <button id="window-minimize" class="window-control-btn" title="Minimize" tabindex="-1">
+          <span class="material-symbols-outlined">remove</span>
+        </button>
+        <button id="window-maximize" class="window-control-btn" title="Maximize" tabindex="-1">
+          <span class="material-symbols-outlined" id="maximize-icon">crop_square</span>
+        </button>
+        <button id="window-close" class="window-control-btn window-close-btn" title="Close" tabindex="-1">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="wb-sidebar" class="wb-sidebar">
+      <div class="wb-sidebar-header">
+        <span class="wb-header-title">Boards</span>
+      </div>
+      
+      <div class="wb-search-container">
+        <div class="wb-search-wrapper">
+          <span class="material-symbols-outlined">search</span>
+          <input type="text" id="wb-search-input" placeholder="Search boards..." spellcheck="false">
+        </div>
+      </div>
+
+      <div id="wb-list" class="wb-board-list"></div>
+      
+      <div class="wb-sidebar-footer">
+        <button id="wb-new-board-btn" class="wb-footer-new-btn">
+          <span class="material-symbols-outlined">add</span>
+          <span>New Board</span>
+        </button>
+        <div class="wb-footer-secondary">
+          <button id="wb-delete-all-btn" class="wb-footer-clear-btn" title="Delete All Boards">
+            <span class="material-symbols-outlined">delete_sweep</span>
+          </button>
+          <button id="wb-sidebar-settings-btn" class="wb-footer-settings-btn" title="Settings">
+            <span class="material-symbols-outlined">settings</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="whiteboard-settings-popup" class="whiteboard-settings-popup" style="display: none;">
+      <div class="whiteboard-settings-group">
+        <label>Page Colour</label>
+        <div class="whiteboard-color-grid">
+          <button class="wb-color-btn" data-color="#fffacd" style="background: #fffacd;" title="Cream"></button>
+          <button class="wb-color-btn" data-color="#ffffff" style="background: #ffffff;" title="White"></button>
+          <button class="wb-color-btn" data-color="#1a1a1a" style="background: #1a1a1a;" title="Dark"></button>
+          <button class="wb-color-btn" data-color="#e3f2fd" style="background: #e3f2fd;" title="Blue"></button>
+          <button class="wb-color-btn" data-color="#f1f8e9" style="background: #f1f8e9;" title="Green"></button>
+        </div>
+      </div>
+      <div class="whiteboard-settings-divider"></div>
+      <div class="whiteboard-settings-group">
+        <label>Page Style</label>
+        <div class="whiteboard-mode-toggle">
+          <button class="wb-mode-btn" data-mode="grid">
+            <span class="material-symbols-outlined">grid_4x4</span>
+            <span>Grid</span>
+          </button>
+          <button class="wb-mode-btn" data-mode="lines">
+            <span class="material-symbols-outlined">reorder</span>
+            <span>Lines</span>
+          </button>
+          <button class="wb-mode-btn" data-mode="dotted">
+            <span class="material-symbols-outlined">more_horiz</span>
+            <span>Dotted</span>
+          </button>
+          <button class="wb-mode-btn" data-mode="isometric">
+            <span class="material-symbols-outlined">grid_guides</span>
+            <span>Isometric</span>
+          </button>
+          <button class="wb-mode-btn" data-mode="graph">
+            <span class="material-symbols-outlined">grid_on</span>
+            <span>Graph</span>
+          </button>
+          <button class="wb-mode-btn" data-mode="hexagonal">
+            <span class="material-symbols-outlined">hexagon</span>
+            <span>Hex</span>
+          </button>
+        </div>
+      </div>
+      <div class="whiteboard-settings-divider"></div>
+      <div class="whiteboard-settings-group">
+        <label>Pattern Colour</label>
+        <div class="whiteboard-pattern-color-grid">
+          <button class="wb-pattern-color-btn active" data-color="default" style="background: rgba(255,255,255,0.15);" title="Default"></button>
+          <button class="wb-pattern-color-btn" data-color="#ff0000" style="background: #ff0000;" title="Red"></button>
+          <button class="wb-pattern-color-btn" data-color="#00ff00" style="background: #00ff00;" title="Green"></button>
+          <button class="wb-pattern-color-btn" data-color="#00bcd4" style="background: #00bcd4;" title="Teal"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <canvas id="canvas"></canvas>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

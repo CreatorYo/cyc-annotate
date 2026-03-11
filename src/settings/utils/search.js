@@ -225,12 +225,10 @@ class SettingsSearch {
           if (item.element.classList.contains('last-visible')) {
             item.element.classList.remove('last-visible')
           }
-          if (item.type === 'item') {
-            item.subItems.forEach(sub => {
-              if (sub.element.style.display !== '') {
-                sub.element.style.display = ''
-              }
-            })
+          if (item.type === "item") {
+            item.subItems.forEach((sub) => {
+              sub.element.classList.remove("hidden");
+            });
           }
         })
       })
@@ -284,16 +282,17 @@ class SettingsSearch {
               item.element.classList.remove('last-visible')
             }
 
-            item.subItems.forEach(sub => {
-              const subMatches = sub.text.includes(searchTerm)
-              const shouldShow = subMatches || sectionMatches || subsectionHasMatches
-              const currentDisplay = sub.element.style.display
-              if (shouldShow && currentDisplay !== 'block') {
-                sub.element.style.display = 'block'
-              } else if (!shouldShow && currentDisplay !== 'none') {
-                sub.element.style.display = 'none'
+            item.subItems.forEach((sub) => {
+              const subMatches = sub.text.includes(searchTerm);
+              const shouldShow =
+                subMatches || sectionMatches || subsectionHasMatches;
+
+              if (shouldShow) {
+                sub.element.classList.remove("hidden");
+              } else {
+                sub.element.classList.add("hidden");
               }
-            })
+            });
             
             sectionHasVisibleItems = true
             hasResults = true

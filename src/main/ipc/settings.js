@@ -36,9 +36,18 @@ function initSettingsIpc(context) {
   ipcMain.on('get-system-settings', (event) => {
     event.returnValue = {
       standbyInToolbar: getSetting('standby-in-toolbar', false),
+      stickyNoteInToolbar: getSetting('sticky-note-in-toolbar', false),
       showTrayIcon: getSetting('show-tray-icon', true),
       launchOnStartup: getSetting('launch-on-startup', false)
     };
+  });
+
+  ipcMain.on('sticky-note-in-toolbar-changed', (event, enabled) => {
+    setSetting('sticky-note-in-toolbar', enabled);
+    const win = getWin();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('sticky-note-in-toolbar-changed', enabled);
+    }
   });
 
   ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
@@ -81,11 +90,11 @@ function initSettingsIpc(context) {
     }
   });
 
-  ipcMain.on('disable-toolbar-moving-changed', (event, enabled) => {
-    setSetting('disable-toolbar-moving', enabled);
+  ipcMain.on('toolbar-dragging-changed', (event, enabled) => {
+    setSetting('toolbar-dragging-enabled', enabled);
     const win = getWin();
     if (win && !win.isDestroyed()) {
-      win.webContents.send('disable-toolbar-moving-changed', enabled);
+      win.webContents.send('toolbar-dragging-changed', enabled);
     }
   });
 

@@ -65,6 +65,10 @@ ipcRenderer.on("os-theme-changed", (event, effectiveTheme) => {
     updateAccentColor(savedAccentColor);
   }
 });
+ 
+ipcRenderer.on("theme-changed", (event, theme) => {
+  applyTheme(theme, false);
+});
 
 const themeDropdown = document.getElementById("theme-dropdown");
 const themeDropdownTrigger = document.getElementById("theme-dropdown-trigger");
@@ -86,6 +90,20 @@ document
       themeDropdown.classList.remove("open");
     });
   });
+
+function bindCheckbox(id, storageKey, defaultValue, ipcEvent = null, callback = null) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const saved = localStorage.getItem(storageKey);
+  el.checked = saved !== null ? saved === "true" : defaultValue;
+  el.addEventListener("change", (e) => {
+    const val = e.target.checked;
+    localStorage.setItem(storageKey, val ? "true" : "false");
+    if (ipcEvent) ipcRenderer.send(ipcEvent, val);
+    if (callback) callback(val);
+  });
+  if (callback) callback(el.checked);
+}
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
@@ -128,7 +146,7 @@ if (accentColorHex) {
 if (accentColorPicker) {
   accentColorPicker.value = savedAccentColor;
   accentColorPicker.addEventListener("change", (e) =>
-    updateAccentColor(e.target.value)
+    updateAccentColor(e.target.value),
   );
 }
 
@@ -212,7 +230,7 @@ async function toggleSync() {
         await ipcRenderer.invoke(
           "show-error-dialog",
           "Accent Color Error",
-          "Unable to get Windows accent colour. This feature is only available on Windows."
+          "Unable to get Windows accent colour. This feature is only available on Windows.",
         );
       }
     } catch (error) {
@@ -220,7 +238,7 @@ async function toggleSync() {
         "show-error-dialog",
         "Accent Color Error",
         "Error syncing with Windows accent colour",
-        error.message
+        error.message,
       );
     }
   }
@@ -333,7 +351,7 @@ window.applyLayout = applyLayout;
 
 const layoutDropdown = document.getElementById("layout-dropdown");
 const layoutDropdownTrigger = document.getElementById(
-  "layout-dropdown-trigger"
+  "layout-dropdown-trigger",
 );
 
 if (layoutDropdownTrigger) {
@@ -356,7 +374,7 @@ document
 
 const positionDropdown = document.getElementById("position-dropdown");
 const positionDropdownTrigger = document.getElementById(
-  "position-dropdown-trigger"
+  "position-dropdown-trigger",
 );
 
 if (positionDropdownTrigger) {
@@ -474,10 +492,12 @@ document.addEventListener("keydown", (e) => {
 if (resetShortcutBtn) {
   resetShortcutBtn.addEventListener("click", () => {
     currentShortcut = DEFAULT_SHORTCUT;
-    if (shortcutInput) shortcutInput.value = "Ctrl+Shift+D";
+    if (shortcutInput) {
+      shortcutInput.value = formatShortcut(parseShortcut(DEFAULT_SHORTCUT));
+    }
     localStorage.setItem("shortcut", DEFAULT_SHORTCUT);
-    updateResetShortcutVisibility();
     ipcRenderer.send("update-shortcut", DEFAULT_SHORTCUT);
+    updateResetShortcutVisibility();
   });
 }
 
@@ -494,175 +514,361 @@ if (soundsCheckbox) {
   });
 }
 
-const textSolveCheckbox = document.getElementById("text-solve-enabled");
-if (textSolveCheckbox) {
-  const textSolveEnabled = localStorage.getItem("text-solve-enabled");
-  if (textSolveEnabled !== null) {
-    textSolveCheckbox.checked = textSolveEnabled === "true";
-  }
+const SOUND_TYPES = [
+  "trash",
+  "pop",
+  "undo",
+  "redo",
+  "capture",
+  "color",
+  "copy",
+  "paste",
+  "selectAll",
+  "standbyOn",
+  "standbyOff",
+  "visibilityOn",
+  "visibilityOff",
+  "timerAlarm",
+];
 
-  textSolveCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem("text-solve-enabled", e.target.checked);
+let currentSoundFilter = "all";
+let currentSoundSearch = "";
+
+function applyCustomSoundsFilters() {
+  window.applyCustomSoundsFilters = applyCustomSoundsFilters;
+  const soundRows = document.querySelectorAll(".custom-sound-row");
+  soundRows.forEach((row) => {
+    const soundInfo = row.querySelector(".sound-info span:not(.material-symbols-outlined)");
+    if (!soundInfo) return;
+    
+    const soundName = soundInfo.textContent.toLowerCase();
+    const pathDisplay = row.querySelector(".sound-path-display");
+    const isCustom = pathDisplay && pathDisplay.classList.contains("has-custom-path");
+
+    const matchesSearch = soundName.includes(currentSoundSearch);
+    let matchesFilter = true;
+
+    if (currentSoundFilter === "custom") matchesFilter = isCustom;
+    else if (currentSoundFilter === "default") matchesFilter = !isCustom;
+
+    row.style.display = matchesSearch && matchesFilter ? "grid" : "none";
   });
-}
 
-const elementEraserCheckbox = document.getElementById("element-eraser-enabled");
-if (elementEraserCheckbox) {
-  const elementEraserEnabled = localStorage.getItem("element-eraser-enabled");
-  if (elementEraserEnabled !== null) {
-    elementEraserCheckbox.checked = elementEraserEnabled !== "false";
+  const visibleRows = Array.from(soundRows).filter(r => r.style.display !== "none");
+  const listContainer = document.querySelector(".custom-sounds-list");
+  const testSection = document.querySelector(".test-sounds-section");
+  
+  if (!listContainer) return;
+
+  let emptyState = document.getElementById("custom-sounds-empty-state");
+  
+  if (visibleRows.length === 0) {
+    if (testSection) testSection.style.display = "none";
+    if (!emptyState) {
+      emptyState = document.createElement("div");
+      emptyState.id = "custom-sounds-empty-state";
+      emptyState.className = "empty-state-message";
+      emptyState.style.cssText = `
+        padding: 40px 20px;
+        text-align: center;
+        opacity: 0.6;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      `;
+      emptyState.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 32px;">search</span>
+        <span style="font-size: 13px;">No matching sounds found</span>
+      `;
+      listContainer.appendChild(emptyState);
+    }
   } else {
-    elementEraserCheckbox.checked = true;
+    if (testSection) testSection.style.display = "block";
+    if (emptyState) {
+      emptyState.remove();
+    }
   }
-
-  elementEraserCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem("element-eraser-enabled", e.target.checked);
-    ipcRenderer.send("element-eraser-changed", e.target.checked);
-  });
 }
 
-const snapToObjectsCheckbox = document.getElementById(
-  "snap-to-objects-enabled"
-);
-if (snapToObjectsCheckbox) {
-  const snapToObjects = localStorage.getItem("snap-to-objects-enabled");
-  if (snapToObjects !== null) {
-    snapToObjectsCheckbox.checked = snapToObjects === "true";
+function initCustomSounds() {
+  SOUND_TYPES.forEach((soundType) => {
+    const pathSpan = document.getElementById(`${soundType}-sound-path`);
+    const selectBtn = document.getElementById(`${soundType}-sound-btn`);
+    const resetBtn = document.getElementById(`${soundType}-sound-reset`);
+
+    if (pathSpan && selectBtn && resetBtn) {
+      const savedPath = localStorage.getItem(`custom-sound-${soundType}`);
+      if (savedPath) {
+        pathSpan.textContent = savedPath;
+        pathSpan.classList.add("has-custom-path");
+        checkSoundFileExists(soundType, savedPath);
+      } else {
+        pathSpan.textContent = "Default sound";
+        pathSpan.classList.remove("has-custom-path");
+      }
+
+      selectBtn.addEventListener("click", () => {
+        ipcRenderer.send("select-custom-sound", soundType);
+      });
+
+      resetBtn.addEventListener("click", () => {
+        localStorage.removeItem(`custom-sound-${soundType}`);
+        pathSpan.textContent = "Default sound";
+        pathSpan.classList.remove("has-custom-path");
+        pathSpan.style.color = "";
+        pathSpan.style.opacity = "";
+        ipcRenderer.send("reset-custom-sound", soundType);
+        applyCustomSoundsFilters();
+      });
+
+      pathSpan.addEventListener("click", () => {
+        if (pathSpan.textContent === "Copied!") return;
+        if (!pathSpan.classList.contains("has-custom-path")) return;
+        const text = pathSpan.textContent.replace(" (File not found)", "");
+        navigator.clipboard.writeText(text).then(() => {
+          const originalText = pathSpan.textContent;
+          const originalColor = pathSpan.style.color;
+          pathSpan.textContent = "Copied!";
+          pathSpan.style.color = "#16a34a";
+          pathSpan.classList.add("copied");
+          setTimeout(() => {
+            pathSpan.textContent = originalText;
+            pathSpan.style.color = originalColor;
+            pathSpan.classList.remove("copied");
+          }, 1000);
+        });
+      });
+    }
+  });
+
+  const testAllBtn = document.getElementById("test-all-sounds-btn");
+  if (testAllBtn) {
+    testAllBtn.addEventListener("click", () => {
+      const accentColor = getComputedStyle(document.body)
+        .getPropertyValue("--accent-color")
+        .trim();
+      ipcRenderer.send("test-all-sounds", accentColor);
+    });
+  }
+
+  const applyAllToggle = document.getElementById("apply-all-sounds-toggle");
+  const applyAllMenu = document.getElementById("apply-all-sounds-menu");
+
+  if (applyAllToggle && applyAllMenu) {
+    applyAllToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isShowing = applyAllMenu.classList.toggle("show");
+      applyAllToggle.classList.toggle("active", isShowing);
+    });
+
+    document.addEventListener("click", () => {
+      applyAllMenu.classList.remove("show");
+      applyAllToggle.classList.remove("active");
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        applyAllMenu.classList.remove("show");
+        applyAllToggle.classList.remove("active");
+      }
+    });
+  }
+
+  const applyToAllBtn = document.getElementById("apply-current-to-all");
+  if (applyToAllBtn) {
+    applyToAllBtn.addEventListener("click", async () => {
+      const result = await ipcRenderer.invoke("show-open-dialog", {
+        title: "Select Sound to Apply to All",
+        filters: [
+          {
+            name: "Audio Files",
+            extensions: ["mp3", "wav", "ogg", "flac", "aac", "m4a"],
+          },
+        ],
+        properties: ["openFile"],
+      });
+
+      if (!result.canceled && result.filePaths.length > 0) {
+        const filePath = result.filePaths[0];
+        SOUND_TYPES.forEach((type) => {
+          localStorage.setItem(`custom-sound-${type}`, filePath);
+          const pathSpan = document.getElementById(`${type}-sound-path`);
+          if (pathSpan) {
+            pathSpan.textContent = filePath;
+            pathSpan.classList.add("has-custom-path");
+          }
+          ipcRenderer.send("custom-sound-selected", type, filePath);
+        });
+        applyCustomSoundsFilters();
+        await ipcRenderer.invoke("show-info-dialog", "Success", "Sound applied to all actions!");
+      }
+    });
+  }
+
+  const resetAllSoundsBtn = document.getElementById("reset-all-custom-sounds");
+  if (resetAllSoundsBtn) {
+    resetAllSoundsBtn.addEventListener("click", () => {
+      SOUND_TYPES.forEach((type) => {
+        localStorage.removeItem(`custom-sound-${type}`);
+        const pathSpan = document.getElementById(`${type}-sound-path`);
+        if (pathSpan) {
+          pathSpan.textContent = "Default sound";
+          pathSpan.classList.remove("has-custom-path");
+        }
+        ipcRenderer.send("reset-custom-sound", type);
+      });
+      applyCustomSoundsFilters();
+      ipcRenderer.invoke("show-info-dialog", "Success", "All custom sounds have been reset to defaults!");
+    });
+  }
+}
+
+async function checkSoundFileExists(soundType, filePath) {
+  if (!filePath) return;
+  const pathSpan = document.getElementById(`${soundType}-sound-path`);
+  if (!pathSpan) return;
+
+  const exists = await ipcRenderer.invoke("check-file-exists", filePath);
+  if (!exists) {
+    if (!pathSpan.textContent.includes("(File not found)")) {
+      pathSpan.textContent = filePath + " (File not found)";
+    }
+    pathSpan.classList.add("file-missing");
+    pathSpan.style.color = "#ff6b6b";
+    pathSpan.style.opacity = "1";
+    pathSpan.title = filePath;
   } else {
-    snapToObjectsCheckbox.checked = false;
+    pathSpan.textContent = filePath;
+    pathSpan.classList.remove("file-missing");
+    pathSpan.style.color = "";
+    pathSpan.style.opacity = "";
+    pathSpan.title = filePath;
+  }
+}
+
+function checkAllSoundFiles() {
+  SOUND_TYPES.forEach((type) => {
+    const savedPath = localStorage.getItem(`custom-sound-${type}`);
+    if (savedPath) {
+      checkSoundFileExists(type, savedPath);
+    }
+  });
+}
+
+setInterval(checkAllSoundFiles, 3000);
+
+function updateCustomSoundFilterGlider(animate = true) {
+  const filterGroup = document.getElementById("custom-sounds-filter");
+  const glider = filterGroup?.querySelector(".filter-glider");
+  const activePill = filterGroup?.querySelector(".filter-pill.active");
+
+  if (glider && activePill) {
+    if (!animate) glider.style.transition = "none";
+    glider.style.width = `${activePill.offsetWidth}px`;
+    glider.style.left = `${activePill.offsetLeft}px`;
+    if (!animate) {
+      glider.offsetHeight;
+      glider.style.transition = "";
+    }
+  }
+}
+
+function initCustomSoundsFiltering() {
+  const searchInput = document.getElementById("custom-sounds-search");
+  const filterGroup = document.getElementById("custom-sounds-filter");
+
+  if (!searchInput || !filterGroup) return;
+
+  searchInput.addEventListener("input", (e) => {
+    currentSoundSearch = e.target.value.toLowerCase();
+    applyCustomSoundsFilters();
+  });
+
+  filterGroup.addEventListener("click", (e) => {
+    const pill = e.target.closest(".filter-pill");
+    if (!pill) return;
+
+    filterGroup
+      .querySelectorAll(".filter-pill")
+      .forEach((p) => p.classList.remove("active"));
+    pill.classList.add("active");
+    currentSoundFilter = pill.dataset.filter;
+    updateCustomSoundFilterGlider();
+    applyCustomSoundsFilters();
+  });
+
+  setTimeout(() => updateCustomSoundFilterGlider(false), 50);
+
+  const customSoundsToggle = document.getElementById("custom-sounds-toggle");
+  if (customSoundsToggle) {
+    customSoundsToggle.addEventListener("click", () => {
+      updateCustomSoundFilterGlider(false);
+      setTimeout(() => updateCustomSoundFilterGlider(false), 50);
+      setTimeout(() => updateCustomSoundFilterGlider(false), 150);
+    });
   }
 
-  snapToObjectsCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem("snap-to-objects-enabled", e.target.checked);
-    ipcRenderer.send("snap-to-objects-changed", e.target.checked);
-  });
-}
-
-const showTrayIconCheckbox = document.getElementById("show-tray-icon");
-if (showTrayIconCheckbox) {
-  const showTrayIcon = localStorage.getItem("show-tray-icon");
-  if (showTrayIcon !== null) {
-    showTrayIconCheckbox.checked = showTrayIcon === "true";
-  } else {
-    showTrayIconCheckbox.checked = true;
+  const mainSoundsToggle = document.getElementById("sounds-enabled");
+  if (mainSoundsToggle) {
+    mainSoundsToggle.addEventListener("change", () => {
+      if (mainSoundsToggle.checked) {
+        setTimeout(() => updateCustomSoundFilterGlider(false), 50);
+      }
+    });
   }
-
-  showTrayIconCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem("show-tray-icon", e.target.checked);
-    ipcRenderer.send("toggle-tray-icon", e.target.checked);
-  });
 }
 
-const toolbarAccentBgCheckbox = document.getElementById(
-  "toolbar-accent-bg-enabled"
-);
-if (toolbarAccentBgCheckbox) {
-  const toolbarAccentBg = localStorage.getItem("toolbar-accent-bg");
-  if (toolbarAccentBg !== null) {
-    toolbarAccentBgCheckbox.checked = toolbarAccentBg === "true";
+initCustomSounds();
+initCustomSoundsFiltering();
+
+ipcRenderer.on("custom-sound-selected", (event, soundType, filePath) => {
+  const pathSpan = document.getElementById(`${soundType}-sound-path`);
+  if (pathSpan) {
+    localStorage.setItem(`custom-sound-${soundType}`, filePath);
+    pathSpan.textContent = filePath;
+    pathSpan.classList.add("has-custom-path");
+    pathSpan.style.color = "";
+    pathSpan.style.opacity = "";
+    checkSoundFileExists(soundType, filePath);
+    applyCustomSoundsFilters();
   }
+});
 
-  toolbarAccentBgCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem(
-      "toolbar-accent-bg",
-      e.target.checked ? "true" : "false"
-    );
-    updateToolbarBackgroundColor();
-  });
+const soundsToggle = document.getElementById("sounds-enabled");
+const customSoundsSection = document.getElementById("custom-sounds-section");
 
-  updateToolbarBackgroundColor();
-}
-
-const disableToolbarMovingCheckbox = document.getElementById(
-  "disable-toolbar-moving"
-);
-if (disableToolbarMovingCheckbox) {
-  const disableToolbarMoving = localStorage.getItem("disable-toolbar-moving");
-  disableToolbarMovingCheckbox.checked = disableToolbarMoving !== "false";
-
-  disableToolbarMovingCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem(
-      "disable-toolbar-moving",
-      e.target.checked ? "true" : "false"
-    );
-    ipcRenderer.send("disable-toolbar-moving-changed", e.target.checked);
-  });
-}
-
-const standbyInToolbarCheckbox = document.getElementById("standby-in-toolbar");
-if (standbyInToolbarCheckbox) {
-  const standbyInToolbar = localStorage.getItem("standby-in-toolbar");
-  if (standbyInToolbar !== null) {
-    standbyInToolbarCheckbox.checked = standbyInToolbar === "true";
-  } else {
-    standbyInToolbarCheckbox.checked = false;
+function updateCustomSoundsVisibility() {
+  if (customSoundsSection && soundsToggle) {
+    customSoundsSection.style.display = soundsToggle.checked ? "block" : "none";
   }
-
-  standbyInToolbarCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem(
-      "standby-in-toolbar",
-      e.target.checked ? "true" : "false"
-    );
-    ipcRenderer.send("standby-in-toolbar-changed", e.target.checked);
-  });
 }
 
-const launchOnStartupCheckbox = document.getElementById("launch-on-startup");
-if (launchOnStartupCheckbox) {
-  const launchOnStartup = localStorage.getItem("launch-on-startup");
-  if (launchOnStartup !== null) {
-    launchOnStartupCheckbox.checked = launchOnStartup === "true";
-  }
-
-  launchOnStartupCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem("launch-on-startup", e.target.checked);
-    ipcRenderer.send("set-auto-launch", e.target.checked);
-  });
+if (soundsToggle) {
+  soundsToggle.addEventListener("change", updateCustomSoundsVisibility);
+  updateCustomSoundsVisibility();
 }
 
-const screenshotNotificationCheckbox = document.getElementById(
-  "screenshot-notification"
-);
-if (screenshotNotificationCheckbox) {
-  const screenshotNotification = localStorage.getItem(
-    "screenshot-notification"
-  );
-  if (screenshotNotification !== null) {
-    screenshotNotificationCheckbox.checked = screenshotNotification === "true";
-  } else {
-    screenshotNotificationCheckbox.checked = true;
-  }
-
-  screenshotNotificationCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem("screenshot-notification", e.target.checked);
-    ipcRenderer.send("screenshot-notification-changed", e.target.checked);
-  });
-}
-
-const copySnapshotClipboardCheckbox = document.getElementById(
-  "copy-snapshot-clipboard"
-);
-if (copySnapshotClipboardCheckbox) {
-  const copySnapshotClipboard = localStorage.getItem("copy-snapshot-clipboard");
-  if (copySnapshotClipboard !== null) {
-    copySnapshotClipboardCheckbox.checked = copySnapshotClipboard === "true";
-  } else {
-    copySnapshotClipboardCheckbox.checked = false;
-  }
-
-  copySnapshotClipboardCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem("copy-snapshot-clipboard", e.target.checked);
-    ipcRenderer.send("copy-snapshot-clipboard-changed", e.target.checked);
-  });
-}
+bindCheckbox("text-solve-enabled", "text-solve-enabled", false);
+bindCheckbox("element-eraser-enabled", "element-eraser-enabled", true, "element-eraser-changed");
+bindCheckbox("snap-to-objects-enabled", "snap-to-objects-enabled", false, "snap-to-objects-changed");
+bindCheckbox("show-tray-icon", "show-tray-icon", true, "toggle-tray-icon");
+bindCheckbox("toolbar-accent-bg-enabled", "toolbar-accent-bg", false, "toolbar-accent-bg-changed", updateToolbarBackgroundColor);
+bindCheckbox("toolbar-dragging-enabled", "toolbar-dragging-enabled", true, "toolbar-dragging-changed");
+bindCheckbox("standby-in-toolbar", "standby-in-toolbar", false, "standby-in-toolbar-changed");
+bindCheckbox("launch-on-startup", "launch-on-startup", false, "set-auto-launch");
+bindCheckbox("screenshot-notification", "screenshot-notification", true, "screenshot-notification-changed");
+bindCheckbox("copy-snapshot-clipboard", "copy-snapshot-clipboard", false, "copy-snapshot-clipboard-changed");
+bindCheckbox("reduce-clutter-enabled", "reduce-clutter", true, "reduce-clutter-changed", updateToolbarSubSettingVisibility);
+bindCheckbox("sticky-note-in-toolbar", "sticky-note-in-toolbar", false, "sticky-note-in-toolbar-changed");
 
 const autoSaveSnapshotsCheckbox = document.getElementById(
-  "auto-save-snapshots"
+  "auto-save-snapshots",
 );
 const saveDirectoryWrapper = document.getElementById("save-directory-wrapper");
 const saveDirectoryPath = document.getElementById("save-directory-path");
 const selectSaveDirectoryBtn = document.getElementById(
-  "select-save-directory-btn"
+  "select-save-directory-btn",
 );
 
 if (autoSaveSnapshotsCheckbox) {
@@ -695,10 +901,14 @@ if (autoSaveSnapshotsCheckbox) {
           }
 
           if (saveDirectoryPath) {
-            saveDirectoryPath.textContent =
-              directoryPath + " (Directory not found)";
+            if (!saveDirectoryPath.textContent.includes("(Directory not found)")) {
+              saveDirectoryPath.textContent =
+                directoryPath + " (Directory not found)";
+            }
             saveDirectoryPath.style.color = "#ff6b6b";
             saveDirectoryPath.style.opacity = "1";
+            saveDirectoryPath.title = directoryPath;
+            saveDirectoryPath.classList.add("file-missing");
           }
 
           ipcRenderer.send("update-settings-badge", true);
@@ -716,11 +926,17 @@ if (autoSaveSnapshotsCheckbox) {
               saveDirectoryPath.textContent = directoryPath;
               saveDirectoryPath.style.color = "";
               saveDirectoryPath.style.opacity = "";
+              saveDirectoryPath.title = directoryPath;
+              saveDirectoryPath.classList.remove("file-missing");
             } else {
-              saveDirectoryPath.textContent =
-                directoryPath + " (Directory not found)";
+              if (!saveDirectoryPath.textContent.includes("(Directory not found)")) {
+                saveDirectoryPath.textContent =
+                  directoryPath + " (Directory not found)";
+              }
               saveDirectoryPath.style.color = "#ff6b6b";
               saveDirectoryPath.style.opacity = "1";
+              saveDirectoryPath.title = directoryPath;
+              saveDirectoryPath.classList.add("file-missing");
             }
           }
 
@@ -735,7 +951,7 @@ if (autoSaveSnapshotsCheckbox) {
       if (!saveDirectoryPath.classList.contains("has-directory")) return;
       const text = saveDirectoryPath.textContent.replace(
         " (Directory not found)",
-        ""
+        "",
       );
       navigator.clipboard.writeText(text).then(() => {
         const originalText = saveDirectoryPath.textContent;
@@ -818,7 +1034,7 @@ if (autoSaveSnapshotsCheckbox) {
 }
 
 const closeDirectoryWarningBtn = document.getElementById(
-  "close-directory-warning"
+  "close-directory-warning",
 );
 if (closeDirectoryWarningBtn) {
   closeDirectoryWarningBtn.addEventListener("click", () => {
@@ -881,7 +1097,7 @@ ipcRenderer.on("sync-system-settings", (event, settings) => {
       launchOnStartupCheckbox.checked = settings.launchOnStartup === true;
       localStorage.setItem(
         "launch-on-startup",
-        settings.launchOnStartup === true
+        settings.launchOnStartup === true,
       );
     }
   }
@@ -890,7 +1106,7 @@ ipcRenderer.on("sync-system-settings", (event, settings) => {
 function initToggleLabelClick() {
   document.querySelectorAll(".setting-row").forEach((row) => {
     const labelWrapper = row.querySelector(
-      ".setting-label-wrapper[data-toggle-for]"
+      ".setting-label-wrapper[data-toggle-for]",
     );
     if (labelWrapper) {
       row.addEventListener("click", (e) => {
@@ -907,34 +1123,13 @@ function initToggleLabelClick() {
   });
 }
 
-const reduceClutterCheckbox = document.getElementById("reduce-clutter-enabled");
-const standbyInToolbarWrapper = document.getElementById(
-  "standby-in-toolbar-wrapper"
-);
-
-function updateStandbySubSettingVisibility() {
-  if (standbyInToolbarWrapper && reduceClutterCheckbox) {
-    standbyInToolbarWrapper.style.display = reduceClutterCheckbox.checked
-      ? "block"
-      : "none";
-  }
-}
-
-if (reduceClutterCheckbox) {
-  const reduceClutter = localStorage.getItem("reduce-clutter");
-  if (reduceClutter !== null) {
-    reduceClutterCheckbox.checked = reduceClutter === "true";
-  } else {
-    reduceClutterCheckbox.checked = true;
-  }
-
-  updateStandbySubSettingVisibility();
-
-  reduceClutterCheckbox.addEventListener("change", (e) => {
-    localStorage.setItem("reduce-clutter", e.target.checked ? "true" : "false");
-    ipcRenderer.send("reduce-clutter-changed", e.target.checked);
-    updateStandbySubSettingVisibility();
-  });
+function updateToolbarSubSettingVisibility() {
+  const el = document.getElementById("reduce-clutter-enabled");
+  const standby = document.getElementById("standby-in-toolbar-wrapper");
+  const sticky = document.getElementById("sticky-note-in-toolbar-wrapper");
+  const display = el && el.checked ? "block" : "none";
+  if (standby) standby.style.display = display;
+  if (sticky) sticky.style.display = display;
 }
 
 if (document.readyState === "loading") {
@@ -963,13 +1158,23 @@ const DIALOG_INFO = {
     description: "Warning when duplicating a large number of elements",
     icon: "content_copy",
   },
+  "switch-to-overlay-warning": {
+    name: "Switch to Overlay",
+    description: "Warning when switching from whiteboard to annotation overlay",
+    icon: "layers",
+  },
+  "toolbar-collision": {
+    name: "Toolbar Collision",
+    description: "Warning when elements overlap with the toolbar",
+    icon: "dock_to_right",
+  },
 };
 
 const dismissedDialogsToggle = document.getElementById(
-  "dismissed-dialogs-toggle"
+  "dismissed-dialogs-toggle",
 );
 const dismissedDialogsContent = document.getElementById(
-  "dismissed-dialogs-content"
+  "dismissed-dialogs-content",
 );
 const dismissedDialogsList = document.getElementById("dismissed-dialogs-list");
 const dismissedCount = document.getElementById("dismissed-count");
@@ -981,11 +1186,21 @@ if (dismissedDialogsToggle) {
   });
 }
 
+const customSoundsToggle = document.getElementById("custom-sounds-toggle");
+const customSoundsContent = document.getElementById("custom-sounds-content");
+
+if (customSoundsToggle) {
+  customSoundsToggle.addEventListener("click", () => {
+    customSoundsToggle.classList.toggle("expanded");
+    customSoundsContent.classList.toggle("expanded");
+  });
+}
+
 async function loadDismissedDialogs() {
   try {
     const dismissedDialogs = await ipcRenderer.invoke("get-dismissed-dialogs");
     const dialogIds = Object.keys(dismissedDialogs || {}).filter(
-      (id) => dismissedDialogs[id]
+      (id) => dismissedDialogs[id],
     );
 
     if (dismissedCount) {
@@ -1041,7 +1256,7 @@ async function loadDismissedDialogs() {
       "show-warning-dialog",
       "Settings Warning",
       "Could not load dismissed dialogs",
-      e.message
+      e.message,
     );
   }
 }
@@ -1141,7 +1356,7 @@ function initCategoryNavigation() {
         "show-warning-dialog",
         "Labs Warning",
         "Experimental Features",
-        "These features are experimental and may be unstable or change in future updates. Use at your own risk."
+        "These features are experimental and may be unstable or change in future updates. Use at your own risk.",
       );
       isLabsDialogShowing = false;
     });
@@ -1169,7 +1384,7 @@ async function initReportIssueButton() {
 
     if (reportBtn) {
       const subject = encodeURIComponent(
-        `Bug Report - CYC Annotate v${systemInfo.version}`
+        `Bug Report - CYC Annotate v${systemInfo.version}`,
       );
       const body =
         encodeURIComponent(`Please describe the issue you're experiencing:
@@ -1193,7 +1408,7 @@ ${systemInfo.osVersion ? `- Operating System: ${systemInfo.osVersion}` : `- Plat
       "show-error-dialog",
       "Initialization Error",
       "Error initializing report issue button",
-      error.message
+      error.message,
     );
   }
 }
@@ -1209,7 +1424,7 @@ function initViewDetailsButton() {
 }
 
 const optimizedRenderingCheckbox = document.getElementById(
-  "optimized-rendering"
+  "optimized-rendering",
 );
 if (optimizedRenderingCheckbox) {
   const optimizedRendering = localStorage.getItem("optimized-rendering");
@@ -1228,7 +1443,7 @@ if (optimizedRenderingCheckbox) {
 
       const shouldRelaunch = await ipcRenderer.invoke(
         "show-relaunch-dialog",
-        "optimized-rendering"
+        "optimized-rendering",
       );
       if (shouldRelaunch) {
       }
@@ -1240,7 +1455,7 @@ if (optimizedRenderingCheckbox) {
 }
 
 const hardwareAccelerationCheckbox = document.getElementById(
-  "hardware-acceleration"
+  "hardware-acceleration",
 );
 if (hardwareAccelerationCheckbox) {
   const hardwareAcceleration = localStorage.getItem("hardware-acceleration");
@@ -1259,7 +1474,7 @@ if (hardwareAccelerationCheckbox) {
 
       const shouldRelaunch = await ipcRenderer.invoke(
         "show-relaunch-dialog",
-        "hardware-acceleration"
+        "hardware-acceleration",
       );
       if (shouldRelaunch) {
       }
@@ -1284,7 +1499,7 @@ function initInfoTooltips() {
       tooltip.style.top = `${rect.top - 8}px`;
     });
     icon.addEventListener("mouseleave", () =>
-      tooltip.classList.remove("visible")
+      tooltip.classList.remove("visible"),
     );
   });
 }

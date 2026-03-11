@@ -8,6 +8,7 @@ function initCommandMenu(helpers) {
     standbyManager,
     triggerCapture,
     playSound,
+    applyTheme,
   } = helpers;
 
   let selectedItemIndex = 0;
@@ -15,6 +16,9 @@ function initCommandMenu(helpers) {
   let lastMouseX = 0;
   let lastMouseY = 0;
   let cleanupTimeout = null;
+  let ctrlHoldTimer = null;
+  let isCtrlDown = false;
+  let showNumbers = false;
 
   let isDragging = false,
     dragStart = { x: 0, y: 0 },
@@ -69,8 +73,11 @@ function initCommandMenu(helpers) {
         const width = overlay.offsetWidth,
           height = overlay.offsetHeight;
 
+        const isWhiteboard = window.location.pathname.includes('whiteboard.html');
+        const topLimit = isWhiteboard ? 40 : 0;
+        
         x = Math.max(0, Math.min(x, winW - width));
-        y = Math.max(0, Math.min(y, winH - height));
+        y = Math.max(topLimit, Math.min(y, winH - height));
 
         let xTargets = [winW / 2];
         if (winW > screenW + 100) {
@@ -83,25 +90,33 @@ function initCommandMenu(helpers) {
           const currentCenter = val + size / 2;
 
           for (const target of targets) {
-            const compareVal = isVertical ? currentCenter : val;
-            if (Math.abs(compareVal - target) < 20) {
+            const targetPos = typeof target === "number" ? target : target.pos;
+            const align =
+              typeof target === "number"
+                ? isVertical
+                  ? "center"
+                  : "edge"
+                : target.align;
+
+            const compareVal = align === "center" ? currentCenter : val;
+            if (Math.abs(compareVal - targetPos) < 20) {
               guide.classList.add("visible");
-              guide.style[isVertical ? "left" : "top"] = target + "px";
-              return isVertical ? target - size / 2 : target;
+              guide.style[isVertical ? "left" : "top"] = targetPos + "px";
+              return align === "center" ? targetPos - size / 2 : targetPos;
             }
           }
           guide.classList.remove("visible");
           return val;
         };
 
-        overlay.style.left = snap(x, xTargets, "snap-guide-v", true) + "px";
-        overlay.style.top =
-          snap(
-            y,
-            [Math.abs(y - 100) < 20 ? 100 : winH / 2],
-            "snap-guide-h",
-            false
-          ) + "px";
+        const xT = xTargets.map((t) => ({ pos: t, align: "center" }));
+        const yT = [
+          { pos: 100, align: "edge" },
+          { pos: winH / 2, align: "center" },
+        ];
+
+        overlay.style.left = snap(x, xT, "snap-guide-v", true) + "px";
+        overlay.style.top = snap(y, yT, "snap-guide-h", false) + "px";
       };
 
       const onUp = () => {
@@ -123,12 +138,38 @@ function initCommandMenu(helpers) {
   }
 
   const savedPos = JSON.parse(localStorage.getItem("cmd-pos"));
-  if (savedPos)
+  if (savedPos && overlay) {
+    let x = parseFloat(savedPos.x);
+    let y = parseFloat(savedPos.y);
+    const [winW, winH] = [window.innerWidth, window.innerHeight];
+    const width = overlay.offsetWidth || 400;
+    const height = overlay.offsetHeight || 500;
+    
+    const isWhiteboard = window.location.pathname.includes('whiteboard.html');
+    const topLimit = isWhiteboard ? 40 : 0;
+
+    x = Math.max(0, Math.min(x, winW - width));
+    y = Math.max(topLimit, Math.min(y, winH - height));
+
     Object.assign(overlay.style, {
       transform: "none",
-      left: savedPos.x,
-      top: savedPos.y,
+      left: x + "px",
+      top: y + "px",
     });
+  }
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'cmd-pos') {
+      const newPos = JSON.parse(e.newValue);
+      if (newPos && overlay) {
+        Object.assign(overlay.style, {
+          transform: "none",
+          left: newPos.x,
+          top: newPos.y
+        });
+      }
+    }
+  });
 
   document.addEventListener(
     "mousemove",
@@ -163,6 +204,12 @@ function initCommandMenu(helpers) {
       icon: "text_fields",
       shortcut: "T",
       action: () => setTool("text"),
+    },
+    {
+      name: "Sticky Note",
+      icon: "sticky_note_2",
+      shortcut: "N",
+      action: () => setTool("sticky-note"),
     },
     {
       name: "Eraser",
@@ -296,6 +343,20 @@ function initCommandMenu(helpers) {
       },
     },
     {
+      name: "Toggle Theme",
+      keywords: ["switch", "light", "dark", "system", "theme", "appearance", "mode"],
+      icon: "dark_mode",
+      shortcut: "Shift+T",
+      action: () => {
+        const currentTheme = localStorage.getItem("theme") || "system";
+        let nextTheme;
+        if (currentTheme === "system") nextTheme = "light";
+        else if (currentTheme === "light") nextTheme = "dark";
+        else nextTheme = "system";
+        applyTheme(nextTheme);
+      },
+    },
+    {
       name: "Close App",
       icon: "close",
       shortcut: "Esc",
@@ -332,27 +393,58 @@ function initCommandMenu(helpers) {
     const rawQuery = commandMenuInput.value;
     const query = rawQuery.toLowerCase().trim();
 
-    const newFilteredItems = commandMenuItems.filter(
-      (item) =>
-        item.name.toLowerCase().includes(query) ||
-        item.shortcut.toLowerCase().includes(query)
-    );
+    const newFilteredItems = commandMenuItems.filter((item) => {
+      const name = (item.name || "").toLowerCase();
+      const shortcut = (item.shortcut || "").toLowerCase();
+      const keywords = (item.keywords || []).join(" ").toLowerCase();
+      return (
+        name.includes(query) ||
+        shortcut.includes(query) ||
+        keywords.includes(query)
+      );
+    });
 
     filteredItems = newFilteredItems;
 
     if (filteredItems.length > 0) {
       resultsContainer.style.display = "block";
       resultsContainer.innerHTML = filteredItems
-        .map(
-          (item, index) => `
+        .map((item, index) => {
+          let itemIcon = item.icon;
+          let itemName = item.name;
+
+          if (item.name === "Toggle Theme") {
+            const currentTheme = localStorage.getItem("theme") || "system";
+            const effectiveTheme = document.body.getAttribute("data-theme");
+
+            if (currentTheme === "system") {
+              itemIcon = "light_mode"; 
+              itemName = "Switch to Light Mode";
+            } else if (currentTheme === "light") {
+              itemIcon = "dark_mode";
+              itemName = "Switch to Dark Mode";
+            } else {
+              itemIcon = "desktop_windows";
+              itemName = "Switch to System Mode";
+            }
+          }
+
+          return `
         <div class="command-menu-item ${index === selectedItemIndex ? "active" : ""}" data-index="${index}">
-          <span class="material-symbols-outlined command-menu-item-icon">${item.icon}</span>
-          <span class="command-menu-item-name">${item.name}</span>
+          <span class="material-symbols-outlined command-menu-item-icon">${itemIcon}</span>
+          <span class="command-menu-item-name">${itemName}</span>
           <span class="command-menu-item-shortcut">${item.shortcut}</span>
+          ${index < 10 ? `<span class="command-menu-item-number">${(index + 1) % 10}</span>` : ""}
         </div>
-      `
-        )
+      `;
+        })
         .join("");
+
+      if (showNumbers) {
+        resultsContainer.classList.add("show-quick-numbers");
+      } else {
+        resultsContainer.classList.remove("show-quick-numbers");
+      }
 
       resultsContainer.querySelectorAll(".command-menu-item").forEach((el) => {
         el.addEventListener("click", () => {
@@ -444,6 +536,14 @@ function initCommandMenu(helpers) {
       if (resultsContainer) {
         resultsContainer.style.display = "none";
         resultsContainer.innerHTML = "";
+      }
+      showNumbers = false;
+      if (resultsContainer) {
+        resultsContainer.classList.remove("show-quick-numbers");
+      }
+      if (ctrlHoldTimer) {
+        clearTimeout(ctrlHoldTimer);
+        ctrlHoldTimer = null;
       }
       filteredItems = [];
       cleanupTimeout = null;
@@ -551,6 +651,51 @@ function initCommandMenu(helpers) {
   if (closeCommandMenuBtn) {
     closeCommandMenuBtn.addEventListener("click", closeCommandMenu);
   }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Control") {
+      if (isCtrlDown) return;
+      isCtrlDown = true;
+      if (commandMenuOverlay && commandMenuOverlay.classList.contains("show")) {
+        ctrlHoldTimer = setTimeout(() => {
+          showNumbers = true;
+          if (resultsContainer) {
+            resultsContainer.classList.add("show-quick-numbers");
+          }
+        }, 800);
+      }
+    }
+
+    if (
+      e.ctrlKey &&
+      /^[0-9]$/.test(e.key) &&
+      commandMenuOverlay &&
+      commandMenuOverlay.classList.contains("show")
+    ) {
+      let index = parseInt(e.key) - 1;
+      if (e.key === "0") index = 9;
+      if (index >= 0 && index < filteredItems.length) {
+        e.preventDefault();
+        applyCommandMenuItem(index);
+      }
+    }
+  });
+
+  window.addEventListener("keyup", (e) => {
+    if (e.key === "Control") {
+      isCtrlDown = false;
+      if (ctrlHoldTimer) {
+        clearTimeout(ctrlHoldTimer);
+        ctrlHoldTimer = null;
+      }
+      if (showNumbers) {
+        showNumbers = false;
+        if (resultsContainer) {
+          resultsContainer.classList.remove("show-quick-numbers");
+        }
+      }
+    }
+  });
 
   return {
     toggleCommandMenu,

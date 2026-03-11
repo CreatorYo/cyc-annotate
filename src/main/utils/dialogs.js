@@ -78,6 +78,37 @@ async function showErrorDialog(parentWindow, title, message, detail = null) {
   })
 }
 
+async function showInfoDialog(parentWindow, title, message, detail) {
+  await dialog.showMessageBox(parentWindow || null, {
+    type: 'info',
+    title: title || 'Information',
+    message: message || '',
+    detail: detail || '',
+    buttons: ['OK'],
+    defaultId: 0
+  })
+}
+
+async function showToolbarRepositionDialog(parentWindow, toolbarSide) {
+  const isLeftSide = toolbarSide === 'left';
+  const result = await dialog.showMessageBox(parentWindow || null, {
+    type: 'warning',
+    title: 'Toolbar Collision Detected',
+    message: `Would you like to move the toolbar over to the ${isLeftSide ? 'right' : 'left'} for this session?`,
+    detail: `The element appears to be overlapping with the toolbar on the ${isLeftSide ? 'left' : 'right'} side.`,
+    buttons: ['No', 'Yes'],
+    defaultId: 1,
+    cancelId: 0,
+    checkboxLabel: "Don't show this again",
+    checkboxChecked: false
+  })
+  
+  return {
+    confirmed: result.response === 1,
+    dontShowAgain: result.checkboxChecked
+  }
+}
+
 async function showWarningDialog(parentWindow, title, message, detail = null) {
   await dialog.showMessageBox(parentWindow || null, {
     type: 'warning',
@@ -108,13 +139,33 @@ async function showDuplicateWarning(parentWindow, elementCount) {
     message: `You are about to duplicate approximately ${elementCount} elements`,
     detail: 'Duplicating a large number of elements may affect performance. Do you want to continue?',
     buttons: ['Cancel', 'Duplicate'],
-    defaultId: 0,
+    defaultId: 1,
     cancelId: 0,
     noLink: true,
     checkboxLabel: "Don't show this again",
     checkboxChecked: false
   })
   
+  return {
+    confirmed: result.response === 1,
+    dontShowAgain: result.checkboxChecked
+  }
+}
+
+async function showSwitchToOverlayWarning(parentWindow) {
+  const result = await dialog.showMessageBox(parentWindow || null, {
+    type: 'warning',
+    title: 'Switch to Annotation Overlay',
+    message: 'The whiteboard will be closed to open the annotation overlay',
+    detail: 'Are you sure you want to switch?',
+    buttons: ['Cancel', 'Switch'],
+    defaultId: 1,
+    cancelId: 0,
+    noLink: true,
+    checkboxLabel: "Don't show this again",
+    checkboxChecked: false
+  })
+
   return {
     confirmed: result.response === 1,
     dontShowAgain: result.checkboxChecked
@@ -220,6 +271,8 @@ module.exports = {
   showWarningDialog,
   showSecondInstanceWarning,
   showDuplicateWarning,
+  showSwitchToOverlayWarning,
   showSystemDetailsDialog,
-  showAccentColorPresets
+  showAccentColorPresets,
+  showToolbarRepositionDialog
 }
