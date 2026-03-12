@@ -48,7 +48,7 @@ function show(title, body, filePath) {
   thisWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   thisWin.setAlwaysOnTop(true, 'screen-saver', 1)
   
-  thisWin.loadFile(path.join(__dirname, '../../notification/notification.html'))
+  thisWin.loadFile(path.join(__dirname, '../../renderer/pages/notification/notification.html'))
   
   deps.disableDefaultShortcuts?.(thisWin)
   

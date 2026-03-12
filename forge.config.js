@@ -10,7 +10,7 @@ module.exports = {
     name: 'CYCAnnotate',
     executableName: 'CYCAnnotate',
     asar: true,
-    icon: path.join(__dirname, 'icon'),
+    icon: path.join(__dirname, 'src/assets/icon'),
     ignore: [
       /^\/\.git/,
       /^\/node_modules\/\.cache/,

@@ -1,7 +1,7 @@
 const { ipcRenderer } = require('electron')
-const { updateAccentColorContrast } = require('../../../settings/utils/colorUtils.js')
+const { updateAccentColorContrast } = require('../../../pages/settings/utils/colorUtils.js')
 
-const { DEFAULT_ACCENT_COLOR } = require('../../../shared/constants.js')
+const { DEFAULT_ACCENT_COLOR } = require('../../../../shared/constants.js')
 
 let osTheme = 'dark'
 

@@ -1,5 +1,5 @@
 const { ipcRenderer } = require('electron')
-const { DEFAULT_ACCENT_COLOR } = require('../shared/constants.js')
+const { DEFAULT_ACCENT_COLOR } = require('../../../shared/constants.js')
 
 let isSelecting = false
 let startX = 0

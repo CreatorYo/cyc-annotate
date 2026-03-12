@@ -18,8 +18,8 @@ function create() {
   }
   
   try {
-    const iconPathIco = path.join(__dirname, '../../../icon.ico')
-    const iconPathPng = path.join(__dirname, '../../../icon.png')
+    const iconPathIco = path.join(__dirname, '../../assets/icon.ico')
+    const iconPathPng = path.join(__dirname, '../../assets/icon.png')
     const iconPath = fs.existsSync(iconPathIco) ? iconPathIco : iconPathPng
     
     tray = new Tray(iconPath)

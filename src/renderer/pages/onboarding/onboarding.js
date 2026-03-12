@@ -1,9 +1,9 @@
 const { ipcRenderer } = require('electron')
-const { initWindowControls } = require('../shared/window-controls.js')
+const { initWindowControls } = require('../../../shared/window-controls.js')
 
 initWindowControls({ showMinimize: true, showMaximize: false, showClose: true })
 
-const { DEFAULT_SHORTCUT, DEFAULT_ACCENT_COLOR: DEFAULT_COLOR } = require('../shared/constants.js')
+const { DEFAULT_SHORTCUT, DEFAULT_ACCENT_COLOR: DEFAULT_COLOR } = require('../../../shared/constants.js')
 
 let currentStep = 0
 let currentShortcut = DEFAULT_SHORTCUT

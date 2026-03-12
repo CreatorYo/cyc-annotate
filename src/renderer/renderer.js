@@ -1,24 +1,24 @@
 const { ipcRenderer } = require('electron')
-const { DEFAULT_ACCENT_COLOR } = require('../shared/constants.js')
-const { initSelectTool } = require('./tools/selectTool.js')
-const { initTextTool } = require('./tools/textTool.js')
-const { initStickyNoteTool } = require('./tools/stickyNoteTool.js')
-const { initColorPickerTool } = require('./tools/colorPicker.js')
-const { initCommandMenu } = require('./tools/commandMenu.js')
-const { initThemeManager, applyTheme, updateToolbarBackgroundColor } = require('./utils/managers/themeManager.js')
-const { initTooltips, hideAllTooltips } = require('./utils/managers/tooltipManager.js')
-const { initAudioContext, playSound } = require('./utils/audio/soundEffects.js')
-const { initStandbyManager } = require('./utils/managers/standbyManager.js')
-const { initShortcutManager } = require('./utils/events/shortcutManager.js')
-const ToolbarPositionManager = require('./utils/managers/toolbarPositionManager')
-const { initWindowControls } = require('../shared/window-controls.js')
-const WidgetComponent = require('./components/WidgetComponent.js')
+const { DEFAULT_ACCENT_COLOR } = require('../../shared/constants.js')
+const { initSelectTool } = require('../modules/tools/selectTool.js')
+const { initTextTool } = require('../modules/tools/textTool.js')
+const { initStickyNoteTool } = require('../modules/tools/stickyNoteTool.js')
+const { initColorPickerTool } = require('../modules/tools/colorPicker.js')
+const { initCommandMenu } = require('../modules/tools/commandMenu.js')
+const { initThemeManager, applyTheme, updateToolbarBackgroundColor } = require('../modules/utils/managers/themeManager.js')
+const { initTooltips, hideAllTooltips } = require('../modules/utils/managers/tooltipManager.js')
+const { initAudioContext, playSound } = require('../modules/utils/audio/soundEffects.js')
+const { initStandbyManager } = require('../modules/utils/managers/standbyManager.js')
+const { initShortcutManager } = require('../modules/utils/events/shortcutManager.js')
+const ToolbarPositionManager = require('../modules/utils/managers/toolbarPositionManager')
+const { initWindowControls } = require('../../shared/window-controls.js')
+const WidgetComponent = require('../modules/components/WidgetComponent.js')
 
 WidgetComponent.init()
 
 const isWhiteboard = window.location.pathname.includes('whiteboard.html')
 
-const CanvasManager = require('./core/CanvasManager.js')
+const CanvasManager = require('../modules/core/CanvasManager.js')
 CanvasManager.init(() => redrawCanvas())
 const canvas = CanvasManager.getCanvas()
 const ctx = CanvasManager.getCtx()
@@ -27,10 +27,10 @@ const optimizedRendering = CanvasManager.isOptimizedRendering()
 document.addEventListener('click', initAudioContext, { once: true })
 document.addEventListener('mousedown', initAudioContext, { once: true })
 
-const { init: initInputHandler, updateCursor } = require('./input/InputHandler.js')
-const { state, createElement, saveState, undo, redo } = require('./core/AppState.js')
-const { drawArrow } = require('./utils/drawings/DrawingUtils.js')
-const { drawText, drawStickyNote } = require('./utils/drawings/StickyNoteDrawingUtils.js')
+const { init: initInputHandler, updateCursor } = require('../modules/input/InputHandler.js')
+const { state, createElement, saveState, undo, redo } = require('../modules/core/AppState.js')
+const { drawArrow } = require('../modules/utils/drawings/DrawingUtils.js')
+const { drawText, drawStickyNote } = require('../modules/utils/drawings/StickyNoteDrawingUtils.js')
 
 canvas.style.pointerEvents = 'auto'
 
@@ -323,7 +323,7 @@ function drawElement(element) {
   ctx.restore()
 }
 
-const { getElementBounds, hitTest, findElementAt } = require('./utils/drawings/CollisionUtils.js')
+const { getElementBounds, hitTest, findElementAt } = require('../modules/utils/drawings/CollisionUtils.js')
 
 function updateSelectionOverlay() {
   const { selectionCtx, selectionCanvas } = CanvasManager.createSelectionCanvas()
@@ -553,7 +553,7 @@ function checkIfHasDrawn() {
 
 saveState(updateUndoRedoButtons)
 
-const { copySelectedElements, pasteElements } = require('./tools/clipboardTool.js')
+const { copySelectedElements, pasteElements } = require('../modules/tools/clipboardTool.js')
 
 const handleCopy = () => copySelectedElements(state, playSound)
 const handlePaste = () => pasteElements(state, redrawCanvas, saveState, playSound)
@@ -1178,7 +1178,7 @@ function initFeaturesShelf() {
     playSound('pop')
   })
 
-  const Dropdown = require('./components/Dropdown.js')
+  const Dropdown = require('../modules/components/Dropdown.js')
   
   let clockStyle = localStorage.getItem('clock-style') || 'digital'
   let clockTimezone = localStorage.getItem('clock-timezone') || 'local'
@@ -2211,7 +2211,7 @@ window.addEventListener('storage', (e) => {
   }
 })
 
-const { initWhiteboardMode } = require('./utils/features/whiteboardManager.js')
+const { initWhiteboardMode } = require('../modules/utils/features/whiteboardManager.js')
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {

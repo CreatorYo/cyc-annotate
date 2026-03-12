@@ -1,5 +1,5 @@
 const { ipcRenderer } = require('electron')
-const { DEFAULT_ACCENT_COLOR, DEFAULT_SHORTCUT } = require('../../shared/constants.js')
+const { DEFAULT_ACCENT_COLOR, DEFAULT_SHORTCUT } = require('../../../../shared/constants.js')
 const { applyTheme, updateAccentColor, updateToolbarBackgroundColor } = require('./ThemeManager.js')
 
 async function resetEverything() {

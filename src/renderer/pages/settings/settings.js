@@ -18,7 +18,7 @@ const {
 const {
   DEFAULT_ACCENT_COLOR,
   DEFAULT_SHORTCUT,
-} = require("../shared/constants.js");
+} = require("../../../shared/constants.js");
 
 const PRESET_ACCENT_COLORS = [
   { name: "Default Blue", color: DEFAULT_ACCENT_COLOR },
@@ -1523,5 +1523,5 @@ window.currentCategory = currentCategory;
 
 new SettingsSearch();
 
-const { initWindowControls } = require("../shared/window-controls.js");
+const { initWindowControls } = require("../../../shared/window-controls.js");
 initWindowControls({ showMinimize: true, showMaximize: true, showClose: true });

@@ -83,7 +83,7 @@ function open() {
       }
     })
     
-    captureOverlayWin.loadFile(path.join(__dirname, '../../capture/capture-overlay.html'))
+    captureOverlayWin.loadFile(path.join(__dirname, '../../renderer/pages/capture/capture-overlay.html'))
     deps.disableDefaultShortcuts?.(captureOverlayWin)
     
     captureOverlayWin.once('ready-to-show', () => {

@@ -28,8 +28,8 @@
     "compression": "maximum",
     "files": [
       "src/**/*",
-      "styles/**/*",
-      "build/icon.ico",
+      "src/styles/**/*",
+      "src/assets/icon.ico",
       "package.json"
     ],
     "extraFiles": [],
@@ -43,7 +43,7 @@
           ]
         }
       ],
-      "icon": "build/icon.ico",
+      "icon": "src/assets/icon.ico",
       "artifactName": "${productName} Setup ${version}.${ext}",
       "forceCodeSigning": false,
       "verifyUpdateCodeSignature": false,
@@ -53,9 +53,9 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
+      "installerIcon": "src/assets/icon.ico",
+      "uninstallerIcon": "src/assets/icon.ico",
+      "installerHeaderIcon": "src/assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "CYC Annotate",

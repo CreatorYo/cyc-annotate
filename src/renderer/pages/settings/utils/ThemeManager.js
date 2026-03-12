@@ -1,5 +1,5 @@
 const { ipcRenderer } = require('electron')
-const { DEFAULT_ACCENT_COLOR, DEFAULT_SHORTCUT } = require('../../shared/constants.js')
+const { DEFAULT_ACCENT_COLOR, DEFAULT_SHORTCUT } = require('../../../../shared/constants.js')
 const { updateDropdownMenu } = require('./dropdownMenu.js')
 const { updateToggleSwitchColor } = require('./toggleSwitch.js')
 const { normalizeHex, getColorForPicker, updateAccentColorContrast } = require('./colorUtils.js')

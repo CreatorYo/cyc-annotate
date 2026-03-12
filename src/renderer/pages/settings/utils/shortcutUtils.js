@@ -1,5 +1,5 @@
 const { ipcRenderer } = require('electron')
-const { DEFAULT_SHORTCUT } = require('../../shared/constants.js')
+const { DEFAULT_SHORTCUT } = require('../../../../shared/constants.js')
 
 function formatShortcut(keys) {
   return keys.map(k => {

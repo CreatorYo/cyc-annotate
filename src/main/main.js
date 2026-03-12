@@ -10,10 +10,11 @@ const { init: initNotificationHandler } = require('./utils/notificationHandler')
 const startupFeature = require('./utils/startupfeature')
 const { init: initCaptureOverlay } = require('./utils/captureOverlay')
 const { init: initIpc } = require('./ipc')
+const { initSecurity } = require('./middleware/security')
 const { DEFAULT_ACCENT_COLOR, DEFAULT_SHORTCUT } = require('../shared/constants.js')
 
-const iconPathIco = path.join(__dirname, '../../icon.ico')
-const iconPathPng = path.join(__dirname, '../../icon.png')
+const iconPathIco = path.join(__dirname, '../assets/icon.ico')
+const iconPathPng = path.join(__dirname, '../assets/icon.png')
 const iconPath = fs.existsSync(iconPathIco) ? iconPathIco : iconPathPng
 
 let win
@@ -158,7 +159,7 @@ function createSettingsWindow() {
     height: 700,
     minWidth: 800,
     minHeight: 550,
-    file: 'src/settings/settings.html'
+    file: 'src/renderer/pages/settings/settings.html'
   })
 
   settingsWin.webContents.once('did-finish-load', () => {
@@ -192,7 +193,7 @@ function createWhiteboardWindow() {
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#fffacd',
-    file: 'src/renderer/whiteboard.html'
+    file: 'src/renderer/pages/whiteboard.html'
   })
 
   whiteboardWindows.push(newWhiteboardWin)
@@ -435,7 +436,7 @@ function createOnboardingWindow() {
     maxHeight: 550,
     resizable: false,
     maximizable: false,
-    file: 'src/onboarding/onboarding.html'
+    file: 'src/renderer/pages/onboarding/onboarding.html'
   })
 
   onboardingWin.webContents.once('did-finish-load', () => {
@@ -471,7 +472,7 @@ function createMainWindow() {
     }
   })
 
-  win.loadFile('src/renderer/toolbar.html')
+  win.loadFile('src/renderer/pages/toolbar.html')
   standbyModeEnabled = false
   disableDefaultShortcuts(win)
 
@@ -587,6 +588,7 @@ if (!gotTheLock) {
   })
 
   app.whenReady().then(() => {
+    initSecurity()
     if (process.platform === 'win32') {
       app.setAppUserModelId('creatoryocreations.cycannotate')
       
