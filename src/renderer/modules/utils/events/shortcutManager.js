@@ -272,21 +272,27 @@ function init(deps) {
           document.getElementById('timer-settings-popup'),
           document.getElementById('clock-settings-popup'),
           document.getElementById('custom-color-picker'),
+          document.getElementById('sticky-font-dropdown'),
+          document.getElementById('sticky-color-palette'),
           document.getElementById('sticky-note-input-container')
         ]
         
         let hasOpenPopup = false
-        popups.forEach(popup => {
+        for (const popup of popups) {
           if (popup && (popup.classList.contains('show') || (popup.id === 'sticky-note-input-container' && popup.style.display === 'flex'))) {
             hasOpenPopup = true
             popup.classList.remove('show')
             if (popup.id === 'sticky-note-input-container') {
               popup.style.display = 'none'
             }
+            break
           }
-        })
+        }
         
         if (!hasOpenPopup) {
+          const isWhiteboard = document.body.classList.contains('whiteboard-mode')
+          if (isWhiteboard) return
+
           ipcRenderer.send('close-notification')
           setTimeout(() => {
             const closeBtn = document.getElementById('close-btn')

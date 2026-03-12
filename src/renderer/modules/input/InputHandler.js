@@ -67,8 +67,8 @@ function init(dependencies) {
   })
   canvas.addEventListener('wheel', (e) => {
     const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const x = e.clientX - rect.left - state.panX
+    const y = e.clientY - rect.top - state.panY
     
     const element = findElementAt(x, y)
     if (element && element.type === 'stickyNote') {
@@ -353,9 +353,24 @@ function draw(e) {
   if (state.isPanning) {
     const currentX = e.clientX || e.touches?.[0]?.clientX;
     const currentY = e.clientY || e.touches?.[0]?.clientY;
+    const dx = currentX - lastX;
+    const dy = currentY - lastY;
     
-    state.panX += currentX - lastX;
-    state.panY += currentY - lastY;
+    state.panX += dx;
+    state.panY += dy;
+    
+    if (state.selectionStart) {
+      state.selectionStart.x -= dx;
+      state.selectionStart.y -= dy;
+    }
+    if (state.shapeStart) {
+      state.shapeStart.x -= dx;
+      state.shapeStart.y -= dy;
+    }
+    if (state.dragOffset) {
+      state.dragOffset.x -= dx;
+      state.dragOffset.y -= dy;
+    }
     
     lastX = currentX;
     lastY = currentY;

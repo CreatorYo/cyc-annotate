@@ -488,6 +488,8 @@ function initWhiteboardMode(deps) {
 
     const titleInput = document.getElementById('wb-title-input');
     
+    let previousTitle = "";
+
     const resizeTitleInput = () => {
         if (!titleInput) return;
         
@@ -496,23 +498,42 @@ function initWhiteboardMode(deps) {
         tempSpan.style.position = 'absolute';
         tempSpan.style.whiteSpace = 'pre';
         tempSpan.style.font = getComputedStyle(titleInput).font;
-        tempSpan.innerText = titleInput.value || titleInput.placeholder;
+        tempSpan.innerText = titleInput.value || titleInput.placeholder || "Board Title";
         document.body.appendChild(tempSpan);
-        titleInput.style.width = Math.min(Math.max(tempSpan.offsetWidth + 16, 40), 450) + 'px';
+        titleInput.style.width = Math.min(Math.max(tempSpan.offsetWidth + 12, 10), 450) + 'px';
         document.body.removeChild(tempSpan);
     };
 
     if (titleInput) {
+        titleInput.addEventListener('focus', () => {
+            previousTitle = titleInput.value;
+            titleInput.select();
+        });
+
         titleInput.addEventListener('input', (e) => {
             state.currentBoardTitle = e.target.value;
             state.saveStatus = 'unsaved';
             resizeTitleInput();
         });
+
         titleInput.addEventListener('blur', () => {
-            if (state.saveStatus === 'unsaved') saveCurrentBoard();
+            if (!titleInput.value.trim()) {
+                titleInput.value = previousTitle;
+                state.currentBoardTitle = previousTitle;
+                resizeTitleInput();
+            } else if (state.saveStatus === 'unsaved') {
+                saveCurrentBoard();
+            }
         });
+
         titleInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === 'Escape') {
+            if (e.key === 'Enter') {
+                titleInput.blur();
+                e.preventDefault();
+                e.stopPropagation();
+            } else if (e.key === 'Escape') {
+                titleInput.value = previousTitle;
+                state.currentBoardTitle = previousTitle;
                 titleInput.blur();
                 e.preventDefault();
                 e.stopPropagation();

@@ -103,7 +103,7 @@ function init(context) {
         })
 
         const path = require('path')
-        activeProgressDialog.loadFile(path.join(__dirname, '../../settings/sound-test-dialog.html'))
+        activeProgressDialog.loadFile(path.join(__dirname, '../../renderer/pages/settings/sound-test-dialog.html'))
 
         let currentTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
 
@@ -160,7 +160,8 @@ function init(context) {
           { type: 'standbyOn', name: 'Standby On', duration: 1200 },
           { type: 'standbyOff', name: 'Standby Off', duration: 800 },
           { type: 'visibilityOn', name: 'Visibility On', duration: 700 },
-          { type: 'visibilityOff', name: 'Visibility Off', duration: 600 }
+          { type: 'visibilityOff', name: 'Visibility Off', duration: 600 },
+          { type: 'timerAlarm', name: 'Timer Alarm', duration: 1500 }
         ]
 
         let currentIndex = 0

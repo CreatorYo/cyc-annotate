@@ -648,8 +648,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
         const sin = Math.sin(rotation);
         const dx = unrotatedLabelX - centerX;
         const dy = unrotatedLabelY - centerY;
-        const screenX = centerX + (dx * cos - dy * sin);
-        const screenY = centerY + (dx * sin + dy * cos);
+        const screenX = (centerX + (dx * cos - dy * sin)) + state.panX;
+        const screenY = (centerY + (dx * sin + dy * cos)) + state.panY;
 
         overlayCtx.save();
         overlayCtx.setTransform(1, 0, 0, 1, 0, 0);

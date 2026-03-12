@@ -24,6 +24,7 @@
   "build": {
     "appId": "creatoryocreations.cycannotate",
     "productName": "CYC Annotate",
+    "asar": true,
     "beforeBuild": null,
     "compression": "maximum",
     "files": [
@@ -85,6 +86,7 @@
   },
   "overrides": {
     "tar": "^7.5.0",
-    "@tootallnate/once": "^3.0.1"
+    "@tootallnate/once": "^3.0.1",
+    "tmp": "^0.2.4"
   }
 }
