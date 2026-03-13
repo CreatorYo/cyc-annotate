@@ -29,6 +29,13 @@
     </div>
   </div>
   <script src="notification.js"></script>
+  <script>
+    if (typeof AppNotification !== 'undefined') {
+      AppNotification.initWindow();
+    } else if (typeof Notification !== 'undefined' && Notification.initWindow) {
+      Notification.initWindow();
+    }
+  </script>
 </body>
 
 </html>

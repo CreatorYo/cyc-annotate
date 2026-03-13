@@ -691,6 +691,34 @@
 
         <div class="settings-section" data-section="system" data-category="system">
           <div class="section-content">
+            <div class="setting-item" data-keywords="startup launch window toolbar whiteboard focus">
+              <div class="setting-row">
+                <div class="setting-label-wrapper">
+                  <label>Startup Window</label>
+                  <span class="setting-description">Choose which window to open when the app starts</span>
+                </div>
+                <div class="dropdown-menu" id="startup-window-dropdown">
+                  <button class="dropdown-menu-trigger" id="startup-window-dropdown-trigger">
+                    <div class="trigger-content">
+                      <span class="material-symbols-outlined" id="current-startup-window-icon">toolbar</span>
+                      <span id="current-startup-window-text">Toolbar</span>
+                    </div>
+                    <span class="material-symbols-outlined arrow">expand_more</span>
+                  </button>
+                  <div class="dropdown-menu-menu">
+                    <div class="dropdown-menu-item" data-value="toolbar">
+                      <span class="material-symbols-outlined">toolbar</span>
+                      <span>Toolbar</span>
+                    </div>
+                    <div class="dropdown-menu-item" data-value="whiteboard">
+                      <span class="material-symbols-outlined">edit_square</span>
+                      <span>Whiteboard</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="setting-item" data-keywords="system tray icon notification area show hide">
               <div class="setting-row">
                 <div class="setting-label-wrapper" data-toggle-for="show-tray-icon">

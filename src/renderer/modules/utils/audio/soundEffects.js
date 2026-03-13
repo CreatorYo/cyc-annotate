@@ -51,7 +51,7 @@ async function ensureRunning() {
       }
       return context.state === 'running'
     } catch (err) {
-      console.warn('SoundEffects: Failed to resume AudioContext', err)
+      ipcRenderer.invoke('show-warning-dialog', 'Audio Alert', 'System failed to resume audio. Sounds may be muted.', err.message)
       return false
     } finally {
       isResuming = false
@@ -199,7 +199,7 @@ async function loadCustomSound(filePath) {
     customSoundCache.set(filePath, audioBuffer)
     return audioBuffer
   } catch (error) {
-    console.warn(`SoundEffects: Failed to load custom sound from ${filePath}:`, error)
+    ipcRenderer.invoke('show-warning-dialog', 'Sound Alert', `Failed to load custom sound from: ${filePath}`, error.message)
     return null
   }
 }
@@ -325,9 +325,10 @@ async function playSound(type, retryCount = 0, isTest = false) {
     }
 
   } catch (err) {
-    console.warn(`SoundEffects: Failed to play "${type}" (attempt ${retryCount})`, err)
     if (retryCount < 2) {
       setTimeout(() => playSound(type, retryCount + 1, isTest), 100)
+    } else {
+      ipcRenderer.invoke('show-warning-dialog', 'Audio Alert', `Failed to play sound: "${type}" after multiple attempts.`, err.message)
     }
   }
 }

@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="../../styles/pages/toolbar.css">
   <link rel="stylesheet" href="../../styles/components/command-menu.css">
   <link rel="stylesheet" href="../../styles/components/widgets.css">
+  <link rel="stylesheet" href="../../styles/components/notification.css">
   <link rel="stylesheet" href="../../styles/pages/whiteboard.css">
   <link href="https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/open-dyslexic-regular.min.css" rel="stylesheet">
   <script>
@@ -19,12 +20,16 @@
       document.documentElement.style.setProperty('--wb-page-color', savedColor);
       const isDark = savedColor === '#1a1a1a';
       document.documentElement.style.setProperty('--wb-icon-color', isDark ? '#ffffff' : '#1e1e1e');
+      document.documentElement.style.backgroundColor = savedColor;
+      document.addEventListener('DOMContentLoaded', () => {
+          document.body.style.backgroundColor = savedColor;
+      });
     })();
   </script>
 </head>
 
 <body data-theme="system" class="whiteboard-mode">
-  <div id="whiteboard-ui" style="opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+  <div id="whiteboard-ui" style="opacity: 1; transition: opacity 0.3s ease;">
     <div class="whiteboard-header">
       <button id="wb-menu-btn" class="wb-icon-btn" title="My Whiteboards">
         <span class="material-symbols-outlined">menu</span>
@@ -51,6 +56,7 @@
       </div>
       <div class="window-drag-area" style="-webkit-app-region: drag; flex: 1; height: 100%; align-self: stretch;"></div>
       <div class="window-controls">
+
         <button id="whiteboard-settings-btn" class="window-control-btn" title="Whiteboard Settings" tabindex="-1">
           <span class="material-symbols-outlined">expand_more</span>
         </button>
@@ -67,92 +73,194 @@
     </div>
 
     <div id="wb-sidebar" class="wb-sidebar">
-      <div class="wb-sidebar-header">
-        <span class="wb-header-title">Boards</span>
-      </div>
-      
-      <div class="wb-search-container">
-        <div class="wb-search-wrapper">
-          <span class="material-symbols-outlined">search</span>
-          <input type="text" id="wb-search-input" placeholder="Search boards..." spellcheck="false">
-        </div>
-      </div>
+      <div id="wb-sidebar-inner" class="wb-sidebar-inner">
+        <!-- Main Boards View -->
+        <div id="wb-sidebar-main" class="wb-sidebar-view">
+          <div class="wb-sidebar-header">
+            <span class="wb-header-title">Boards</span>
+          </div>
+          
+          <div class="wb-search-container">
+            <div class="wb-search-wrapper">
+              <span class="material-symbols-outlined">search</span>
+              <input type="text" id="wb-search-input" placeholder="Search boards..." spellcheck="false">
+            </div>
+          </div>
 
-      <div id="wb-list" class="wb-board-list"></div>
-      
-      <div class="wb-sidebar-footer">
-        <button id="wb-new-board-btn" class="wb-footer-new-btn">
-          <span class="material-symbols-outlined">add</span>
-          <span>New Board</span>
-        </button>
-        <div class="wb-footer-secondary">
-          <button id="wb-delete-all-btn" class="wb-footer-clear-btn" title="Delete All Boards">
-            <span class="material-symbols-outlined">delete_sweep</span>
-          </button>
-          <button id="wb-sidebar-settings-btn" class="wb-footer-settings-btn" title="Settings">
-            <span class="material-symbols-outlined">settings</span>
-          </button>
+          <div id="wb-list" class="wb-board-list"></div>
+          
+          <div class="wb-sidebar-footer">
+            <button id="wb-new-board-btn" class="wb-footer-new-btn">
+              <span class="material-symbols-outlined">add</span>
+              <span>New Board</span>
+            </button>
+            <div class="wb-footer-secondary">
+              <button id="wb-delete-all-btn" class="wb-footer-clear-btn" title="Delete All Boards">
+                <span class="material-symbols-outlined">delete_sweep</span>
+              </button>
+              <button id="wb-sidebar-settings-btn" class="wb-footer-settings-btn" title="Settings">
+                <span class="material-symbols-outlined">settings</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="wb-sidebar-settings" class="wb-sidebar-view">
+          <div class="wb-sidebar-header">
+            <button id="wb-settings-back-btn" class="wb-back-btn">
+              <span class="material-symbols-outlined">arrow_back</span>
+            </button>
+            <span class="wb-header-title">Board Settings</span>
+          </div>
+
+          <div class="wb-sidebar-scroll-content">
+            <div class="wb-settings-section" data-active-category="solid" id="page-color-section">
+              <div class="wb-section-header-row">
+                <div class="wb-category-dropdown-container">
+                  <div class="wb-category-trigger-minimal" id="page-color-category-trigger">
+                    <label class="wb-settings-label">Page Colour</label>
+                    <span class="material-symbols-outlined chevron-icon">expand_more</span>
+                  </div>
+                  <div class="wb-category-menu">
+                    <div class="wb-category-item active" data-value="solid">Solid</div>
+                    <div class="wb-category-item" data-value="pastel">Pastel</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="wb-category-grids">
+                <div class="wb-category-grid-wrapper" data-category="pastel">
+                  <div class="whiteboard-colour-grid">
+                    <button class="wb-color-btn active" data-color="#fffacd" style="background: #fffacd; --btn-color: #fffacd;" title="Cream"></button>
+                    <button class="wb-color-btn" data-color="#ffffff" style="background: #ffffff; --btn-color: #ffffff;" title="White"></button>
+                    <button class="wb-color-btn" data-color="#f5f5f5" style="background: #f5f5f5; --btn-color: #f5f5f5;" title="Cool Grey"></button>
+                    <button class="wb-color-btn" data-color="#e3f2fd" style="background: #e3f2fd; --btn-color: #e3f2fd;" title="Sky Blue"></button>
+                    <button class="wb-color-btn" data-color="#f1f8e9" style="background: #f1f8e9; --btn-color: #f1f8e9;" title="Pale Green"></button>
+                    <button class="wb-color-btn" data-color="#fff3e0" style="background: #fff3e0; --btn-color: #fff3e0;" title="Peach"></button>
+                    <button class="wb-color-btn" data-color="#f3e5f5" style="background: #f3e5f5; --btn-color: #f3e5f5;" title="Lavender"></button>
+                    <button class="wb-color-btn" data-color="#fce4ec" style="background: #fce4ec; --btn-color: #fce4ec;" title="Pink"></button>
+                    <button class="wb-color-btn" data-color="#e0f2f1" style="background: #e0f2f1; --btn-color: #e0f2f1;" title="Mint"></button>
+                  </div>
+                </div>
+
+                <div class="wb-category-grid-wrapper" data-category="solid">
+                  <div class="whiteboard-colour-grid">
+                    <button class="wb-color-btn" data-color="#1a1a1a" style="background: #1a1a1a; --btn-color: #1a1a1a;" title="Obsidian"></button>
+                    <button class="wb-color-btn" data-color="#d32f2f" style="background: #d32f2f; --btn-color: #d32f2f;" title="Ruby Red"></button>
+                    <button class="wb-color-btn" data-color="#f57c00" style="background: #f57c00; --btn-color: #f57c00;" title="Deep Orange"></button>
+                    <button class="wb-color-btn" data-color="#fbc02d" style="background: #fbc02d; --btn-color: #fbc02d;" title="Sunny Yellow"></button>
+                    <button class="wb-color-btn" data-color="#388e3c" style="background: #388e3c; --btn-color: #388e3c;" title="Emerald Green"></button>
+                    <button class="wb-color-btn" data-color="#1976d2" style="background: #1976d2; --btn-color: #1976d2;" title="Royal Blue"></button>
+                    <button class="wb-color-btn" data-color="#7b1fa2" style="background: #7b1fa2; --btn-color: #7b1fa2;" title="Deep Purple"></button>
+                    <button class="wb-color-btn" data-color="#c2185b" style="background: #c2185b; --btn-color: #c2185b;" title="Vivid Pink"></button>
+                    <button class="wb-color-btn" data-color="#455a64" style="background: #455a64; --btn-color: #455a64;" title="Slate Grey"></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="wb-settings-divider"></div>
+
+            <div class="wb-settings-section">
+              <label class="wb-settings-label">Page Style</label>
+              <div class="whiteboard-mode-toggle">
+                <button class="wb-mode-btn" data-mode="grid">
+                  <span class="material-symbols-outlined">grid_4x4</span>
+                  <span>Grid</span>
+                </button>
+                <button class="wb-mode-btn" data-mode="lines">
+                  <span class="material-symbols-outlined">reorder</span>
+                  <span>Lines</span>
+                </button>
+                <button class="wb-mode-btn" data-mode="dotted">
+                  <span class="material-symbols-outlined">more_horiz</span>
+                  <span>Dotted</span>
+                </button>
+                <button class="wb-mode-btn" data-mode="isometric">
+                  <span class="material-symbols-outlined">grid_guides</span>
+                  <span>Isometric</span>
+                </button>
+                <button class="wb-mode-btn" data-mode="graph">
+                  <span class="material-symbols-outlined">grid_on</span>
+                  <span>Graph</span>
+                </button>
+                <button class="wb-mode-btn" data-mode="hexagonal">
+                  <span class="material-symbols-outlined">hexagon</span>
+                  <span>Hex</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="wb-settings-divider"></div>
+
+            <div class="wb-settings-section" data-active-category="solid" id="pattern-color-section">
+              <div class="wb-section-header-row">
+                <div class="wb-category-dropdown-container">
+                  <div class="wb-category-trigger-minimal" id="pattern-color-category-trigger">
+                    <label class="wb-settings-label">Pattern Colour</label>
+                    <span class="material-symbols-outlined chevron-icon">expand_more</span>
+                  </div>
+                  <div class="wb-category-menu">
+                    <div class="wb-category-item active" data-value="solid">Solid</div>
+                    <div class="wb-category-item" data-value="pastel">Pastel</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="wb-category-grids">
+                <div class="wb-category-grid-wrapper" data-category="solid">
+                  <div class="whiteboard-pattern-colour-grid">
+                    <button class="wb-pattern-color-btn active" data-color="default" style="background: rgba(150,150,150,0.4); --btn-color: #888;" title="Default"></button>
+                    <button class="wb-pattern-color-btn" data-color="#121212" style="background: #121212; --btn-color: #121212;" title="Midnight"></button>
+                    <button class="wb-pattern-color-btn" data-color="#b71c1c" style="background: #b71c1c; --btn-color: #b71c1c;" title="Crimson"></button>
+                    <button class="wb-pattern-color-btn" data-color="#1b5e20" style="background: #1b5e20; --btn-color: #1b5e20;" title="Forest"></button>
+                    <button class="wb-pattern-color-btn" data-color="#0d47a1" style="background: #0d47a1; --btn-color: #0d47a1;" title="Ocean"></button>
+                    <button class="wb-pattern-color-btn" data-color="#fbc02d" style="background: #fbc02d; --btn-color: #fbc02d;" title="Gold"></button>
+                    <button class="wb-pattern-color-btn" data-color="#ffffff" style="background: #ffffff; --btn-color: #ffffff;" title="White"></button>
+                  </div>
+                </div>
+
+                <div class="wb-category-grid-wrapper" data-category="pastel">
+                  <div class="whiteboard-pattern-colour-grid">
+                    <button class="wb-pattern-color-btn" data-color="#e3f2fd" style="background: #e3f2fd; --btn-color: #e3f2fd;" title="Soft Blue"></button>
+                    <button class="wb-pattern-color-btn" data-color="#f1f8e9" style="background: #f1f8e9; --btn-color: #f1f8e9;" title="Soft Green"></button>
+                    <button class="wb-pattern-color-btn" data-color="#fff3e0" style="background: #fff3e0; --btn-color: #fff3e0;" title="Soft Peach"></button>
+                    <button class="wb-pattern-color-btn" data-color="#f3e5f5" style="background: #f3e5f5; --btn-color: #f3e5f5;" title="Soft Lavender"></button>
+                    <button class="wb-pattern-color-btn" data-color="#fce4ec" style="background: #fce4ec; --btn-color: #fce4ec;" title="Soft Pink"></button>
+                    <button class="wb-pattern-color-btn" data-color="#e0f2f1" style="background: #e0f2f1; --btn-color: #e0f2f1;" title="Soft Mint"></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="wb-settings-divider"></div>
+
+            <div class="wb-settings-section">
+              <label class="wb-settings-label">Export & Share</label>
+              <div class="wb-export-grid">
+                <button class="wb-export-btn" id="wb-export-png-btn" title="Export as PNG">
+                  <span class="material-symbols-outlined">image</span>
+                  <span>PNG</span>
+                </button>
+                <button class="wb-export-btn" id="wb-export-jpg-btn" title="Export as JPG">
+                  <span class="material-symbols-outlined">photo_library</span>
+                  <span>JPG</span>
+                </button>
+                <button class="wb-export-btn" id="wb-print-btn" title="Print Board">
+                  <span class="material-symbols-outlined">print</span>
+                  <span>Print</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <div id="whiteboard-settings-popup" class="whiteboard-settings-popup" style="display: none;">
-      <div class="whiteboard-settings-group">
-        <label>Page Colour</label>
-        <div class="whiteboard-color-grid">
-          <button class="wb-color-btn" data-color="#fffacd" style="background: #fffacd;" title="Cream"></button>
-          <button class="wb-color-btn" data-color="#ffffff" style="background: #ffffff;" title="White"></button>
-          <button class="wb-color-btn" data-color="#1a1a1a" style="background: #1a1a1a;" title="Dark"></button>
-          <button class="wb-color-btn" data-color="#e3f2fd" style="background: #e3f2fd;" title="Blue"></button>
-          <button class="wb-color-btn" data-color="#f1f8e9" style="background: #f1f8e9;" title="Green"></button>
-        </div>
-      </div>
-      <div class="whiteboard-settings-divider"></div>
-      <div class="whiteboard-settings-group">
-        <label>Page Style</label>
-        <div class="whiteboard-mode-toggle">
-          <button class="wb-mode-btn" data-mode="grid">
-            <span class="material-symbols-outlined">grid_4x4</span>
-            <span>Grid</span>
-          </button>
-          <button class="wb-mode-btn" data-mode="lines">
-            <span class="material-symbols-outlined">reorder</span>
-            <span>Lines</span>
-          </button>
-          <button class="wb-mode-btn" data-mode="dotted">
-            <span class="material-symbols-outlined">more_horiz</span>
-            <span>Dotted</span>
-          </button>
-          <button class="wb-mode-btn" data-mode="isometric">
-            <span class="material-symbols-outlined">grid_guides</span>
-            <span>Isometric</span>
-          </button>
-          <button class="wb-mode-btn" data-mode="graph">
-            <span class="material-symbols-outlined">grid_on</span>
-            <span>Graph</span>
-          </button>
-          <button class="wb-mode-btn" data-mode="hexagonal">
-            <span class="material-symbols-outlined">hexagon</span>
-            <span>Hex</span>
-          </button>
-        </div>
-      </div>
-      <div class="whiteboard-settings-divider"></div>
-      <div class="whiteboard-settings-group">
-        <label>Pattern Colour</label>
-        <div class="whiteboard-pattern-color-grid">
-          <button class="wb-pattern-color-btn active" data-color="default" style="background: rgba(255,255,255,0.15);" title="Default"></button>
-          <button class="wb-pattern-color-btn" data-color="#ff0000" style="background: #ff0000;" title="Red"></button>
-          <button class="wb-pattern-color-btn" data-color="#00ff00" style="background: #00ff00;" title="Green"></button>
-          <button class="wb-pattern-color-btn" data-color="#00bcd4" style="background: #00bcd4;" title="Teal"></button>
-        </div>
-      </div>
-    </div>
-  </div>
 
-
+  <div id="wb-notification-container" class="wb-notification-container"></div>
   <canvas id="canvas"></canvas>
-
   <script src="../renderer.js"></script>
 </body>
 </html>

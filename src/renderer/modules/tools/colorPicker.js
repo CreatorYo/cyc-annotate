@@ -6,6 +6,7 @@ function initColorPickerTool(deps) {
     playSound,
     hideAllTooltips,
     closeAllPopups,
+    saveState
   } = deps
 
   let isCustomColorActive = false
@@ -13,7 +14,7 @@ function initColorPickerTool(deps) {
   let currentH = 0, currentS = 1, currentV = 1
 
   function rgbToHex(r, g, b) {
-    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
   }
 
   function hexToRgb(hex) {
@@ -133,7 +134,7 @@ function initColorPickerTool(deps) {
     if (colorPreview) colorPreview.style.backgroundColor = currentHex
     if (hexInput && document.activeElement !== hexInput) hexInput.value = currentHex
 
-    setColor(currentHex, true)
+    setColor(currentHex, true, false)
   }
 
   function updateCustomColorButton(color) {
@@ -151,34 +152,33 @@ function initColorPickerTool(deps) {
     }
   }
 
-  function setColor(color, isCustom = false) {
-    const upperColor = color.toUpperCase()
-    state.color = upperColor
+  function setColor(color, isCustom = false, save = true) {
+    state.color = color
 
     if (state.tool === 'select' && state.selectedElements.length > 0) {
-      selectTool.updateSelectedColor(upperColor)
+      selectTool.updateSelectedColor(color, save)
     }
     if (textTool) {
-      textTool.updateCurrentTextColor(upperColor)
+      textTool.updateCurrentTextColor(color)
     }
     if (deps.stickyNoteTool && deps.stickyNoteTool.updateActiveNoteColor) {
-      deps.stickyNoteTool.updateActiveNoteColor(upperColor)
+      deps.stickyNoteTool.updateActiveNoteColor(color)
     }
 
     if (state.pickingWhiteboardColor) {
-      state.whiteboardPageColor = upperColor
-      document.body.style.setProperty('--wb-page-color', upperColor)
+      state.whiteboardPageColor = color
+      document.body.style.setProperty('--wb-page-color', color)
       const redraw = deps.redrawCanvas || (global.redrawCanvas)
       if (redraw) redraw()
     }
 
-    updateThemeColors(upperColor)
+    updateThemeColors(color)
 
     document.querySelectorAll('.color-swatch, .color-option').forEach(el => {
-      const elColor = el.dataset.color?.toUpperCase()
-      const isActive = elColor === upperColor
+      const elColor = el.dataset.color
+      const isActive = elColor && color && elColor.toLowerCase() === color.toLowerCase()
       el.classList.toggle('active', isActive)
-      if (isActive) el.style.setProperty('border-color', upperColor, 'important')
+      if (isActive) el.style.setProperty('border-color', color, 'important')
       else el.style.removeProperty('border-color')
     })
 
@@ -186,7 +186,7 @@ function initColorPickerTool(deps) {
     const customPickerPopup = document.getElementById('custom-color-picker')
 
     const isPreset = !!Array.from(document.querySelectorAll('.color-swatch[data-color], .color-option[data-color]'))
-      .find(el => el.dataset.color.toUpperCase() === upperColor)
+      .find(el => el.dataset.color && color && el.dataset.color.toLowerCase() === color.toLowerCase())
 
     if (isPreset && !isCustom) {
       isCustomColorActive = false
@@ -194,16 +194,16 @@ function initColorPickerTool(deps) {
       if (customBtn) customBtn.classList.remove('active')
     } else {
       isCustomColorActive = true
-      customColorValue = upperColor
+      customColorValue = color
       if (customBtn) customBtn.classList.add('active')
     }
 
     if (isCustom) {
-      updateCustomColorButton(upperColor)
+      updateCustomColorButton(color)
     }
 
     if (!isCustom && customPickerPopup?.classList.contains('show')) {
-      syncPickerWithColor(upperColor)
+      syncPickerWithColor(color)
     }
   }
 
@@ -235,7 +235,7 @@ function initColorPickerTool(deps) {
       
       try {
         const result = await new EyeDropper().open()
-        const hex = result.sRGBHex.toUpperCase()
+        const hex = result.sRGBHex
         syncPickerWithColor(hex)
         setColor(hex, true)
         playSound('color')
@@ -269,7 +269,13 @@ function initColorPickerTool(deps) {
       if (isDraggingSV) handleSVMouse(e)
       if (isDraggingHue) handleHueMouse(e)
     })
-    window.addEventListener('mouseup', () => { isDraggingSV = false; isDraggingHue = false })
+    window.addEventListener('mouseup', () => { 
+      if ((isDraggingSV || isDraggingHue) && saveState) {
+        saveState();
+      }
+      isDraggingSV = false; 
+      isDraggingHue = false 
+    })
 
     if (hexInput) {
       hexInput.maxLength = 7
@@ -279,15 +285,15 @@ function initColorPickerTool(deps) {
         if (/^#[0-9A-Fa-f]{3}$/.test(hex) || /^#[0-9A-Fa-f]{6}$/.test(hex)) {
           const normalized = normalizeHex(hex)
           syncPickerWithColor(normalized)
-          setColor(normalized.toUpperCase(), true)
+          setColor(normalized, true)
         }
       })
       hexInput.addEventListener('blur', (e) => {
         const hex = e.target.value.trim()
         if (/^#[0-9A-Fa-f]{3}$/.test(hex) || /^#[0-9A-Fa-f]{6}$/.test(hex)) {
           const normalized = normalizeHex(hex)
-          e.target.value = normalized.toUpperCase()
-          setColor(normalized.toUpperCase(), true)
+          e.target.value = normalized
+          setColor(normalized, true)
         } else {
           e.target.value = state.color
         }
@@ -304,6 +310,19 @@ function initColorPickerTool(deps) {
           }
         }
       })
+    }
+
+    const savedPos = localStorage.getItem('color-picker-pos')
+    if (savedPos && customPickerPopup) {
+      try {
+        const { left, top, isDragged } = JSON.parse(savedPos)
+        if (isDragged) {
+          customPickerPopup.classList.add('dragged')
+          customPickerPopup.style.cssText = `left: ${left}px; top: ${top}px; transform: none; bottom: auto; right: auto; margin: 0;`
+        }
+      } catch (e) {
+        ipcRenderer.invoke('show-error-dialog', 'System Error', 'Failed to restore color picker position from storage.', e.message)
+      }
     }
 
     let isDragging = false, startX = 0, startY = 0, initialLeft = 0, initialTop = 0
@@ -328,10 +347,23 @@ function initColorPickerTool(deps) {
       customPickerPopup.style.left = x + 'px'
       customPickerPopup.style.top = y + 'px'
     })
-    window.addEventListener('mouseup', () => isDragging = false)
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        const rect = customPickerPopup.getBoundingClientRect()
+        const parentRect = customPickerPopup.offsetParent.getBoundingClientRect()
+        const pos = {
+          left: rect.left - parentRect.left,
+          top: rect.top - parentRect.top,
+          isDragged: true
+        }
+        localStorage.setItem('color-picker-pos', JSON.stringify(pos))
+      }
+      isDragging = false
+    })
     dragHandle?.addEventListener('dblclick', () => {
       customPickerPopup.classList.remove('dragged')
       customPickerPopup.removeAttribute('style')
+      localStorage.removeItem('color-picker-pos')
     })
   }
 
@@ -391,14 +423,14 @@ function initColorPickerTool(deps) {
       swatch.addEventListener('click', () => { playSound('color'); setColor(swatch.dataset.color, false) })
     })
 
-    const normalizedInitial = state.color.toUpperCase()
+    const initialColor = state.color
     const isPreset = !!Array.from(document.querySelectorAll('.color-swatch[data-color], .color-option[data-color]'))
-      .find(el => el.dataset.color.toUpperCase() === normalizedInitial)
+      .find(el => el.dataset.color && initialColor && el.dataset.color.toLowerCase() === initialColor.toLowerCase())
 
     if (!isPreset) {
       isCustomColorActive = true
-      customColorValue = normalizedInitial
-      updateCustomColorButton(normalizedInitial)
+      customColorValue = initialColor
+      updateCustomColorButton(initialColor)
     }
   }
 

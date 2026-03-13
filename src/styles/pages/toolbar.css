@@ -3,7 +3,6 @@
   --bg-light: #ffffff;
   --toolbar-bg-dark: #1e1e1e;
   --toolbar-bg-light: #ffffff;
-  --toolbar-border: rgba(0, 0, 0, 0.1);
   --text-dark: #000000;
   --text-light: #ffffff;
   --accent-color: #3bbbf6;
@@ -25,8 +24,6 @@
 [data-theme="light"] ::selection {
   background: color-mix(in srgb, var(--accent-color), transparent 75%);
 }
-
-
 
 ::-webkit-scrollbar {
   width: 8px;
@@ -96,14 +93,15 @@
   --widget-preview-bg: rgba(255, 255, 255, 0.1);
   --widget-preview-border: rgba(255, 255, 255, 0.08);
   --widget-label: rgba(255, 255, 255, 0.6);
-  --widget-add-btn-bg: rgba(255, 255, 255, 0.12);
-  --widget-add-btn-border: rgba(255, 255, 255, 0.1);
+  --widget-add-btn-bg: #333333;
+  --widget-add-btn-border: rgba(255, 255, 255, 0.08);
   --widget-add-btn-text: rgba(255, 255, 255, 0.8);
   --widget-icon: rgba(255, 255, 255, 0.7);
   --widget-icon-hover: #ffffff;
   --container-border: rgba(255, 255, 255, 0.06);
   --clock-face-border: rgba(255, 255, 255, 0.2);
   --clock-hand-bg: #ffffff;
+  --toolbar-border: rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="light"] {
@@ -124,6 +122,7 @@
   --container-border: rgba(0, 0, 0, 0.15);
   --clock-face-border: rgba(0, 0, 0, 0.2);
   --clock-hand-bg: #000000;
+  --toolbar-border: rgba(0, 0, 0, 0.08);
 }
 
 * {
@@ -1478,6 +1477,7 @@ button, input, textarea {
   font-size: 13px;
   outline: none;
   width: 100%;
+  text-transform: uppercase;
 }
 
 .eyedropper-btn {
@@ -1652,9 +1652,6 @@ button, input, textarea {
   background: rgba(0, 0, 0, 0.15);
 }
 
-
-
-
 #canvas {
   position: absolute;
   top: 0;
@@ -1674,7 +1671,6 @@ button, input, textarea {
     padding: 12px 8px;
   }
 }
-
 
 .standby-active::before {
   content: '';
@@ -1740,12 +1736,6 @@ button, input, textarea {
   right: 0;
   height: 1px;
 }
-
-
-
-
-
-
 
 .toolbar-drag-handle {
   display: flex;

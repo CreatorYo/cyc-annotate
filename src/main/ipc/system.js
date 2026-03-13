@@ -23,11 +23,15 @@ function initSystemIpc(context) {
   });
 
   ipcMain.on('reset-everything', () => {
-    const { getWin } = context;
+    const { getWin, getSettingsWin } = context;
     const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('reset-everything');
-    }
+    const settingsWin = getSettingsWin();
+
+    [win, settingsWin].forEach(targetWin => {
+      if (targetWin && !targetWin.isDestroyed()) {
+        targetWin.webContents.send('reset-everything');
+      }
+    });
   });
 }
 

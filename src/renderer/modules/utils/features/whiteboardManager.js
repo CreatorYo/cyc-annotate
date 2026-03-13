@@ -4,7 +4,9 @@ function initWhiteboardMode(deps) {
   const { 
     state, 
     redrawCanvas, 
-    initWindowControls 
+    initWindowControls,
+    updateCursor,
+    playSound
   } = deps
 
   const isWhiteboard = window.location.pathname.includes('whiteboard.html')
@@ -46,6 +48,7 @@ function initWhiteboardMode(deps) {
           updateWhiteboardTheme(state.whiteboardPageColor);
           redrawCanvas();
           updateActiveBoardUI();
+          updateSettingsUI();
           
           document.querySelectorAll('.wb-pattern-color-btn').forEach(btn => {
               btn.classList.toggle('active', btn.dataset.color === state.whiteboardGridColor);
@@ -166,12 +169,21 @@ function initWhiteboardMode(deps) {
         return null;
     }
 
-    const saveCurrentBoard = async () => {
+    let lastPreviewCapture = 0;
+    const PREVIEW_CAPTURE_INTERVAL = 30000; // 30 seconds
+
+    const saveCurrentBoard = async (options = { capturePreview: true }) => {
         if (!state.currentBoardId) return;
         
         state.saveStatus = 'saving';
         
-        const preview = await capturePreview();
+        let preview = null;
+        const now = Date.now();
+        
+        if (options.capturePreview || (now - lastPreviewCapture > PREVIEW_CAPTURE_INTERVAL)) {
+            preview = await capturePreview();
+            lastPreviewCapture = now;
+        }
         
         try {
             await ipcRenderer.invoke('wb-save-board', {
@@ -188,9 +200,9 @@ function initWhiteboardMode(deps) {
                 }
             });
             state.saveStatus = 'saved';
-            refreshBoardsList(); 
+            if (preview) refreshBoardsList(); 
         } catch (e) {
-            ipcRenderer.invoke('show-error-dialog', 'Whiteboard Error', 'Failed to save board', e.message);
+            ipcRenderer.invoke('show-error-dialog', 'Save Error', 'Failed to save whiteboard data.', e.message);
             state.saveStatus = 'unsaved'; 
             updateSaveStatusUI('Error Saving');
         }
@@ -214,6 +226,8 @@ function initWhiteboardMode(deps) {
       renderBoardsList();
     }
 
+    let collapsedSections = JSON.parse(localStorage.getItem('wb-collapsed-sections') || '{"pinned": false, "all": false}');
+
     const renderBoardsList = () => {
       const listContainer = document.getElementById('wb-list');
       if (!listContainer) return;
@@ -223,60 +237,105 @@ function initWhiteboardMode(deps) {
       );
 
       if (filteredBoards.length === 0) {
-        listContainer.innerHTML = `
-          <div class="wb-empty-state">
-            <div class="wb-empty-main">No boards yet</div>
-            <div class="wb-empty-sub">Create one to get started</div>
-          </div>
-        `;
+        if (searchQuery) {
+          listContainer.innerHTML = `
+            <div class="wb-empty-state search-empty">
+              <span class="material-symbols-outlined wb-empty-icon">search</span>
+              <div class="wb-empty-main">No results found</div>
+              <div class="wb-empty-sub">Try searching for something else</div>
+            </div>
+          `;
+        } else {
+          listContainer.innerHTML = `
+            <div class="wb-empty-state">
+              <div class="wb-empty-main">No boards yet</div>
+              <div class="wb-empty-sub">Create one to get started</div>
+            </div>
+          `;
+        }
         return;
       }
 
+      const pinnedBoards = filteredBoards.filter(b => b.pinned);
+      const otherBoards = filteredBoards.filter(b => !b.pinned);
+
       listContainer.innerHTML = '';
-      filteredBoards.forEach(board => {
-        const item = document.createElement('div');
-        item.className = `wb-board-item ${board.id === state.currentBoardId ? 'active' : ''}`;
-        item.setAttribute('data-id', board.id);
+
+      const createSection = (id, title, boards) => {
+        if (boards.length === 0 && !searchQuery) return;
+        if (boards.length === 0 && searchQuery) return;
+
+        const section = document.createElement('div');
+        section.className = `wb-list-section ${collapsedSections[id] ? 'collapsed' : ''}`;
         
-        const canDelete = filteredBoards.length > 1;
-        
-        item.innerHTML = `
-          <div class="wb-board-info">
-            <div class="wb-board-title">${board.title}</div>
-            <div class="wb-board-date">${new Date(board.updatedAt).toLocaleDateString()}</div>
-          </div>
-          ${canDelete ? `
-          <button class="wb-item-delete-btn" title="Delete Board">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-          ` : ''}
+        const header = document.createElement('div');
+        header.className = 'wb-section-header';
+        header.innerHTML = `
+          <span class="material-symbols-outlined wb-section-chevron">expand_more</span>
+          <span class="wb-section-title">${title} (${boards.length})</span>
         `;
-
-        item.addEventListener('click', (e) => {
-          if (e.target.closest('.wb-item-delete-btn')) return;
-          if (board.id !== state.currentBoardId) {
-            loadBoard(board.id);
-          }
-          sidebar.classList.remove('open');
+        header.addEventListener('click', (e) => {
+          e.stopPropagation();
+          collapsedSections[id] = !collapsedSections[id];
+          localStorage.setItem('wb-collapsed-sections', JSON.stringify(collapsedSections));
+          section.classList.toggle('collapsed');
         });
 
-        if (canDelete) {
-          item.querySelector('.wb-item-delete-btn').addEventListener('click', (e) => {
+        const content = document.createElement('div');
+        content.className = 'wb-section-content';
+
+        boards.forEach(board => {
+          const item = document.createElement('div');
+          item.className = `wb-board-item ${board.id === state.currentBoardId ? 'active' : ''}`;
+          item.setAttribute('data-id', board.id);
+          
+          item.innerHTML = `
+            <div class="wb-board-info">
+              <div class="wb-board-title">${board.title}</div>
+              <div class="wb-board-date">${new Date(board.updatedAt).toLocaleDateString()}</div>
+            </div>
+            <button class="wb-item-more-btn" title="More Options">
+              <span class="material-symbols-outlined">more_vert</span>
+            </button>
+          `;
+
+          item.addEventListener('click', (e) => {
+            if (e.target.closest('.wb-item-more-btn')) return;
+            if (board.id !== state.currentBoardId) {
+              loadBoard(board.id);
+            }
+            sidebar.classList.remove('open');
+          });
+
+          item.querySelector('.wb-item-more-btn').addEventListener('click', (e) => {
             e.stopPropagation();
-            deleteBoard(board.id);
+            const rect = e.target.getBoundingClientRect();
+            ipcRenderer.send('show-whiteboard-context-menu', {
+               boardId: board.id,
+               title: board.title,
+               x: Math.round(rect.left),
+               y: Math.round(rect.bottom)
+            });
           });
-        }
 
-        item.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          ipcRenderer.send('show-whiteboard-context-menu', {
-             boardId: board.id,
-             title: board.title
+          item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            ipcRenderer.send('show-whiteboard-context-menu', {
+               boardId: board.id,
+               title: board.title
+            });
           });
+
+          content.appendChild(item);
         });
 
-        listContainer.appendChild(item);
-      });
+        section.appendChild(header);
+        section.appendChild(content);
+        listContainer.appendChild(section);
+      };
+
+      createSection('pinned', 'Pinned', pinnedBoards);
+      createSection('all', 'All Boards', otherBoards);
     }
 
     const deleteAllBtn = document.getElementById('wb-delete-all-btn');
@@ -328,10 +387,6 @@ function initWhiteboardMode(deps) {
 
     const settingsBtnSidebar = document.getElementById('wb-sidebar-settings-btn');
     if (settingsBtnSidebar) {
-        settingsBtnSidebar.addEventListener('click', (e) => {
-            e.stopPropagation();
-            document.getElementById('whiteboard-settings-btn')?.click();
-        });
     }
     
     const updateActiveBoardUI = () => {
@@ -357,21 +412,42 @@ function initWhiteboardMode(deps) {
     if (autoSaveInterval) clearInterval(autoSaveInterval);
     autoSaveInterval = setInterval(() => {
         if (state.saveStatus === 'unsaved' && state.currentBoardId) {
-            saveCurrentBoard(false);
+            saveCurrentBoard({ capturePreview: false });
         }
-    }, 1000);
+    }, 2000);
     
+    const updateSettingsUI = () => {
+        const colorBtns = document.querySelectorAll('.wb-color-btn');
+        colorBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.color === state.whiteboardPageColor);
+        });
+
+        const modeBtns = document.querySelectorAll('.wb-mode-btn');
+        modeBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === state.whiteboardGridMode);
+        });
+
+        const gridColorBtns = document.querySelectorAll('.wb-pattern-color-btn');
+        gridColorBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.color === state.whiteboardGridColor);
+        });
+    }
+
+    const getBrightness = (hex) => {
+      hex = hex.replace("#", "");
+      const r = parseInt(hex.substr(0, 2), 16), g = parseInt(hex.substr(2, 2), 16), b = parseInt(hex.substr(4, 2), 16);
+      return (r * 299 + g * 587 + b * 114) / 1000;
+    }
+
     const updateWhiteboardTheme = (color) => {
       document.body.style.setProperty('--wb-page-color', color)
       localStorage.setItem('last-wb-page-color', color)
-      
-      const isDark = color === '#1a1a1a'
-      const iconColor = isDark ? '#ffffff' : '#1e1e1e'
-      document.documentElement.style.setProperty('--wb-icon-color', iconColor)
-      
-      redrawCanvas()
+      const isDark = getBrightness(color) < 128;
+      const header = document.querySelector('.whiteboard-header');
+      if (header) header.setAttribute('data-header-theme', isDark ? 'dark' : 'light');
+      redrawCanvas();
     }
-    
+
     updateWhiteboardTheme(state.whiteboardPageColor)
     
     setTimeout(() => {
@@ -408,16 +484,27 @@ function initWhiteboardMode(deps) {
             e.stopPropagation();
             sidebar.classList.toggle('open');
             refreshBoardsList();
+            if (typeof updateCursor === 'function') updateCursor();
         });
         
         document.addEventListener('click', (e) => {
             if (!sidebar.contains(e.target) && e.target !== menuBtn) {
+                const wasOpen = sidebar.classList.contains('open');
                 sidebar.classList.remove('open');
+                if (wasOpen && typeof updateCursor === 'function') updateCursor();
             }
         });
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                // First, handle color category dropdowns
+                const openCategoryMenus = document.querySelectorAll('.wb-category-dropdown-container.open');
+                if (openCategoryMenus.length > 0) {
+                    openCategoryMenus.forEach(c => c.classList.remove('open'));
+                    e.stopPropagation();
+                    return;
+                }
+
                 const titleDropdown = document.getElementById('wb-title-dropdown');
                 if (titleDropdown && titleDropdown.style.display === 'flex') {
                      titleDropdown.style.display = 'none';
@@ -434,16 +521,18 @@ function initWhiteboardMode(deps) {
                     return;
                 }
 
-                if (sidebar.classList.contains('open')) {
-                    sidebar.classList.remove('open');
+                const sidebarInner = document.getElementById('wb-sidebar-inner');
+                if (sidebarInner && sidebarInner.classList.contains('show-settings')) {
+                    sidebarInner.classList.remove('show-settings');
                     e.stopPropagation();
                     return;
                 }
-                const settingsPopup = document.getElementById('whiteboard-settings-popup');
-                if (settingsPopup && settingsPopup.style.display === 'flex') {
-                    settingsPopup.style.display = 'none';
-                    document.getElementById('whiteboard-settings-btn')?.classList.remove('active');
+
+                if (sidebar.classList.contains('open')) {
+                    sidebar.classList.remove('open');
+                    if (typeof updateCursor === 'function') updateCursor();
                     e.stopPropagation();
+                    return;
                 }
             }
         }, true);
@@ -460,6 +549,10 @@ function initWhiteboardMode(deps) {
         ipcRenderer.invoke('show-error-dialog', 'Whiteboard Error', 'Failed to duplicate board', e.message);
       }
     }
+
+    ipcRenderer.on('wb-board-updated', () => {
+        refreshBoardsList();
+    });
 
     ipcRenderer.on('wb-menu-rename', (event, boardId) => {
       if (state.currentBoardId !== boardId) {
@@ -490,18 +583,22 @@ function initWhiteboardMode(deps) {
     
     let previousTitle = "";
 
+    let titleSizeSpan = null;
     const resizeTitleInput = () => {
         if (!titleInput) return;
         
-        const tempSpan = document.createElement('span');
-        tempSpan.style.visibility = 'hidden';
-        tempSpan.style.position = 'absolute';
-        tempSpan.style.whiteSpace = 'pre';
-        tempSpan.style.font = getComputedStyle(titleInput).font;
-        tempSpan.innerText = titleInput.value || titleInput.placeholder || "Board Title";
-        document.body.appendChild(tempSpan);
-        titleInput.style.width = Math.min(Math.max(tempSpan.offsetWidth + 12, 10), 450) + 'px';
-        document.body.removeChild(tempSpan);
+        if (!titleSizeSpan) {
+            titleSizeSpan = document.createElement('span');
+            titleSizeSpan.style.visibility = 'hidden';
+            titleSizeSpan.style.position = 'absolute';
+            titleSizeSpan.style.whiteSpace = 'pre';
+            titleSizeSpan.style.pointerEvents = 'none';
+            document.body.appendChild(titleSizeSpan);
+        }
+        
+        titleSizeSpan.style.font = getComputedStyle(titleInput).font;
+        titleSizeSpan.innerText = titleInput.value || titleInput.placeholder || "Board Title";
+        titleInput.style.width = Math.min(Math.max(titleSizeSpan.offsetWidth + 12, 10), 450) + 'px';
     };
 
     if (titleInput) {
@@ -550,7 +647,24 @@ function initWhiteboardMode(deps) {
         titleOptionsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const isVisible = titleDropdown.style.display === 'flex';
-            titleDropdown.style.display = isVisible ? 'none' : 'flex';
+            
+            if (!isVisible) {
+                titleDropdown.style.display = 'flex';
+                
+                const btnRect = titleOptionsBtn.getBoundingClientRect();
+                const dropdownWidth = 160; 
+                
+                if (btnRect.right < dropdownWidth + 12) {
+                    titleDropdown.style.left = '0';
+                    titleDropdown.style.right = 'auto';
+                } else {
+                    titleDropdown.style.left = 'auto';
+                    titleDropdown.style.right = '0';
+                }
+            } else {
+                titleDropdown.style.display = 'none';
+            }
+            
             titleOptionsBtn.classList.toggle('active', !isVisible);
         });
 
@@ -593,7 +707,7 @@ function initWhiteboardMode(deps) {
             createNewBoard();
         }
         
-        setTimeout(revealUI, 1000);
+        revealUI();
     });
 
     const initialColorBtn = document.querySelector(`.wb-color-btn[data-color="${state.whiteboardPageColor}"]`)
@@ -602,25 +716,42 @@ function initWhiteboardMode(deps) {
     const initialModeBtn = document.querySelector(`.wb-mode-btn[data-mode="${state.whiteboardGridMode}"]`)
     if (initialModeBtn) initialModeBtn.classList.add('active')
 
-    const settingsBtn = document.getElementById('whiteboard-settings-btn')
-    const settingsPopup = document.getElementById('whiteboard-settings-popup')
+    const settingsBtn = document.getElementById('wb-sidebar-settings-btn')
+    const headerSettingsBtn = document.getElementById('whiteboard-settings-btn')
+    const backBtn = document.getElementById('wb-settings-back-btn')
+    const sidebarInner = document.getElementById('wb-sidebar-inner')
     
-    if (settingsBtn && settingsPopup) {
-      settingsBtn.addEventListener('click', (e) => {
+    if (settingsBtn && sidebarInner) {
+      const openSettings = (e) => {
         e.stopPropagation()
-        const isVisible = settingsPopup.style.display === 'flex'
-        settingsPopup.style.display = isVisible ? 'none' : 'flex'
-        settingsBtn.classList.toggle('active', !isVisible)
-      })
+        if (sidebar && !sidebar.classList.contains('open')) {
+          sidebar.classList.add('open')
+          refreshBoardsList()
+        }
+        sidebarInner.classList.add('show-settings')
+        playSound('pop')
+      }
+
+      settingsBtn.addEventListener('click', openSettings)
+      if (headerSettingsBtn) {
+        headerSettingsBtn.addEventListener('click', openSettings)
+      }
+
+      if (backBtn) {
+        backBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          sidebarInner.classList.remove('show-settings')
+          playSound('pop')
+        })
+      }
 
       const closePopup = () => {
-        settingsPopup.style.display = 'none'
-        settingsBtn.classList.remove('active')
+        if (sidebarInner) sidebarInner.classList.remove('show-settings')
         state.pickingWhiteboardColor = false
       }
 
       document.addEventListener('click', (e) => {
-        if (!settingsPopup.contains(e.target) && e.target !== settingsBtn) {
+        if (sidebarInner && !sidebarInner.contains(e.target) && e.target !== settingsBtn) {
           closePopup()
         }
       })
@@ -632,10 +763,9 @@ function initWhiteboardMode(deps) {
           state.whiteboardPageColor = color
           updateWhiteboardTheme(color)
           state.saveStatus = 'unsaved';
-          saveCurrentBoard();
-          
-          colorBtns.forEach(b => b.classList.remove('active'))
-          btn.classList.add('active')
+          updateSettingsUI()
+          saveCurrentBoard({ capturePreview: false });
+          CanvasManager.clearGridCache();
         })
       })
 
@@ -643,18 +773,10 @@ function initWhiteboardMode(deps) {
       modeBtns.forEach(btn => {
         btn.addEventListener('click', () => {
           const mode = btn.dataset.mode
-          
-          if (state.whiteboardGridMode === mode) {
-            state.whiteboardGridMode = 'none'
-            btn.classList.remove('active')
-          } else {
-            state.whiteboardGridMode = mode
-            modeBtns.forEach(b => b.classList.remove('active'))
-            btn.classList.add('active')
-          }
-          
+          state.whiteboardGridMode = (state.whiteboardGridMode === mode) ? 'none' : mode
           state.saveStatus = 'unsaved'
-          saveCurrentBoard();
+          updateSettingsUI()
+          saveCurrentBoard({ capturePreview: false });
           redrawCanvas()
         })
       })
@@ -662,17 +784,122 @@ function initWhiteboardMode(deps) {
       const gridColorBtns = document.querySelectorAll('.wb-pattern-color-btn')
       gridColorBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-          const color = btn.dataset.color
-          state.whiteboardGridColor = color
+          state.whiteboardGridColor = btn.dataset.color
           state.saveStatus = 'unsaved';
-          
-          gridColorBtns.forEach(b => b.classList.remove('active'))
-          btn.classList.add('active')
-          saveCurrentBoard();
+          updateSettingsUI()
+          saveCurrentBoard({ capturePreview: false });
+          CanvasManager.clearGridCache();
           redrawCanvas()
         })
       })
+
+      const triggers = document.querySelectorAll('.wb-category-trigger, .wb-category-trigger-minimal');
+      triggers.forEach(trigger => {
+        trigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const container = trigger.closest('.wb-category-dropdown-container');
+          const isOpen = container.classList.contains('open');
+          document.querySelectorAll('.wb-category-dropdown-container').forEach(c => c.classList.remove('open'));
+          if (!isOpen) container.classList.add('open');
+        });
+      });
+
+      const categoryItems = document.querySelectorAll('.wb-category-item');
+      categoryItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const value = item.dataset.value;
+          const labelText = item.dataset.label || item.textContent;
+          const section = item.closest('.wb-settings-section');
+          const container = item.closest('.wb-category-dropdown-container');
+          if (section) {
+            section.setAttribute('data-active-category', value);
+            const label = container.querySelector('.current-label');
+            if (label) label.textContent = labelText;
+            container.querySelectorAll('.wb-category-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            container.classList.remove('open');
+          }
+        });
+      });
+
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.wb-category-dropdown-container').forEach(c => c.classList.remove('open'));
+      });
+
+      updateSettingsUI()
     }
+
+    const captureFullBoard = (format = 'image/png', quality = 0.92) => {
+        const canvas = document.getElementById('canvas');
+        if (!canvas) return null;
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        try {
+            tempCtx.fillStyle = state.whiteboardPageColor || '#fffacd';
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+            if (typeof window.drawGridOnBuffer === 'function') {
+                window.drawGridOnBuffer(tempCtx);
+            }
+
+            tempCtx.drawImage(canvas, 0, 0);
+
+            const result = tempCanvas.toDataURL(format, quality);
+            tempCanvas.width = 0;
+            tempCanvas.height = 0;
+            return result;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const AppNotification = require('../../../pages/notification/notification.js');
+
+    const showNotification = (title, message, filePath = null) => {
+        const container = document.getElementById('wb-notification-container');
+        if (!container) return;
+        AppNotification.show(container, { title, message, filePath });
+    };
+
+    const handleExport = async (format) => {
+        const dataUrl = captureFullBoard(format === 'png' ? 'image/png' : 'image/jpeg');
+        if (!dataUrl) return;
+
+        const result = await ipcRenderer.invoke('wb-export-board', {
+            dataUrl,
+            format,
+            title: state.currentBoardTitle
+        });
+        
+        if (result && result.success) {
+            if (typeof playSound === 'function') playSound('pop');
+            showNotification(
+                'Export Successful', 
+                `Board exported as ${format.toUpperCase()}`, 
+                result.filePath
+            );
+        }
+    };
+
+    document.getElementById('wb-export-png-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleExport('png');
+    });
+
+    document.getElementById('wb-export-jpg-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleExport('jpg');
+    });
+
+    document.getElementById('wb-print-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.print();
+    });
   }
 }
 

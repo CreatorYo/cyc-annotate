@@ -16,6 +16,7 @@ function show(title, body, filePath) {
     notificationWin = null
   }
   
+  const focusedWin = BrowserWindow.getFocusedWindow()
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
   const { x, y } = primaryDisplay.workArea
@@ -29,6 +30,7 @@ function show(title, body, filePath) {
     transparent: true,
     backgroundColor: '#00000000',
     alwaysOnTop: true,
+    parent: focusedWin || undefined,
     skipTaskbar: true,
     resizable: false,
     movable: false,

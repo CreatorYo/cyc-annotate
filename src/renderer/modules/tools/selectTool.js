@@ -1532,7 +1532,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
     playSound('move');
   }
 
-  function updateSelectedColor(color) {
+  function updateSelectedColor(color, save = true) {
     if (state.selectedElements.length === 0) return;
     getSelectedElements().forEach((element) => {
       element.color = color;
@@ -1545,7 +1545,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
       }
     });
     redrawCanvas();
-    saveState();
+    if (save) saveState();
   }
 
   function updateSelectedStrokeSize(size) {

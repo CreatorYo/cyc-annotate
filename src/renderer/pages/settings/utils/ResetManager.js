@@ -1,6 +1,6 @@
 const { ipcRenderer } = require('electron')
 const { DEFAULT_ACCENT_COLOR, DEFAULT_SHORTCUT } = require('../../../../shared/constants.js')
-const { applyTheme, updateAccentColor, updateToolbarBackgroundColor } = require('./ThemeManager.js')
+const { applyTheme, updateAccentColor, updateToolbarBackgroundColor } = require('../../../modules/utils/managers/themeManager.js')
 
 async function resetEverything() {
   const confirmed = await ipcRenderer.invoke('show-reset-confirmation')

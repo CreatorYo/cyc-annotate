@@ -399,7 +399,7 @@ class WidgetComponent {
               <div class="widget-card widget-small" id="feature-whiteboard">
                 <div class="widget-add-btn">+</div>
                 <div class="widget-preview">
-                  <span class="material-symbols-outlined widget-icon">tactic</span>
+                  <span class="material-symbols-outlined widget-icon">edit_square</span>
                 </div>
                 <span class="widget-label">Whiteboard</span>
               </div>

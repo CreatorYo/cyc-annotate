@@ -5,7 +5,7 @@ const { initTextTool } = require('../modules/tools/textTool.js')
 const { initStickyNoteTool } = require('../modules/tools/stickyNoteTool.js')
 const { initColorPickerTool } = require('../modules/tools/colorPicker.js')
 const { initCommandMenu } = require('../modules/tools/commandMenu.js')
-const { initThemeManager, applyTheme, updateToolbarBackgroundColor } = require('../modules/utils/managers/themeManager.js')
+const { initThemeManager, applyTheme, updateToolbarBackgroundColor, updateAccentColor } = require('../modules/utils/managers/themeManager.js')
 const { initTooltips, hideAllTooltips } = require('../modules/utils/managers/tooltipManager.js')
 const { initAudioContext, playSound } = require('../modules/utils/audio/soundEffects.js')
 const { initStandbyManager } = require('../modules/utils/managers/standbyManager.js')
@@ -38,180 +38,165 @@ ctx.lineCap = 'round'
 ctx.lineJoin = 'round'
 
 function drawGrid(targetCtx = ctx) {
-  if (isWhiteboard) {
-    if (state.whiteboardGridMode === 'none') return
-  } else {
-    if (!state.gridEnabled) return
+  const gridMode = isWhiteboard ? state.whiteboardGridMode : (state.gridEnabled ? 'grid' : 'none');
+  if (gridMode === 'none') return;
+  
+  targetCtx.save();
+  
+  const isDark = isWhiteboard ? (state.whiteboardPageColor === '#1a1a1a') : (document.body.getAttribute('data-theme') === 'dark');
+  const customGridColor = isWhiteboard && state.whiteboardGridColor && state.whiteboardGridColor !== 'default' ? state.whiteboardGridColor : null;
+  const gridKey = `${gridMode}-${state.gridSize}-${isDark}-${customGridColor}`;
+  const cache = CanvasManager.getGridCache();
+  
+  let pattern = cache.get(gridKey);
+  
+  if (!pattern) {
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    const size = state.gridSize;
+    
+    let strokeStyle, fillStyle;
+    if (customGridColor) {
+      strokeStyle = customGridColor + '40';
+      fillStyle = customGridColor + '60';
+    } else {
+      strokeStyle = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.15)';
+      fillStyle = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
+    }
+
+    if (gridMode === 'dotted') {
+      tempCanvas.width = size;
+      tempCanvas.height = size;
+      tempCtx.fillStyle = fillStyle;
+      tempCtx.beginPath();
+      tempCtx.arc(size/2, size/2, 2, 0, Math.PI * 2);
+      tempCtx.fill();
+    } else if (gridMode === 'graph') {
+      tempCanvas.width = size;
+      tempCanvas.height = size;
+      tempCtx.strokeStyle = strokeStyle;
+      
+      const minorSpacing = size / 5;
+      tempCtx.lineWidth = 1;
+      tempCtx.globalAlpha = 0.4;
+      tempCtx.beginPath();
+      for (let i = 1; i < 5; i++) {
+        const p = i * minorSpacing;
+        tempCtx.moveTo(p, 0); tempCtx.lineTo(p, size);
+        tempCtx.moveTo(0, p); tempCtx.lineTo(size, p);
+      }
+      tempCtx.stroke();
+      
+      tempCtx.lineWidth = 1.5;
+      tempCtx.globalAlpha = 1.0;
+      tempCtx.beginPath();
+      tempCtx.moveTo(0, 0); tempCtx.lineTo(size, 0);
+      tempCtx.moveTo(0, 0); tempCtx.lineTo(0, size);
+      tempCtx.stroke();
+    } else if (gridMode === 'grid' || gridMode === 'lines') {
+      tempCanvas.width = size;
+      tempCanvas.height = size;
+      tempCtx.strokeStyle = strokeStyle;
+      tempCtx.lineWidth = 1;
+      tempCtx.beginPath();
+      tempCtx.moveTo(0, 0); tempCtx.lineTo(size, 0);
+      if (gridMode === 'grid') {
+        tempCtx.moveTo(0, 0); tempCtx.lineTo(0, size);
+      }
+      tempCtx.stroke();
+    } else if (gridMode === 'hexagonal') {
+      const s = size / 1.5;
+      const h = s * Math.sqrt(3);
+      tempCanvas.width = s * 3;
+      tempCanvas.height = h;
+      tempCtx.strokeStyle = strokeStyle;
+      tempCtx.lineWidth = 1;
+      
+      const drawHex = (cx, cy) => {
+        tempCtx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const angle = i * Math.PI / 3;
+          const px = cx + s * Math.cos(angle);
+          const py = cy + s * Math.sin(angle);
+          if (i === 0) tempCtx.moveTo(px, py);
+          else tempCtx.lineTo(px, py);
+        }
+        tempCtx.closePath();
+        tempCtx.stroke();
+      };
+
+      drawHex(0, 0);
+      drawHex(s * 1.5, h / 2);
+      drawHex(s * 3, 0);
+      drawHex(0, h);
+      drawHex(s * 3, h);
+    } else if (gridMode === 'isometric') {
+      targetCtx.restore();
+      return drawIsometricGrid(targetCtx, isDark, customGridColor);
+    }
+    
+    if (tempCanvas.width > 0) {
+      pattern = targetCtx.createPattern(tempCanvas, 'repeat');
+      cache.set(gridKey, pattern);
+    }
+  }
+
+  if (pattern) {
+    const matrix = new DOMMatrix().translate(state.panX, state.panY);
+    pattern.setTransform(matrix);
+    targetCtx.fillStyle = pattern;
+    targetCtx.setTransform(1, 0, 0, 1, 0, 0);
+    targetCtx.fillRect(0, 0, canvas.width, canvas.height);
   }
   
-  targetCtx.save()
-  
+  targetCtx.restore();
+}
+
+function drawIsometricGrid(targetCtx, isDark, customGridColor) {
+  const spacing = state.gridSize;
+  const tan30 = 0.57735;
+  const verticalSpacing = spacing * 0.866 * 2;
   const viewportX = -state.panX;
   const viewportY = -state.panY;
   const viewportWidth = canvas.width;
   const viewportHeight = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
 
-  if (isWhiteboard) {
-    const isDark = state.whiteboardPageColor === '#1a1a1a';
-    const customGridColor = state.whiteboardGridColor && state.whiteboardGridColor !== 'default' ? state.whiteboardGridColor : null;
-    
-    if (customGridColor) {
-      targetCtx.strokeStyle = customGridColor + '40';
-      targetCtx.fillStyle = customGridColor + '60';
-    } else {
-      targetCtx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.15)'
-      targetCtx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'
-    }
+  targetCtx.save();
+  if (customGridColor) {
+    targetCtx.strokeStyle = customGridColor + '40';
   } else {
-    const isDark = document.body.getAttribute('data-theme') === 'dark'
-    targetCtx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
-    targetCtx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.15)'
+    targetCtx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.15)';
   }
-  targetCtx.lineWidth = 1
-
-  if (isWhiteboard && state.whiteboardGridMode === 'dotted') {
-    const dotRadius = 2
-    const startX = Math.floor(viewportX / state.gridSize) * state.gridSize;
-    const endX = Math.ceil((viewportX + viewportWidth) / state.gridSize) * state.gridSize;
-    const startY = Math.floor(viewportY / state.gridSize) * state.gridSize;
-    const endY = Math.ceil((viewportY + viewportHeight) / state.gridSize) * state.gridSize;
-
-    for (let x = startX; x <= endX; x += state.gridSize) {
-      for (let y = startY; y <= endY; y += state.gridSize) {
-        targetCtx.beginPath()
-        targetCtx.arc(x, y, dotRadius, 0, Math.PI * 2)
-        targetCtx.fill()
-      }
-    }
-  } else if (isWhiteboard && state.whiteboardGridMode === 'isometric') {
-    const spacing = state.gridSize;
-    const tan30 = 0.57735;
-    const verticalSpacing = spacing * 0.866 * 2;
-    
-    targetCtx.beginPath();
-    
-    const startX = Math.floor(viewportX / verticalSpacing) * verticalSpacing;
-    const endX = Math.ceil((viewportX + viewportWidth) / verticalSpacing) * verticalSpacing;
-    
-    for (let x = startX; x <= endX; x += verticalSpacing) {
-      targetCtx.moveTo(x, viewportY);
-      targetCtx.lineTo(x, viewportY + viewportHeight);
-    }
-    
-    const slantSpacing = spacing;
-    
-    const c1_min = viewportY - (viewportX + viewportWidth) * tan30;
-    const c1_max = viewportY + viewportHeight - viewportX * tan30;
-    const startY1 = Math.floor(c1_min / slantSpacing) * slantSpacing;
-    const endY1 = Math.ceil(c1_max / slantSpacing) * slantSpacing;
-
-    for (let y = startY1; y <= endY1; y += slantSpacing) {
-      targetCtx.moveTo(viewportX, y + viewportX * tan30);
-      targetCtx.lineTo(viewportX + viewportWidth, y + (viewportX + viewportWidth) * tan30);
-    }
-    
-    const c2_min = viewportY + viewportX * tan30;
-    const c2_max = viewportY + viewportHeight + (viewportX + viewportWidth) * tan30;
-    const startY2 = Math.floor(c2_min / slantSpacing) * slantSpacing;
-    const endY2 = Math.ceil(c2_max / slantSpacing) * slantSpacing;
-
-    for (let y = startY2; y <= endY2; y += slantSpacing) {
-      targetCtx.moveTo(viewportX, y - viewportX * tan30);
-      targetCtx.lineTo(viewportX + viewportWidth, y - (viewportX + viewportWidth) * tan30);
-    }
-    targetCtx.stroke();
-  } else if (isWhiteboard && state.whiteboardGridMode === 'graph') {
-    const minorSpacing = state.gridSize / 5;
-    
-    const startX = Math.floor(viewportX / state.gridSize) * state.gridSize;
-    const endX = Math.ceil((viewportX + viewportWidth) / state.gridSize) * state.gridSize;
-    const startY = Math.floor(viewportY / state.gridSize) * state.gridSize;
-    const endY = Math.ceil((viewportY + viewportHeight) / state.gridSize) * state.gridSize;
-
-    targetCtx.save();
-    targetCtx.globalAlpha *= 0.4;
-    targetCtx.beginPath();
-    for (let x = startX; x <= endX; x += minorSpacing) {
-      targetCtx.moveTo(x, viewportY);
-      targetCtx.lineTo(x, viewportY + viewportHeight);
-    }
-    for (let y = startY; y <= endY; y += minorSpacing) {
-      targetCtx.moveTo(viewportX, y);
-      targetCtx.lineTo(viewportX + viewportWidth, y);
-    }
-    targetCtx.stroke();
-    targetCtx.restore();
-    
-    targetCtx.beginPath();
-    targetCtx.lineWidth = 1.5;
-    for (let x = startX; x <= endX; x += state.gridSize) {
-      targetCtx.moveTo(x, viewportY);
-      targetCtx.lineTo(x, viewportY + viewportHeight);
-    }
-    for (let y = startY; y <= endY; y += state.gridSize) {
-      targetCtx.moveTo(viewportX, y);
-      targetCtx.lineTo(viewportX + viewportWidth, y);
-    }
-    targetCtx.stroke();
-  } else if (isWhiteboard && state.whiteboardGridMode === 'hexagonal') {
-    const s = state.gridSize / 1.5;
-    const h = s * Math.sqrt(3);
-    
-    const startX = Math.floor(viewportX / (s * 3)) * (s * 3);
-    const endX = Math.ceil((viewportX + viewportWidth) / (s * 3)) * (s * 3) + s * 3;
-    const startY = Math.floor(viewportY / h) * h;
-    const endY = Math.ceil((viewportY + viewportHeight) / h) * h + h;
-
-    targetCtx.beginPath();
-    for (let y = startY; y < endY; y += h) {
-      for (let x = startX; x < endX; x += s * 3) {
-        for (let i = 0; i < 6; i++) {
-          const angle = i * Math.PI / 3;
-          const px = x + s * Math.cos(angle);
-          const py = y + s * Math.sin(angle);
-          if (i === 0) targetCtx.moveTo(px, py);
-          else targetCtx.lineTo(px, py);
-        }
-        targetCtx.closePath();
-
-        const ox = x + s * 1.5;
-        const oy = y + h / 2;
-        for (let i = 0; i < 6; i++) {
-          const angle = i * Math.PI / 3;
-          const px = ox + s * Math.cos(angle);
-          const py = oy + s * Math.sin(angle);
-          if (i === 0) targetCtx.moveTo(px, py);
-          else targetCtx.lineTo(px, py);
-        }
-        targetCtx.closePath();
-      }
-    }
-    targetCtx.stroke();
-  } else {
-    targetCtx.beginPath()
-    
-    const startX = Math.floor(viewportX / state.gridSize) * state.gridSize;
-    const endX = Math.ceil((viewportX + viewportWidth) / state.gridSize) * state.gridSize;
-    const startY = Math.floor(viewportY / state.gridSize) * state.gridSize;
-    const endY = Math.ceil((viewportY + viewportHeight) / state.gridSize) * state.gridSize;
-
-    if (!isWhiteboard || state.whiteboardGridMode === 'grid') {
-      for (let x = startX; x <= endX; x += state.gridSize) {
-        targetCtx.moveTo(x, viewportY)
-        targetCtx.lineTo(x, viewportY + viewportHeight)
-      }
-    }
-
-    if (!isWhiteboard || state.whiteboardGridMode === 'grid' || state.whiteboardGridMode === 'lines') {
-      for (let y = startY; y <= endY; y += state.gridSize) {
-        targetCtx.moveTo(viewportX, y)
-        targetCtx.lineTo(viewportX + viewportWidth, y)
-      }
-    }
-    
-    targetCtx.stroke()
+  targetCtx.lineWidth = 1;
+  targetCtx.beginPath();
+  
+  const startX = Math.floor(viewportX / verticalSpacing) * verticalSpacing;
+  const endX = Math.ceil((viewportX + viewportWidth) / verticalSpacing) * verticalSpacing;
+  for (let x = startX; x <= endX; x += verticalSpacing) {
+    targetCtx.moveTo(x, viewportY); targetCtx.lineTo(x, viewportY + viewportHeight);
   }
-  targetCtx.restore()
+  
+  const slantSpacing = spacing;
+  const c1_min = viewportY - (viewportX + viewportWidth) * tan30;
+  const c1_max = viewportY + viewportHeight - viewportX * tan30;
+  const startY1 = Math.floor(c1_min / slantSpacing) * slantSpacing;
+  const endY1 = Math.ceil(c1_max / slantSpacing) * slantSpacing;
+  for (let y = startY1; y <= endY1; y += slantSpacing) {
+    targetCtx.moveTo(viewportX, y + viewportX * tan30);
+    targetCtx.lineTo(viewportX + viewportWidth, y + (viewportX + viewportWidth) * tan30);
+  }
+  
+  const c2_min = viewportY + viewportX * tan30;
+  const c2_max = viewportY + viewportHeight + (viewportX + viewportWidth) * tan30;
+  const startY2 = Math.floor(c2_min / slantSpacing) * slantSpacing;
+  const endY2 = Math.ceil(c2_max / slantSpacing) * slantSpacing;
+  for (let y = startY2; y <= endY2; y += slantSpacing) {
+    targetCtx.moveTo(viewportX, y - viewportX * tan30);
+    targetCtx.lineTo(viewportX + viewportWidth, y - (viewportX + viewportWidth) * tan30);
+  }
+  targetCtx.stroke();
+  targetCtx.restore();
 }
 
 window.drawGridOnBuffer = (targetCtx) => drawGrid(targetCtx);
@@ -384,7 +369,8 @@ const colorTool = initColorPickerTool({
   playSound,
   hideAllTooltips,
   closeAllPopups,
-  redrawCanvas: () => redrawCanvas()
+  redrawCanvas: () => redrawCanvas(),
+  saveState: () => saveState(updateUndoRedoButtons)
 })
 const { setColor, initColorPicker, setInitialColorBorder, isLightColor } = colorTool
 
@@ -1056,6 +1042,7 @@ function initMoreMenu() {
   
   if (moreUndoBtn) {
     moreUndoBtn.addEventListener('click', () => {
+      if (moreUndoBtn.classList.contains('disabled')) return
       handleUndo()
       moreMenuDropdown.classList.remove('show')
     })
@@ -1063,6 +1050,7 @@ function initMoreMenu() {
   
   if (moreRedoBtn) {
     moreRedoBtn.addEventListener('click', () => {
+      if (moreRedoBtn.classList.contains('disabled')) return
       handleRedo()
       moreMenuDropdown.classList.remove('show')
     })
@@ -1085,6 +1073,7 @@ function initMoreMenu() {
   const moreStickyNoteBtn = document.getElementById('more-sticky-note-btn')
   if (moreStickyNoteBtn) {
     moreStickyNoteBtn.addEventListener('click', () => {
+      if (moreStickyNoteBtn.classList.contains('disabled')) return
       setTool('sticky-note')
       moreMenuDropdown.classList.remove('show')
     })
@@ -1883,18 +1872,7 @@ ipcRenderer.on('hardware-acceleration-changed', (event, enabled) => {
   }
 });
 
-ipcRenderer.on('accent-color-changed', (event, color) => {
-  updateAccentColor(color)
-})
 
-ipcRenderer.on('toolbar-bg-changed', (event, data) => {
-  localStorage.setItem('toolbar-accent-bg', data.enabled ? 'true' : 'false')
-  updateToolbarBackgroundColor()
-})
-
-ipcRenderer.on('windows-accent-color-changed', (event, color) => {
-  updateAccentColor(color)
-})
 
 ipcRenderer.on('sounds-changed', (event, enabled) => {
   const soundsCheckbox = document.getElementById('sounds-enabled')
@@ -2218,13 +2196,17 @@ if (document.readyState === 'loading') {
     initWhiteboardMode({
       state,
       redrawCanvas,
-      initWindowControls
+      initWindowControls,
+      updateCursor,
+      playSound
     })
   })
 } else {
   initWhiteboardMode({
     state,
     redrawCanvas,
-    initWindowControls
+    initWindowControls,
+    updateCursor,
+    playSound
   })
 }

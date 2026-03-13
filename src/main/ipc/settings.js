@@ -139,6 +139,10 @@ function initSettingsIpc(context) {
       win.webContents.send('element-eraser-changed', enabled);
     }
   });
+
+  ipcMain.on('startup-window-changed', (event, value) => {
+    setSetting('startup-window', value);
+  });
 }
 
 module.exports = initSettingsIpc;

@@ -1,4 +1,4 @@
-const { ipcMain, app } = require('electron');
+const { ipcMain, app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -13,9 +13,7 @@ function initWhiteboardIpc(context) {
   }
 
   function getMetadata() {
-    if (!fs.existsSync(metadataPath)) {
-      return [];
-    }
+    if (!fs.existsSync(metadataPath)) return [];
     try {
       const data = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
       return Array.isArray(data) ? data : [];
@@ -104,13 +102,27 @@ function initWhiteboardIpc(context) {
     return true;
   });
 
-  ipcMain.on('show-whiteboard-context-menu', (event, { boardId, title }) => {
+  ipcMain.on('show-whiteboard-context-menu', (event, { boardId, title, x, y }) => {
     const { Menu, MenuItem } = require('electron');
+    const metadata = getMetadata();
+    const board = metadata.find(b => b.id === boardId);
+    if (!board) return;
+
+    const isPinned = !!board.pinned;
     const menu = new Menu();
 
     menu.append(new MenuItem({
       label: 'Rename',
       click: () => event.sender.send('wb-menu-rename', boardId)
+    }));
+
+    menu.append(new MenuItem({
+      label: isPinned ? 'Unpin' : 'Pin',
+      click: () => {
+        board.pinned = !isPinned;
+        saveMetadata(metadata);
+        event.sender.send('wb-board-updated', boardId);
+      }
     }));
 
     menu.append(new MenuItem({
@@ -125,7 +137,12 @@ function initWhiteboardIpc(context) {
       click: () => event.sender.send('wb-menu-delete', boardId)
     }));
 
-    menu.popup({ window: BrowserWindow.fromWebContents(event.sender) });
+    const popupOptions = { window: BrowserWindow.fromWebContents(event.sender) };
+    if (typeof x === 'number' && typeof y === 'number') {
+      popupOptions.x = Math.round(x);
+      popupOptions.y = Math.round(y);
+    }
+    menu.popup(popupOptions);
   });
 
   ipcMain.handle('wb-duplicate-board', async (event, id) => {
@@ -154,7 +171,30 @@ function initWhiteboardIpc(context) {
 
     return newBoard;
   });
+
+  ipcMain.handle('wb-export-board', async (event, { dataUrl, format, title }) => {
+    const { dialog } = require('electron');
+    const win = BrowserWindow.fromWebContents(event.sender);
+    
+    const extensions = format === 'jpg' || format === 'jpeg' ? ['jpg', 'jpeg'] : ['png'];
+    const defaultPath = `${title || 'whiteboard'}.${extensions[0]}`;
+    
+    const { filePath, canceled } = await dialog.showSaveDialog(win, {
+      title: `Export Whiteboard as ${format.toUpperCase()}`,
+      defaultPath: defaultPath,
+      filters: [{ name: 'Images', extensions: extensions }]
+    });
+
+    if (canceled || !filePath) return null;
+    
+    try {
+      const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+      fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+      return { success: true, filePath };
+    } catch (e) {
+      return { success: false };
+    }
+  });
 }
 
-const { BrowserWindow } = require('electron');
 module.exports = initWhiteboardIpc;

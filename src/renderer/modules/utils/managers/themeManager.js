@@ -27,6 +27,16 @@ function applyTheme(theme, notify = true) {
     themeBtn.classList.add('active')
   }
 
+  const themeDropdown = document.getElementById('theme-dropdown')
+  if (themeDropdown) {
+    try {
+      const { updateDropdownMenu } = require('../../../pages/settings/utils/dropdownMenu.js')
+      updateDropdownMenu('theme-dropdown', theme)
+    } catch (e) {
+      ipcRenderer.invoke('show-error-dialog', 'UI Error', 'Failed to update theme dropdown menu', e.message)
+    }
+  }
+
   if (notify) {
     ipcRenderer.send('theme-changed', theme)
   }
@@ -70,7 +80,16 @@ function updateToolbarBackgroundColor() {
     
     const el = Object.assign(document.createElement('style'), {
       id: 'toolbar-bg-override',
-      textContent: `body[data-theme="${effectiveTheme}"] { --toolbar-bg: ${tintedBg} !important; }`
+      textContent: `
+        body[data-theme="${effectiveTheme}"] { 
+          --toolbar-bg: ${tintedBg} !important; 
+          --wb-bg: ${tintedBg} !important;
+          --shelf-bg: ${tintedBg} !important;
+          --panel-bg: ${tintedBg} !important;
+          --dropdown-bg: ${tintedBg} !important;
+          --widget-add-btn-bg: ${tintedBg} !important;
+        }
+      `
     });
     document.head.appendChild(el);
   }
@@ -85,6 +104,7 @@ function initThemeManager() {
 
   ipcRenderer.invoke('get-os-theme').then(theme => {
     osTheme = theme
+    window.osTheme = theme
     const savedTheme = localStorage.getItem('theme') || 'system'
     if (savedTheme === 'system') {
       const effectiveTheme = getEffectiveTheme(savedTheme)
@@ -102,6 +122,7 @@ function initThemeManager() {
 
   ipcRenderer.on('os-theme-changed', (event, effectiveTheme) => {
     osTheme = effectiveTheme
+    window.osTheme = effectiveTheme
     const currentTheme = localStorage.getItem('theme') || 'system'
     if (currentTheme === 'system') {
       document.body.setAttribute('data-theme', effectiveTheme)
@@ -114,7 +135,11 @@ function initThemeManager() {
   })
 
   ipcRenderer.on('accent-color-changed', (event, color) => {
-    applyAccentColor(color)
+    updateAccentColor(color)
+  })
+
+  ipcRenderer.on('windows-accent-color-changed', (event, color) => {
+    updateAccentColor(color)
   })
 
   ipcRenderer.on('toolbar-accent-bg-changed', (event, enabled) => {
@@ -123,23 +148,31 @@ function initThemeManager() {
   })
 
   const savedAccentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR
-  applyAccentColor(savedAccentColor)
+  updateAccentColor(savedAccentColor)
 
   updateToolbarBackgroundColor()
 }
 
-function applyAccentColor(color) {
+function updateAccentColor(color, notify = false) {
   if (!color) return
-  localStorage.setItem('accent-color', color)
+  const normalizedColor = color.startsWith('#') ? color : `#${color}`
+  localStorage.setItem('accent-color', normalizedColor)
   
-  document.documentElement.style.setProperty('--accent-color', color)
+  document.documentElement.style.setProperty('--accent-color', normalizedColor)
   
-  const r = parseInt(color.substr(1, 2), 16)
-  const g = parseInt(color.substr(3, 2), 16)
-  const b = parseInt(color.substr(5, 2), 16)
+  let r, g, b;
+  if (normalizedColor.length === 4) {
+    r = parseInt(normalizedColor[1] + normalizedColor[1], 16);
+    g = parseInt(normalizedColor[2] + normalizedColor[2], 16);
+    b = parseInt(normalizedColor[3] + normalizedColor[3], 16);
+  } else {
+    r = parseInt(normalizedColor.slice(1, 3), 16);
+    g = parseInt(normalizedColor.slice(3, 5), 16);
+    b = parseInt(normalizedColor.slice(5, 7), 16);
+  }
   document.documentElement.style.setProperty('--accent-color-rgb', `${r}, ${g}, ${b}`)
   
-  updateAccentColorContrast(color)
+  updateAccentColorContrast(normalizedColor)
   
   const isLight = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
   const textColor = isLight ? '#000000' : '#ffffff'
@@ -147,16 +180,30 @@ function applyAccentColor(color) {
   document.documentElement.style.setProperty('--accent-text', textColor)
   document.documentElement.style.setProperty('--accent-btn-text-color', textColor)
   
+  const accentColorPicker = document.getElementById('accent-color-picker')
+  const accentColorHex = document.getElementById('accent-color-hex')
+  const accentColorPreview = document.getElementById('accent-color-preview')
   const pickerBtn = document.getElementById('open-color-picker-btn')
+
+  if (accentColorPicker) {
+    const { getColorForPicker } = require('../../../pages/settings/utils/colorUtils.js');
+    accentColorPicker.value = getColorForPicker(normalizedColor);
+  }
+  if (accentColorHex) accentColorHex.value = normalizedColor;
+  if (accentColorPreview) accentColorPreview.style.background = normalizedColor
   if (pickerBtn) pickerBtn.style.color = textColor
 
   updateToolbarBackgroundColor()
+
+  if (notify) {
+    ipcRenderer.send('accent-color-changed', normalizedColor)
+  }
 }
 
 module.exports = {
   initThemeManager,
   applyTheme,
-  applyAccentColor,
+  updateAccentColor,
   getOSTheme,
   getEffectiveTheme,
   darkenTintColor,

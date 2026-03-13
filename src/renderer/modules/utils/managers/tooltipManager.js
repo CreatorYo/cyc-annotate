@@ -60,6 +60,7 @@ function createTooltip(element) {
   let showTimeout
   
   const show = () => {
+    if (element.classList.contains('disabled') || element.hasAttribute('disabled')) return
     hideAllTooltips()
     showTimeout = setTimeout(() => {
       tooltip.classList.add('show')

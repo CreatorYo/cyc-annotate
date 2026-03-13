@@ -652,6 +652,10 @@ if (!gotTheLock) {
       createOnboardingWindow()
     } else {
       createMainWindow()
+      const startupWindow = getSetting('startup-window', 'toolbar')
+      if (startupWindow === 'whiteboard') {
+        createWhiteboardWindow()
+      }
     }
   })
 }

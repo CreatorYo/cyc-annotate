@@ -65,6 +65,13 @@ function init(context) {
     }
   })
 
+  ipcMain.on('custom-sound-selected', (event, soundType, filePath) => {
+    const win = context.getWin()
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('custom-sound-updated', soundType, filePath)
+    }
+  })
+
   ipcMain.on('reset-custom-sound', (event, soundType) => {
     try {
       const win = context.getWin()

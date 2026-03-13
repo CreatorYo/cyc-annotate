@@ -117,6 +117,8 @@ function createSelectionCanvas() {
   return { selectionCanvas, selectionCtx }
 }
 
+let gridPatternCache = new Map()
+
 module.exports = {
   init,
   getCanvas: () => canvas,
@@ -128,5 +130,7 @@ module.exports = {
   getSelectionCanvas: () => selectionCanvas,
   getSelectionCtx: () => selectionCtx,
   isOptimizedRendering: () => optimizedRendering,
-  isHardwareAcceleration: () => hardwareAcceleration
+  isHardwareAcceleration: () => hardwareAcceleration,
+  getGridCache: () => gridPatternCache,
+  clearGridCache: () => gridPatternCache.clear()
 }

@@ -265,6 +265,16 @@ function checkForEraserHit(coords) {
 function startDrawing(e) {
   if (!state.enabled || state.standbyMode) return
 
+  const sidebar = document.getElementById('wb-sidebar')
+  if (sidebar && sidebar.classList.contains('open')) {
+    const screenX = e.clientX || e.touches?.[0]?.clientX;
+    const screenY = e.clientY || e.touches?.[0]?.clientY;
+    
+    if (screenX < 340 || screenY < 60 || screenY > (window.innerHeight - 20)) {
+        return;
+    }
+  }
+
   if (state.isSpacePressed) {
     state.isPanning = true;
     lastX = e.clientX || e.touches?.[0]?.clientX;
@@ -385,6 +395,23 @@ function draw(e) {
   let coords = getCanvasCoordinates(e)
   const canvas = CanvasManager.getCanvas()
   const ctx = CanvasManager.getCtx()
+
+  const sidebar = document.getElementById('wb-sidebar')
+  if (sidebar && sidebar.classList.contains('open')) {
+    const screenX = e.clientX || e.touches?.[0]?.clientX;
+    const screenY = e.clientY || e.touches?.[0]?.clientY;
+    
+    if (screenX < 340 || screenY < 60 || screenY > (window.innerHeight - 20)) {
+      canvas.style.cursor = 'default';
+      if (!state.drawing) return; 
+    } else if (!state.drawing) {
+      updateCursor(); 
+    }
+  } else if (!state.drawing) {
+      if (canvas.style.cursor === 'default' && state.tool !== 'select') {
+          updateCursor();
+      }
+  }
   
   if (state.tool === 'select') {
     const cursor = selectTool.getCursorForSelect(coords)

@@ -1,7 +1,7 @@
 const { ipcMain } = require('electron');
 
 function initOnboardingIpc(context) {
-  const { getWin, getOnboardingWin, setSetting, setShortcut, createMainWindow, registerShortcut, showOverlay, createOnboardingWindow } = context;
+  const { getWin, getSettingsWin, getOnboardingWin, setSetting, setShortcut, createMainWindow, registerShortcut, showOverlay, createOnboardingWindow } = context;
 
   ipcMain.on('show-onboarding', () => {
     createOnboardingWindow();
@@ -23,6 +23,21 @@ function initOnboardingIpc(context) {
     }
     
     const win = getWin();
+    const settingsWin = getSettingsWin();
+
+    [win, settingsWin].forEach(targetWin => {
+      if (targetWin && !targetWin.isDestroyed()) {
+        if (data.shortcut) {
+          targetWin.webContents.send('shortcut-changed', data.shortcut);
+        }
+        if (data.accentColor) {
+          targetWin.webContents.executeJavaScript(`localStorage.setItem('accent-color', '${data.accentColor}')`);
+          targetWin.webContents.send('accent-color-changed', data.accentColor);
+        }
+        targetWin.webContents.send('onboarding-completed');
+      }
+    });
+
     if (!win || win.isDestroyed()) {
       createMainWindow();
       const newWin = getWin();
@@ -36,10 +51,6 @@ function initOnboardingIpc(context) {
     } else {
       if (data.shortcut) {
         registerShortcut();
-      }
-      if (data.accentColor && win && !win.isDestroyed()) {
-        win.webContents.executeJavaScript(`localStorage.setItem('accent-color', '${data.accentColor}')`);
-        win.webContents.send('accent-color-changed', data.accentColor);
       }
       showOverlay();
     }

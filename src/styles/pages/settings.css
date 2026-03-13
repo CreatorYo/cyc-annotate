@@ -1,5 +1,5 @@
 :root {
-  --bg-dark: #1e1e1e;
+  --bg-dark: #111;
   --bg-light: #ffffff;
   --text-dark: #000000;
   --text-light: #e5e5e5;
@@ -272,9 +272,9 @@
   --border: var(--border-dark);
   --section-bg: var(--section-bg-dark);
   --hover-bg: var(--hover-bg-dark);
-  --search-bg: #252525;
-  --search-border: rgba(255, 255, 255, 0.1);
-  --search-border-bottom: rgba(255, 255, 255, 0.4);
+  --search-bg: #181818;
+  --search-border: rgba(255, 255, 255, 0.04);
+  --search-border-bottom: rgba(255, 255, 255, 0.2);
   --search-caret: #ffffff;
 }
 
@@ -1332,6 +1332,7 @@ html, body {
   z-index: 1;
   cursor: text;
   outline: none;
+  text-transform: uppercase;
 }
 
 .accent-color-hex-container::after {

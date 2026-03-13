@@ -1,13 +1,14 @@
 const { ipcRenderer } = require("electron");
-const { updatePositionToggle } = require("./utils/dropdownMenu.js");
+const { updatePositionToggle, updateDropdownMenu } = require("./utils/dropdownMenu.js");
 const { updateToggleSwitchColor } = require("./utils/toggleSwitch.js");
 const { normalizeHex, getColorForPicker } = require("./utils/colorUtils.js");
 const SettingsSearch = require("./utils/search");
 const {
+  initThemeManager,
   applyTheme,
   updateToolbarBackgroundColor,
   updateAccentColor,
-} = require("./utils/ThemeManager.js");
+} = require("../../modules/utils/managers/themeManager.js");
 const { resetEverything } = require("./utils/ResetManager.js");
 const {
   formatShortcut,
@@ -19,6 +20,31 @@ const {
   DEFAULT_ACCENT_COLOR,
   DEFAULT_SHORTCUT,
 } = require("../../../shared/constants.js");
+
+initThemeManager();
+
+ipcRenderer.on("shortcut-changed", (event, newShortcut) => {
+  const shortcutInput = document.getElementById("shortcut-input");
+  if (shortcutInput) {
+    shortcutInput.value = formatShortcut(parseShortcut(newShortcut));
+  }
+});
+
+ipcRenderer.on("onboarding-completed", () => {
+  const newAccentColor =
+    localStorage.getItem("accent-color") || DEFAULT_ACCENT_COLOR;
+  updateAccentColor(newAccentColor);
+
+  const newShortcut = localStorage.getItem("shortcut") || DEFAULT_SHORTCUT;
+  const shortcutInput = document.getElementById("shortcut-input");
+  if (shortcutInput) {
+    shortcutInput.value = formatShortcut(parseShortcut(newShortcut));
+  }
+});
+
+ipcRenderer.on("reset-everything", () => {
+  window.location.reload();
+});
 
 const PRESET_ACCENT_COLORS = [
   { name: "Default Blue", color: DEFAULT_ACCENT_COLOR },
@@ -41,34 +67,6 @@ let directoryCheckInterval = null;
 function getEffectiveTheme(theme) {
   return theme === "system" ? window.osTheme : theme;
 }
-
-ipcRenderer.invoke("get-os-theme").then((theme) => {
-  window.osTheme = theme;
-  const savedTheme = localStorage.getItem("theme") || "system";
-  if (savedTheme === "system") {
-    const effectiveTheme = getEffectiveTheme(savedTheme);
-    document.body.setAttribute("data-theme", effectiveTheme);
-  }
-});
-
-const savedTheme = localStorage.getItem("theme") || "system";
-const effectiveTheme = getEffectiveTheme(savedTheme);
-document.body.setAttribute("data-theme", effectiveTheme);
-
-ipcRenderer.on("os-theme-changed", (event, effectiveTheme) => {
-  window.osTheme = effectiveTheme;
-  const currentTheme = localStorage.getItem("theme") || "system";
-  if (currentTheme === "system") {
-    document.body.setAttribute("data-theme", effectiveTheme);
-    const savedAccentColor =
-      localStorage.getItem("accent-color") || DEFAULT_ACCENT_COLOR;
-    updateAccentColor(savedAccentColor);
-  }
-});
- 
-ipcRenderer.on("theme-changed", (event, theme) => {
-  applyTheme(theme, false);
-});
 
 const themeDropdown = document.getElementById("theme-dropdown");
 const themeDropdownTrigger = document.getElementById("theme-dropdown-trigger");
@@ -105,13 +103,7 @@ function bindCheckbox(id, storageKey, defaultValue, ipcEvent = null, callback = 
   if (callback) callback(el.checked);
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    applyTheme(savedTheme);
-  });
-} else {
-  applyTheme(savedTheme);
-}
+
 
 function updatePositionSettingsVisibility() {
   const layout = getCurrentLayout();
@@ -146,7 +138,7 @@ if (accentColorHex) {
 if (accentColorPicker) {
   accentColorPicker.value = savedAccentColor;
   accentColorPicker.addEventListener("change", (e) =>
-    updateAccentColor(e.target.value),
+    updateAccentColor(e.target.value, true),
   );
 }
 
@@ -204,7 +196,7 @@ function showAccentColorPresets(x, y) {
         toggleSync();
       } else if (result) {
         if (syncWindowsEnabled) toggleSync();
-        updateAccentColor(result);
+        updateAccentColor(result, true);
       }
     });
 }
@@ -225,7 +217,7 @@ async function toggleSync() {
         updateSyncState(true);
         localStorage.setItem("sync-windows-accent", "true");
         ipcRenderer.send("toggle-windows-accent-sync", true);
-        updateAccentColor(windowsColor);
+        updateAccentColor(windowsColor, true);
       } else {
         await ipcRenderer.invoke(
           "show-error-dialog",
@@ -250,14 +242,14 @@ if (accentColorHex) {
     const hex = e.target.value.trim();
     if (/^#[0-9A-Fa-f]{3}$/.test(hex) || /^#[0-9A-Fa-f]{6}$/.test(hex)) {
       const normalizedHex = normalizeHex(hex);
-      updateAccentColor(normalizedHex);
+      updateAccentColor(normalizedHex, true);
     }
   });
   accentColorHex.addEventListener("blur", (e) => {
     const hex = e.target.value.trim();
     if (/^#[0-9A-Fa-f]{3}$/.test(hex) || /^#[0-9A-Fa-f]{6}$/.test(hex)) {
       const normalizedHex = normalizeHex(hex);
-      updateAccentColor(normalizedHex);
+      updateAccentColor(normalizedHex, true);
     } else {
       e.target.value = savedAccentColor;
     }
@@ -268,7 +260,7 @@ if (accentColorHex) {
       const hex = e.target.value.trim();
       if (/^#[0-9A-Fa-f]{3}$/.test(hex) || /^#[0-9A-Fa-f]{6}$/.test(hex)) {
         const normalizedHex = normalizeHex(hex);
-        updateAccentColor(normalizedHex);
+        updateAccentColor(normalizedHex, true);
       } else {
         e.target.value = savedAccentColor;
       }
@@ -328,11 +320,7 @@ ipcRenderer.invoke("get-sync-windows-accent-state").then((enabled) => {
   }
 });
 
-ipcRenderer.on("windows-accent-color-changed", (event, windowsColor) => {
-  if (syncWindowsEnabled) {
-    updateAccentColor(windowsColor);
-  }
-});
+
 
 const {
   applyLayout,
@@ -385,6 +373,34 @@ if (positionDropdownTrigger) {
   });
 }
 
+const startupWindowDropdown = document.getElementById("startup-window-dropdown");
+const startupWindowDropdownTrigger = document.getElementById("startup-window-dropdown-trigger");
+
+if (startupWindowDropdownTrigger) {
+  startupWindowDropdownTrigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeAllDropdowns(startupWindowDropdown);
+    startupWindowDropdown.classList.toggle("open");
+  });
+}
+
+const savedStartupWindow = localStorage.getItem("startup-window") || "toolbar";
+if (startupWindowDropdown) {
+  updateDropdownMenu("startup-window-dropdown", savedStartupWindow);
+}
+
+document
+  .querySelectorAll("#startup-window-dropdown .dropdown-menu-item")
+  .forEach((item) => {
+    item.addEventListener("click", () => {
+      const value = item.dataset.value;
+      localStorage.setItem("startup-window", value);
+      updateDropdownMenu("startup-window-dropdown", value);
+      if (startupWindowDropdown) startupWindowDropdown.classList.remove("open");
+      ipcRenderer.send("startup-window-changed", value);
+    });
+  });
+
 function closeAllDropdowns(except = null) {
   const dropdowns = document.querySelectorAll(".dropdown-menu");
   dropdowns.forEach((d) => {
@@ -401,6 +417,8 @@ document.addEventListener("click", (e) => {
     layoutDropdown.classList.remove("open");
   if (positionDropdown && !positionDropdown.contains(e.target))
     positionDropdown.classList.remove("open");
+  if (startupWindowDropdown && !startupWindowDropdown.contains(e.target))
+    startupWindowDropdown.classList.remove("open");
 });
 
 document.addEventListener("keydown", (e) => {
@@ -615,6 +633,7 @@ function initCustomSounds() {
       resetBtn.addEventListener("click", () => {
         localStorage.removeItem(`custom-sound-${soundType}`);
         pathSpan.textContent = "Default sound";
+        pathSpan.title = "";
         pathSpan.classList.remove("has-custom-path");
         pathSpan.style.color = "";
         pathSpan.style.opacity = "";
@@ -682,8 +701,8 @@ function initCustomSounds() {
         title: "Select Sound to Apply to All",
         filters: [
           {
-            name: "Audio Files",
-            extensions: ["mp3", "wav", "ogg", "flac", "aac", "m4a"],
+            name: "Supported Audio & Video",
+            extensions: ["mp3", "wav", "ogg", "flac", "aac", "m4a", "mp4"],
           },
         ],
         properties: ["openFile"],
@@ -714,7 +733,10 @@ function initCustomSounds() {
         const pathSpan = document.getElementById(`${type}-sound-path`);
         if (pathSpan) {
           pathSpan.textContent = "Default sound";
+          pathSpan.title = "";
           pathSpan.classList.remove("has-custom-path");
+          pathSpan.style.color = "";
+          pathSpan.style.opacity = "";
         }
         ipcRenderer.send("reset-custom-sound", type);
       });
