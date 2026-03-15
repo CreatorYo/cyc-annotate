@@ -1,7 +1,7 @@
 const { ipcMain, app } = require('electron');
 
 function initSystemIpc(context) {
-  const { getOsVersion, setSetting, startupFeature } = context;
+  const { getOsVersion, setSetting, startupFeature, broadcast } = context;
 
   ipcMain.handle('get-app-version', () => {
     return app.getVersion();
@@ -23,15 +23,7 @@ function initSystemIpc(context) {
   });
 
   ipcMain.on('reset-everything', () => {
-    const { getWin, getSettingsWin } = context;
-    const win = getWin();
-    const settingsWin = getSettingsWin();
-
-    [win, settingsWin].forEach(targetWin => {
-      if (targetWin && !targetWin.isDestroyed()) {
-        targetWin.webContents.send('reset-everything');
-      }
-    });
+    broadcast('reset-everything');
   });
 }
 

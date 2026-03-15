@@ -200,6 +200,12 @@ function initCommandMenu(helpers) {
       action: () => setTool("marker"),
     },
     {
+      name: "Highlighter",
+      icon: "ink_highlighter",
+      shortcut: "H",
+      action: () => setTool("highlighter"),
+    },
+    {
       name: "Text",
       icon: "text_fields",
       shortcut: "T",
@@ -450,14 +456,6 @@ function initCommandMenu(helpers) {
         el.addEventListener("click", () => {
           const index = parseInt(el.dataset.index);
           applyCommandMenuItem(index);
-        });
-
-        el.addEventListener("mouseenter", (e) => {
-          if (e.clientX === lastMouseX && e.clientY === lastMouseY) return;
-          lastMouseX = e.clientX;
-          lastMouseY = e.clientY;
-          selectedItemIndex = parseInt(el.dataset.index);
-          updateSelection(false);
         });
 
         el.addEventListener("mousemove", (e) => {

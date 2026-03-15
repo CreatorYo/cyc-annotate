@@ -6,7 +6,7 @@ function initColorPickerTool(deps) {
     playSound,
     hideAllTooltips,
     closeAllPopups,
-    saveState
+    saveState,
   } = deps
 
   let isCustomColorActive = false
@@ -102,18 +102,18 @@ function initColorPickerTool(deps) {
     }
   }
 
-  function syncPickerWithColor(hex) {
+  function syncPickerWithColor(hex, isDragging = false) {
     const rgb = hexToRgb(hex)
     if (rgb) {
       const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b)
       currentH = hsv.h
       currentS = hsv.s
       currentV = hsv.v
-      updateCustomPickerUI()
+      updateCustomPickerUI(isDragging)
     }
   }
 
-  function updateCustomPickerUI() {
+  function updateCustomPickerUI(isDragging = false) {
     const svPicker = document.getElementById('sv-picker')
     const svCursor = document.getElementById('sv-cursor')
     const hueCursor = document.getElementById('hue-cursor')
@@ -134,7 +134,7 @@ function initColorPickerTool(deps) {
     if (colorPreview) colorPreview.style.backgroundColor = currentHex
     if (hexInput && document.activeElement !== hexInput) hexInput.value = currentHex
 
-    setColor(currentHex, true, false)
+    setColor(currentHex, true, isDragging)
   }
 
   function updateCustomColorButton(color) {
@@ -152,17 +152,17 @@ function initColorPickerTool(deps) {
     }
   }
 
-  function setColor(color, isCustom = false, save = true) {
+  function setColor(color, isCustom = false, isDragging = false) {
     state.color = color
 
     if (state.tool === 'select' && state.selectedElements.length > 0) {
-      selectTool.updateSelectedColor(color, save)
+      selectTool.updateSelectedColor(color, !isDragging)
     }
     if (textTool) {
-      textTool.updateCurrentTextColor(color)
+      textTool.updateCurrentTextColor(color, isDragging)
     }
     if (deps.stickyNoteTool && deps.stickyNoteTool.updateActiveNoteColor) {
-      deps.stickyNoteTool.updateActiveNoteColor(color)
+      deps.stickyNoteTool.updateActiveNoteColor(color, !isDragging)
     }
 
     if (state.pickingWhiteboardColor) {
@@ -236,8 +236,9 @@ function initColorPickerTool(deps) {
       try {
         const result = await new EyeDropper().open()
         const hex = result.sRGBHex
-        syncPickerWithColor(hex)
-        setColor(hex, true)
+        syncPickerWithColor(hex, false)
+        setColor(hex, true, false)
+        if (saveState) saveState()
         playSound('color')
       } catch (e) {
         if (customPickerPopup) customPickerPopup.classList.add('show')
@@ -245,7 +246,7 @@ function initColorPickerTool(deps) {
     }
 
     if (eyedropperBtn) eyedropperBtn.addEventListener('click', (e) => {
-      e.stopPropagation()
+      e.stopPropagation(); e.preventDefault()
       handleEyeDropper()
     })
 
@@ -253,29 +254,17 @@ function initColorPickerTool(deps) {
       const rect = svContainer.getBoundingClientRect()
       currentS = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
       currentV = 1 - Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
-      updateCustomPickerUI()
+      updateCustomPickerUI(true)
     }
 
     const handleHueMouse = (e) => {
       const rect = hueContainer.getBoundingClientRect()
       currentH = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-      updateCustomPickerUI()
+      updateCustomPickerUI(true)
     }
 
-    if (svContainer) svContainer.addEventListener('mousedown', (e) => { isDraggingSV = true; handleSVMouse(e) })
-    if (hueContainer) hueContainer.addEventListener('mousedown', (e) => { isDraggingHue = true; handleHueMouse(e) })
-
-    window.addEventListener('mousemove', (e) => {
-      if (isDraggingSV) handleSVMouse(e)
-      if (isDraggingHue) handleHueMouse(e)
-    })
-    window.addEventListener('mouseup', () => { 
-      if ((isDraggingSV || isDraggingHue) && saveState) {
-        saveState();
-      }
-      isDraggingSV = false; 
-      isDraggingHue = false 
-    })
+    if (svContainer) svContainer.addEventListener('mousedown', (e) => { e.preventDefault(); isDraggingSV = true; handleSVMouse(e) })
+    if (hueContainer) hueContainer.addEventListener('mousedown', (e) => { e.preventDefault(); isDraggingHue = true; handleHueMouse(e) })
 
     if (hexInput) {
       hexInput.maxLength = 7
@@ -340,14 +329,22 @@ function initColorPickerTool(deps) {
     })
 
     window.addEventListener('mousemove', (e) => {
-      if (!isDragging) return
-      const parentRect = customPickerPopup.offsetParent.getBoundingClientRect()
-      const x = Math.max(-parentRect.left, Math.min(window.innerWidth - parentRect.left - customPickerPopup.offsetWidth, initialLeft + e.clientX - startX))
-      const y = Math.max(-parentRect.top, Math.min(window.innerHeight - parentRect.top - customPickerPopup.offsetHeight, initialTop + e.clientY - startY))
-      customPickerPopup.style.left = x + 'px'
-      customPickerPopup.style.top = y + 'px'
+      if (isDraggingSV) handleSVMouse(e)
+      if (isDraggingHue) handleHueMouse(e)
+      if (isDragging) {
+        const parentRect = customPickerPopup.offsetParent.getBoundingClientRect()
+        const x = Math.max(-parentRect.left, Math.min(window.innerWidth - parentRect.left - customPickerPopup.offsetWidth, initialLeft + e.clientX - startX))
+        const y = Math.max(-parentRect.top, Math.min(window.innerHeight - parentRect.top - customPickerPopup.offsetHeight, initialTop + e.clientY - startY))
+        customPickerPopup.style.left = x + 'px'
+        customPickerPopup.style.top = y + 'px'
+      }
     })
     window.addEventListener('mouseup', () => {
+      if ((isDraggingSV || isDraggingHue) && saveState) {
+        saveState()
+      }
+      isDraggingSV = false
+      isDraggingHue = false
       if (isDragging) {
         const rect = customPickerPopup.getBoundingClientRect()
         const parentRect = customPickerPopup.offsetParent.getBoundingClientRect()
@@ -382,7 +379,29 @@ function initColorPickerTool(deps) {
         customPickerPopup.style.transition = 'opacity 0.1s ease, transform 0.1s ease, visibility 0s linear 0.1s'
         customPickerPopup.classList.remove('show')
       } else {
-        syncPickerWithColor(isCustomColorActive ? (customColorValue || state.color) : state.color)
+        let activeColor = state.color
+        const textInput = document.getElementById('text-input')
+        if (textInput && textInput.style.display !== 'none') {
+          const color = document.queryCommandValue('foreColor')
+          if (color && color !== 'rgba(0, 0, 0, 0)') {
+            if (color.startsWith('rgb')) {
+              const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+              if (match) {
+                activeColor = rgbToHex(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]))
+              }
+            } else if (color.startsWith('#')) {
+              activeColor = color
+            }
+          }
+        } else if (state.tool === 'select' && state.selectedElements.length > 0) {
+          const firstId = state.selectedElements[0]
+          const element = state.elements.find(e => e.id === firstId)
+          if (element && element.color) {
+            activeColor = element.color
+          }
+        }
+
+        syncPickerWithColor(activeColor, false)
         customPickerPopup.style.transition = 'opacity 0.1s ease, transform 0.1s ease, visibility 0s'
         void customPickerPopup.offsetWidth
         customPickerPopup.classList.add('show')
@@ -411,7 +430,7 @@ function initColorPickerTool(deps) {
       option.addEventListener('mouseenter', () => option.style.setProperty('border-color', color, 'important'))
       option.addEventListener('mouseleave', () => { if (!option.classList.contains('active')) option.style.removeProperty('border-color') })
       option.addEventListener('click', (e) => {
-        e.stopPropagation()
+        e.stopPropagation(); e.preventDefault()
         playSound('color'); setColor(color, false)
         localStorage.setItem('last-preset-color', color)
         updateCustomColorButton(color)
@@ -420,7 +439,10 @@ function initColorPickerTool(deps) {
     })
 
     document.querySelectorAll('.color-swatch[data-color]').forEach(swatch => {
-      swatch.addEventListener('click', () => { playSound('color'); setColor(swatch.dataset.color, false) })
+      swatch.addEventListener('click', (e) => { 
+        e.preventDefault(); e.stopPropagation()
+        playSound('color'); setColor(swatch.dataset.color, false) 
+      })
     })
 
     const initialColor = state.color

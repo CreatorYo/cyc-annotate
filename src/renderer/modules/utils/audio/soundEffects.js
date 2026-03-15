@@ -66,43 +66,43 @@ function exp(t, r) { return Math.exp(-t * r) }
 function rnd() { return Math.random() * 2 - 1 }
 
 const SOUNDS = {
-  trash: [0.4, 0.9, t => {
+  trash: [0.4, 1.0, t => {
     const d = exp(t, 6)
     return (exp(t, 30) * 0.5 + sin(80, t) * 0.3 * d + sin(200, t) * 0.2 * d + sin(800, t) * 0.15 * exp(t, 15) + rnd() * 0.2 * d) * d
   }],
-  pop: [0.15, 0.9, t => {
+  pop: [0.15, 1.0, t => {
     const d = exp(t, 25)
     return (exp(t, 50) * 0.7 + sin(400, t) * 0.5 * d + sin(1200, t) * 0.35 * exp(t, 40) + sin(150, t) * 0.25 * d + rnd() * 0.2 * exp(t, 30)) * d
   }],
-  undo: [0.2, 0.9, t => {
+  undo: [0.2, 1.0, t => {
     const d = exp(t, 20)
     return (sin(300, t) * 0.6 * d + sin(100, t) * 0.4 * d + sin(800, t) * 0.25 * exp(t, 30) + rnd() * 0.15 * d) * d
   }],
-  redo: [0.2, 0.9, t => {
+  redo: [0.2, 1.0, t => {
     const d = exp(t, 20)
     return (sin(400, t) * 0.6 * d + sin(100, t) * 0.4 * d + sin(800, t) * 0.25 * exp(t, 30) + rnd() * 0.15 * d) * d
   }],
-  capture: [0.25, 0.9, t => {
+  capture: [0.25, 1.0, t => {
     const d = exp(t, 15)
     return (sin(600, t) * 0.6 * exp(t, 40) + sin(1200, t) * 0.5 * exp(t, 50) + sin(200, t) * 0.35 * d + sin(1800, t) * 0.25 * exp(t, 60) + rnd() * 0.15 * exp(t, 35)) * d
   }],
-  color: [0.12, 0.9, t => {
+  color: [0.12, 1.0, t => {
     const d = exp(t, 30)
     return (sin(600, t) * 0.6 * d + sin(900, t) * 0.4 * d + sin(1500, t) * 0.25 * exp(t, 50) + sin(300, t) * 0.2 * d) * d
   }],
-  copy: [0.18, 0.9, t => {
+  copy: [0.18, 1.0, t => {
     const d = exp(t, 20)
     return (sin(400 + t * 200, t) * 0.6 * d + sin(1200, t) * 0.5 * exp(t, 60) + sin(1800, t) * 0.35 * exp(t, 45) + sin(250, t) * 0.25 * d + rnd() * 0.1 * exp(t, 50)) * d
   }],
-  paste: [0.22, 0.9, t => {
+  paste: [0.22, 1.0, t => {
     const d = exp(t, 12)
     return (sin(523, t) * 0.6 * d + sin(659, t) * 0.5 * d + sin(600 - t * 150, t) * 0.35 * d + sin(1400, t) * 0.3 * exp(t, 40) + sin(200, t) * 0.25 * d + exp(t, 35) * 0.35) * d
   }],
-  selectAll: [0.25, 0.9, t => {
+  selectAll: [0.25, 1.0, t => {
     const d = exp(t, 12)
     return (sin(300 + t * 2000, t) * 0.5 * d + sin(1200, t) * 0.4 * exp(t, 20) + sin(600, t) * 0.3 * d + sin(2000, t) * 0.2 * exp(t, 25) + rnd() * 0.08 * d) * d
   }],
-  standbyOn: [0.4, 0.9, t => {
+  standbyOn: [0.4, 1.0, t => {
     const att = Math.min(1, t * 200)
     const e1 = att * exp(t, 8)
     const e2 = att * exp(Math.max(0, t - 0.08), 6)
@@ -112,7 +112,7 @@ const SOUNDS = {
     const click = exp(t, 100) * 0.3
     return (n1 * e1 + n2 * e2 + bell + click) * 0.9
   }],
-  standbyOff: [0.2, 0.95, t => {
+  standbyOff: [0.2, 1.0, t => {
     const env = Math.min(1, t * 200) * exp(t, 12)
     const ping = sin(1200, t) * 0.6
     const body = sin(600, t) * 0.45
@@ -121,7 +121,7 @@ const SOUNDS = {
     const click = exp(t, 80) * 0.5
     return (ping + body + low + bright + click) * env
   }],
-  visibilityOn: [0.12, 0.9, t => {
+  visibilityOn: [0.12, 1.0, t => {
     const env = exp(t, 40)
     const click = exp(t, 250) * 0.7
     const metal = sin(2500, t) * 0.15 * exp(t, 80)
@@ -129,22 +129,22 @@ const SOUNDS = {
     const lowEnd = sin(140, t) * 0.25 * exp(t, 20)
     return (click + metal + resonance + lowEnd) * env
   }],
-  visibilityOff: [0.1, 0.85, t => {
+  visibilityOff: [0.1, 1.0, t => {
     const env = exp(t, 50)
     const click = exp(t, 300) * 0.8
     const resonance = sin(1200, t) * 0.25 * exp(t, 45)
     const body = sin(300, t) * 0.2 * exp(t, 25)
     return (click + resonance + body) * env
   }],
-  move: [0.15, 0.85, t => {
+  move: [0.15, 1.0, t => {
     const d = exp(t, 20)
     return (sin(200 + t * 400, t) * 0.4 * d + sin(400, t) * 0.3 * exp(t, 40) + rnd() * 0.1 * d) * d
   }],
-  reset: [0.2, 0.9, t => {
+  reset: [0.2, 1.0, t => {
     const d = exp(t, 25)
     return (sin(800 - t * 1000, t) * 0.5 * d + sin(400, t) * 0.3 * d + exp(t, 50) * 0.2) * d
   }],
-  layerUp: [0.22, 0.9, t => {
+  layerUp: [0.22, 1.0, t => {
     const d = exp(t, 25)
     const fund = sin(440 * Math.pow(1.5, t * 8), t) * 0.4
     const harm1 = sin(880 * Math.pow(1.5, t * 8), t) * 0.2
@@ -152,7 +152,7 @@ const SOUNDS = {
     const click = exp(t, 150) * 0.6
     return (fund + harm1 + noise + click) * d
   }],
-  layerDown: [0.22, 0.9, t => {
+  layerDown: [0.22, 1.0, t => {
     const d = exp(t, 25)
     const fund = sin(880 * Math.pow(0.5, t * 8), t) * 0.4
     const harm1 = sin(440 * Math.pow(0.5, t * 8), t) * 0.2
@@ -160,7 +160,7 @@ const SOUNDS = {
     const click = exp(t, 150) * 0.6
     return (fund + harm1 + noise + click) * d
   }],
-  timerAlarm: [0.8, 0.9, t => {
+  timerAlarm: [0.8, 1.0, t => {
     const env1 = t < 0.4 ? Math.min(1, t * 20) * exp(t, 4) : 0
     const env2 = t >= 0.35 ? Math.min(1, (t - 0.35) * 20) * exp(t - 0.35, 3) : 0
     const note1 = (sin(523, t) * 0.5 + sin(1046, t) * 0.25 + sin(1569, t) * 0.1) * env1
@@ -191,7 +191,7 @@ async function loadCustomSound(filePath) {
         if (abs > peak) peak = abs
       }
       if (peak > 0.01) {
-        const scale = 0.95 / peak
+        const scale = 1.0 / peak
         for (let i = 0; i < data.length; i++) data[i] *= scale
       }
     }
@@ -235,7 +235,7 @@ function getBuffer(type) {
   }
   
   if (peak > 0.01) {
-    const scale = 0.95 / peak
+    const scale = 1.0 / peak
     for (let i = 0; i < len; i++) data[i] *= scale
   }
   
@@ -271,14 +271,13 @@ async function playSound(type, retryCount = 0, isTest = false) {
     }
 
     let buffer = null
-    let volume = 0.9
+    let volume = 1.0
 
     if (customSoundPath) {
       buffer = customSoundCache.get(customSoundPath)
       if (!buffer) {
         buffer = await loadCustomSound(customSoundPath)
       }
-      if (buffer) volume = 0.9
     }
     
     if (!buffer) {
@@ -365,10 +364,16 @@ if (typeof require !== 'undefined') {
 
 function initAudioContext() { init(); ensureRunning(); }
 
-const events = ['click', 'keydown', 'mousedown', 'touchstart', 'pointerdown', 'focus']
-events.forEach(e => document.addEventListener(e, () => {
+let audioUnlocked = false
+const unlockAudio = () => {
+  if (audioUnlocked) return
+  audioUnlocked = true
   ensureRunning()
-}, { passive: true }))
+  const events = ['click', 'keydown', 'mousedown', 'touchstart', 'pointerdown', 'focus']
+  events.forEach(e => document.removeEventListener(e, unlockAudio))
+}
+const events = ['click', 'keydown', 'mousedown', 'touchstart', 'pointerdown', 'focus']
+events.forEach(e => document.addEventListener(e, unlockAudio, { passive: true }))
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
@@ -382,7 +387,7 @@ setInterval(() => {
   } else if (!ctx || ctx.state === 'closed') {
     init()
   }
-}, 10000)
+}, 60000)
 
 setTimeout(() => {
   if (init()) {

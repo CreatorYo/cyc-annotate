@@ -387,15 +387,13 @@ button, input, textarea {
 }
 
 .toolbar-btn.disabled,
-.more-menu-item.disabled,
-.timer-adjust-btn.disabled {
+.more-menu-item.disabled {
   opacity: 0.45 !important;
   cursor: not-allowed;
 }
 
 .toolbar-btn.disabled:hover,
-.more-menu-item.disabled:hover,
-.timer-adjust-btn.disabled:hover {
+.more-menu-item.disabled:hover {
   background: transparent;
 }
 
@@ -892,7 +890,8 @@ button, input, textarea {
 }
 
 .color-swatch:hover {
-  transform: scale(1.15);
+  opacity: 0.8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .color-swatch:focus-visible {
@@ -921,7 +920,6 @@ button, input, textarea {
 }
 
 .color-swatch.custom-color:hover {
-  transform: none;
   background: rgba(255, 255, 255, 0.1) !important;
 }
 
@@ -1008,13 +1006,12 @@ button, input, textarea {
 }
 
 .color-option:hover {
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0.8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .color-option:focus-visible {
   outline: none;
-  transform: scale(1.1);
   box-shadow: 0 0 0 2px var(--toolbar-bg), 0 0 0 4px rgba(255, 255, 255, 0.8) !important;
   z-index: 10;
 }

@@ -1,24 +1,27 @@
-const { ipcMain, dialog, BrowserWindow, nativeTheme } = require('electron')
+const { ipcMain, dialog, BrowserWindow, nativeTheme } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
 function init(context) {
+  const { getSettingsWin, getWin, dialogs, broadcast } = context;
+
   ipcMain.on('select-custom-sound', async (event, soundType) => {
     try {
-      const settingsWin = context.getSettingsWin()
-      if (!settingsWin || settingsWin.isDestroyed()) return
+      const settingsWin = getSettingsWin();
+      if (!settingsWin || settingsWin.isDestroyed()) return;
 
-      const allowedExtensions = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'mp4']
+      const allowedExtensions = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'mp4'];
       const result = await dialog.showOpenDialog(settingsWin, {
         title: `Select Custom Sound for ${soundType}`,
         filters: [
           { name: 'Supported Audio & Video', extensions: allowedExtensions }
         ],
         properties: ['openFile']
-      })
+      });
 
       if (!result.canceled && result.filePaths.length > 0) {
-        const filePath = result.filePaths[0]
-        const path = require('path')
-        const ext = path.extname(filePath).toLowerCase().replace('.', '')
+        const filePath = result.filePaths[0];
+        const ext = path.extname(filePath).toLowerCase().replace('.', '');
         
         if (!allowedExtensions.includes(ext)) {
           await dialog.showMessageBox(settingsWin, {
@@ -27,14 +30,13 @@ function init(context) {
             message: 'You must upload a supported sound format.',
             detail: `Supported formats: ${allowedExtensions.map(e => '.' + e).join(', ')}`,
             buttons: ['OK']
-          })
-          return
+          });
+          return;
         }
 
-        const fs = require('fs')
         if (fs.existsSync(filePath)) {
-          const stats = fs.statSync(filePath)
-          const fileSizeMB = stats.size / (1024 * 1024)
+          const stats = fs.statSync(filePath);
+          const fileSizeMB = stats.size / (1024 * 1024);
           
           if (fileSizeMB > 2) {
             const warningResult = await dialog.showMessageBox(settingsWin, {
@@ -44,55 +46,44 @@ function init(context) {
               title: 'Audio File May Be Too Long',
               message: 'This audio file might be too long for a sound effect.',
               detail: 'For the best user experience, sound effects should be short (under 8 seconds). Large files may cause delays when using annotation tools.'
-            })
+            });
             
             if (warningResult.response === 0) {
-              ipcMain.emit('select-custom-sound', event, soundType)
-              return
+              ipcMain.emit('select-custom-sound', event, soundType);
+              return;
             }
           }
           
-          settingsWin.webContents.send('custom-sound-selected', soundType, filePath)
-          
-          const win = context.getWin()
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('custom-sound-updated', soundType, filePath)
-          }
+          broadcast('custom-sound-selected', soundType, filePath);
         }
       }
     } catch (error) {
-      context.dialogs.showErrorDialog(settingsWin, 'Selection Error', 'Failed to select custom sound.', error.message)
+      dialogs.showErrorDialog(getSettingsWin(), 'Selection Error', 'Failed to select custom sound.', error.message);
     }
-  })
+  });
 
   ipcMain.on('custom-sound-selected', (event, soundType, filePath) => {
-    const win = context.getWin()
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('custom-sound-updated', soundType, filePath)
-    }
-  })
+    broadcast('custom-sound-updated', soundType, filePath);
+  });
 
   ipcMain.on('reset-custom-sound', (event, soundType) => {
     try {
-      const win = context.getWin()
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('custom-sound-reset', soundType)
-      }
+      broadcast('custom-sound-reset', soundType);
     } catch (error) {
-      context.dialogs.showErrorDialog(win, 'Reset Error', 'Failed to reset custom sound.', error.message)
+      dialogs.showErrorDialog(getWin(), 'Reset Error', 'Failed to reset custom sound.', error.message);
     }
-  })
+  });
 
-  let activeProgressDialog = null
+  let activeProgressDialog = null;
 
   ipcMain.on('test-all-sounds', (event, accentColor) => {
     try {
       if (activeProgressDialog && !activeProgressDialog.isDestroyed()) {
-        activeProgressDialog.focus()
-        return
+        activeProgressDialog.focus();
+        return;
       }
 
-      const win = context.getWin()
+      const win = getWin();
       if (win && !win.isDestroyed()) {
         activeProgressDialog = new BrowserWindow({
           width: 400,
@@ -107,52 +98,51 @@ function init(context) {
             contextIsolation: false
           },
           parent: win
-        })
+        });
 
-        const path = require('path')
-        activeProgressDialog.loadFile(path.join(__dirname, '../../renderer/pages/settings/sound-test-dialog.html'))
+        activeProgressDialog.loadFile(path.join(__dirname, '../../renderer/pages/settings/sound-test-dialog.html'));
 
-        let currentTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+        let currentTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
 
         activeProgressDialog.webContents.on('did-finish-load', () => {
           activeProgressDialog.webContents.send('set-theme', {
             theme: currentTheme,
             accentColor: accentColor
-          })
-        })
+          });
+        });
 
         const themeUpdateHandler = () => {
           if (activeProgressDialog && !activeProgressDialog.isDestroyed()) {
-            currentTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+            currentTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
             activeProgressDialog.webContents.send('set-theme', {
               theme: currentTheme,
               accentColor: accentColor
-            })
+            });
           }
-        }
-        nativeTheme.on('updated', themeUpdateHandler)
+        };
+        nativeTheme.on('updated', themeUpdateHandler);
 
         const manualThemeHandler = (e, newTheme) => {
           if (activeProgressDialog && !activeProgressDialog.isDestroyed()) {
-            currentTheme = newTheme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : newTheme
+            currentTheme = newTheme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : newTheme;
             activeProgressDialog.webContents.send('set-theme', {
               theme: currentTheme,
               accentColor: accentColor
-            })
+            });
           }
-        }
+        };
         const accentHandler = (e, newAccent) => {
           if (activeProgressDialog && !activeProgressDialog.isDestroyed()) {
-            accentColor = newAccent
+            accentColor = newAccent;
             activeProgressDialog.webContents.send('set-theme', {
               theme: currentTheme,
               accentColor: accentColor
-            })
+            });
           }
-        }
+        };
 
-        ipcMain.on('theme-changed', manualThemeHandler)
-        ipcMain.on('accent-color-changed', accentHandler)
+        ipcMain.on('theme-changed', manualThemeHandler);
+        ipcMain.on('accent-color-changed', accentHandler);
 
         const soundTypes = [
           { type: 'pop', name: 'Click/Pop', duration: 600 },
@@ -169,75 +159,74 @@ function init(context) {
           { type: 'visibilityOn', name: 'Visibility On', duration: 700 },
           { type: 'visibilityOff', name: 'Visibility Off', duration: 600 },
           { type: 'timerAlarm', name: 'Timer Alarm', duration: 1500 }
-        ]
+        ];
 
-        let currentIndex = 0
-        let testTimeout = null
-        let isTestStopped = false
+        let currentIndex = 0;
+        let testTimeout = null;
+        let isTestStopped = false;
         
         function playNextSound() {
           if (isTestStopped || !activeProgressDialog || activeProgressDialog.isDestroyed()) {
-            return
+            return;
           }
 
           if (currentIndex >= soundTypes.length) {
-            activeProgressDialog.webContents.send('test-complete')
-            return
+            activeProgressDialog.webContents.send('test-complete');
+            return;
           }
 
-          const sound = soundTypes[currentIndex]
+          const sound = soundTypes[currentIndex];
           
           activeProgressDialog.webContents.send('update-test-progress', {
             soundName: sound.name,
             progress: (currentIndex / soundTypes.length) * 100,
             current: currentIndex + 1,
             total: soundTypes.length
-          })
+          });
 
-          win.webContents.send('test-sound', sound.type)
+          win.webContents.send('test-sound', sound.type);
 
           testTimeout = setTimeout(() => {
             if (!isTestStopped) {
-              currentIndex++
-              playNextSound()
+              currentIndex++;
+              playNextSound();
             }
-          }, sound.duration)
+          }, sound.duration);
         }
 
         const stopHandler = () => {
-          isTestStopped = true
-          clearTimeout(testTimeout)
+          isTestStopped = true;
+          clearTimeout(testTimeout);
           if (activeProgressDialog && !activeProgressDialog.isDestroyed()) {
-            activeProgressDialog.close()
+            activeProgressDialog.close();
           }
-        }
-        ipcMain.on('stop-sound-test', stopHandler)
+        };
+        ipcMain.on('stop-sound-test', stopHandler);
 
         testTimeout = setTimeout(() => {
           if (!isTestStopped) {
-            playNextSound()
+            playNextSound();
           }
-        }, 500)
+        }, 500);
 
         activeProgressDialog.on('closed', () => {
-          isTestStopped = true
-          clearTimeout(testTimeout)
-          activeProgressDialog = null
-          ipcMain.removeListener('stop-sound-test', stopHandler)
-          ipcMain.removeListener('theme-changed', manualThemeHandler)
-          ipcMain.removeListener('accent-color-changed', accentHandler)
-          nativeTheme.removeListener('updated', themeUpdateHandler)
-        })
+          isTestStopped = true;
+          clearTimeout(testTimeout);
+          activeProgressDialog = null;
+          ipcMain.removeListener('stop-sound-test', stopHandler);
+          ipcMain.removeListener('theme-changed', manualThemeHandler);
+          ipcMain.removeListener('accent-color-changed', accentHandler);
+          nativeTheme.removeListener('updated', themeUpdateHandler);
+        });
       }
     } catch (error) {
-      context.dialogs.showErrorDialog(win, 'Test Error', 'An error occurred while testing sound effects.', error.message)
+      dialogs.showErrorDialog(getWin(), 'Test Error', 'An error occurred while testing sound effects.', error.message);
     }
-  })
+  });
 
   ipcMain.handle('check-file-exists', async (event, filePath) => {
     if (!filePath) return false;
     try {
-      const fs = require('fs');
       if (fs.existsSync(filePath)) {
         const stats = fs.statSync(filePath);
         return stats.isFile();
@@ -249,4 +238,4 @@ function init(context) {
   });
 }
 
-module.exports = { init }
+module.exports = { init };

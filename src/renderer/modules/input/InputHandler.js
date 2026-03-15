@@ -7,7 +7,31 @@ let selectTool
 let textTool
 let stickyNoteTool
 let redrawCanvas
-let playSound
+
+const _cursorCache = {}
+let _fontsReady = false
+const _cursorCanvas = document.createElement('canvas')
+const _cursorCanvasCtx = _cursorCanvas.getContext('2d')
+
+document.fonts.ready.then(() => {
+  _fontsReady = true
+  for (const key in _cursorCache) delete _cursorCache[key]
+  try { updateCursor() } catch (_) {}
+})
+
+function getCachedCursor(name, iconText, size, hotX, hotY) {
+  if (!_cursorCache[name]) {
+    _cursorCanvas.width = size
+    _cursorCanvas.height = size
+    _cursorCanvasCtx.clearRect(0, 0, size, size)
+    _cursorCanvasCtx.font = `${size}px 'Material Symbols Outlined'`
+    _cursorCanvasCtx.textBaseline = 'top'
+    _cursorCanvasCtx.fillStyle = '#e8eaed'
+    _cursorCanvasCtx.fillText(iconText, 0, 0)
+    _cursorCache[name] = `url("${_cursorCanvas.toDataURL()}") ${hotX} ${hotY}, auto`
+  }
+  return _cursorCache[name]
+}
 
 let isDrawing = false
 let drawFrame = null
@@ -16,13 +40,14 @@ let currentStrokePoints = []
 let lastX = 0
 let lastY = 0
 let elementsDeleted = false
+let _sidebarEl = null
+let _panFrame = null
 
 function init(dependencies) {
   selectTool = dependencies.selectTool
   textTool = dependencies.textTool
   stickyNoteTool = dependencies.stickyNoteTool
   redrawCanvas = dependencies.redrawCanvas
-  playSound = dependencies.playSound
 
   const canvas = CanvasManager.getCanvas()
   
@@ -56,8 +81,6 @@ function init(dependencies) {
     }
   })
     
-
-
   document.addEventListener('keyup', (e) => {
     if (e.code === 'Space') {
       state.isSpacePressed = false;
@@ -257,7 +280,6 @@ function checkForEraserHit(coords) {
       
       redrawCanvas()
       elementsDeleted = true
-      playSound('trash')
     }
   }
 }
@@ -265,8 +287,8 @@ function checkForEraserHit(coords) {
 function startDrawing(e) {
   if (!state.enabled || state.standbyMode) return
 
-  const sidebar = document.getElementById('wb-sidebar')
-  if (sidebar && sidebar.classList.contains('open')) {
+  if (!_sidebarEl) _sidebarEl = document.getElementById('wb-sidebar')
+  if (_sidebarEl && _sidebarEl.classList.contains('open')) {
     const screenX = e.clientX || e.touches?.[0]?.clientX;
     const screenY = e.clientY || e.touches?.[0]?.clientY;
     
@@ -331,14 +353,30 @@ function startDrawing(e) {
   
   const ctx = CanvasManager.getCtx()
 
-  if (state.tool === 'pencil' || state.tool === 'marker' || (state.tool === 'eraser' && !state.elementEraserEnabled)) {
+  if (state.tool === 'pencil' || state.tool === 'marker' || state.tool === 'highlighter' || (state.tool === 'eraser' && !state.elementEraserEnabled)) {
+    let strokeSize = state.strokeSize
+    let alpha = 1.0
+    let compositeOp = 'source-over'
+    let color = state.color
+
+    if (state.tool === 'eraser') {
+      strokeSize = state.strokeSize * 2
+      color = 'rgba(0,0,0,1)'
+      compositeOp = 'destination-out'
+    } else if (state.tool === 'marker') {
+      strokeSize = state.strokeSize * 1.5
+    } else if (state.tool === 'highlighter') {
+      strokeSize = state.strokeSize * 3
+      alpha = 0.35
+    }
+
     currentStroke = {
       type: 'stroke',
       tool: state.tool,
-      color: state.tool === 'eraser' ? 'rgba(0,0,0,1)' : state.color,
-      strokeSize: state.tool === 'eraser' ? state.strokeSize * 2 : (state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize),
-      alpha: 1.0,
-      compositeOperation: state.tool === 'eraser' ? 'destination-out' : 'source-over',
+      color: color,
+      strokeSize: strokeSize,
+      alpha: alpha,
+      compositeOperation: compositeOp,
       points: [{ x: coords.x, y: coords.y }]
     }
     currentStrokePoints = [{ x: coords.x, y: coords.y }]
@@ -388,7 +426,12 @@ function draw(e) {
     if (textTool && textTool.updateInputPosition) textTool.updateInputPosition();
     if (stickyNoteTool && stickyNoteTool.updateStickyNotePosition) stickyNoteTool.updateStickyNotePosition();
 
-    redrawCanvas();
+    if (!_panFrame) {
+      _panFrame = requestAnimationFrame(() => {
+        redrawCanvas();
+        _panFrame = null;
+      });
+    }
     return;
   }
 
@@ -396,8 +439,8 @@ function draw(e) {
   const canvas = CanvasManager.getCanvas()
   const ctx = CanvasManager.getCtx()
 
-  const sidebar = document.getElementById('wb-sidebar')
-  if (sidebar && sidebar.classList.contains('open')) {
+  if (!_sidebarEl) _sidebarEl = document.getElementById('wb-sidebar')
+  if (_sidebarEl && _sidebarEl.classList.contains('open')) {
     const screenX = e.clientX || e.touches?.[0]?.clientX;
     const screenY = e.clientY || e.touches?.[0]?.clientY;
     
@@ -444,7 +487,7 @@ function draw(e) {
   if (!isDrawing) {
     isDrawing = true
     drawFrame = requestAnimationFrame(() => {
-      if (state.tool === 'pencil' || state.tool === 'marker') {
+      if (state.tool === 'pencil' || state.tool === 'marker' || state.tool === 'highlighter') {
         if (e.shiftKey && currentStrokePoints.length > 0) {
           const start = currentStrokePoints[0];
           const constrained = constrainToStraightLine(start.x, start.y, coords.x, coords.y);
@@ -460,8 +503,8 @@ function draw(e) {
         previewCtx.translate(state.panX, state.panY)
 
         previewCtx.strokeStyle = state.color
-        previewCtx.lineWidth = state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize
-        previewCtx.globalAlpha = 1.0
+        previewCtx.lineWidth = state.tool === 'highlighter' ? state.strokeSize * 3 : (state.tool === 'marker' ? state.strokeSize * 1.5 : state.strokeSize)
+        previewCtx.globalAlpha = state.tool === 'highlighter' ? 0.35 : 1.0
         previewCtx.lineCap = 'round'
         previewCtx.lineJoin = 'round'
         previewCtx.beginPath()
@@ -525,20 +568,27 @@ function stopDrawing() {
     }
     
     if (state.tool === 'shapes' && state.shapeStart && state.shapeEnd) {
-      const canFill = state.shapeType === 'rectangle' || state.shapeType === 'circle'
-      createElement('shape', {
-        shapeType: state.shapeType,
-        start: { ...state.shapeStart },
-        end: { ...state.shapeEnd },
-        color: state.color,
-        strokeSize: state.strokeSize,
-        filled: canFill && state.shapeFillEnabled
-      })
-      clearPreview()
-      redrawCanvas()
-      saveState()
-      state.hasDrawn = true
-    } else if (state.tool === 'pencil' || state.tool === 'marker' || (state.tool === 'eraser' && !state.elementEraserEnabled)) {
+      const dx = Math.abs(state.shapeEnd.x - state.shapeStart.x)
+      const dy = Math.abs(state.shapeEnd.y - state.shapeStart.y)
+      
+      if (dx > 1 || dy > 1) {
+        const canFill = state.shapeType === 'rectangle' || state.shapeType === 'circle'
+        createElement('shape', {
+          shapeType: state.shapeType,
+          start: { ...state.shapeStart },
+          end: { ...state.shapeEnd },
+          color: state.color,
+          strokeSize: state.strokeSize,
+          filled: canFill && state.shapeFillEnabled
+        })
+        clearPreview()
+        redrawCanvas()
+        saveState()
+        state.hasDrawn = true
+      } else {
+        clearPreview()
+      }
+    } else if (state.tool === 'pencil' || state.tool === 'marker' || state.tool === 'highlighter' || (state.tool === 'eraser' && !state.elementEraserEnabled)) {
       if (currentStroke && currentStrokePoints.length > 1) {
         currentStroke.points = [...currentStrokePoints]
         createElement('stroke', currentStroke)
@@ -606,26 +656,13 @@ function updateCursor() {
   }
   
   if (tool === 'pencil') {
-    const pencilCursor = 'data:image/svg+xml;base64,' + btoa(`
-      <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
-        <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-128l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z"/>
-      </svg>
-    `)
-    canvas.style.cursor = `url("${pencilCursor}") 2 22, auto`
+    canvas.style.cursor = getCachedCursor('pencil', 'edit', 24, 2, 22)
   } else if (tool === 'marker') {
-    const markerCursor = 'data:image/svg+xml;base64,' + btoa(`
-      <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
-        <path d="M240-120q-45 0-89-22t-71-58q26 0 53-20.5t27-59.5q0-50 35-85t85-35q50 0 85 35t35 85q0 66-47 113t-113 47Zm0-80q33 0 56.5-23.5T320-280q0-17-11.5-28.5T280-320q-17 0-28.5 11.5T240-280q0 23-5.5 42T220-202q5 2 10 2h10Zm230-160L360-470l358-358q11-11 27.5-11.5T774-828l54 54q12 12 12 28t-12 28L470-360Zm-190 80Z"/>
-      </svg>
-    `)
-    canvas.style.cursor = `url("${markerCursor}") 2 22, auto`
+    canvas.style.cursor = getCachedCursor('marker', 'brush', 24, 2, 22)
+  } else if (tool === 'highlighter') {
+    canvas.style.cursor = getCachedCursor('highlighter', 'ink_highlighter', 24, 2, 22)
   } else if (tool === 'eraser') {
-    const eraseCursor = 'data:image/svg+xml;base64,' + btoa(`
-      <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
-        <path d="M690-240h190v80H610l80-80Zm-500 80-85-85q-23-23-23.5-57t22.5-58l440-456q23-24 56.5-24t56.5 23l199 199q23 23 23 57t-23 57L520-160H190Zm296-80 314-322-198-198-442 456 64 64h262Zm-6-240Z"/>
-      </svg>
-    `)
-    canvas.style.cursor = `url("${eraseCursor}") 12 12, auto`
+    canvas.style.cursor = getCachedCursor('eraser', 'ink_eraser', 24, 12, 12)
   } else if (tool === 'text') {
     canvas.style.cursor = 'text'
   } else if (tool === 'sticky-note') {

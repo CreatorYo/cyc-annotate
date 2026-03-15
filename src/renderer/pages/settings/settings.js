@@ -97,7 +97,13 @@ function bindCheckbox(id, storageKey, defaultValue, ipcEvent = null, callback = 
   el.addEventListener("change", (e) => {
     const val = e.target.checked;
     localStorage.setItem(storageKey, val ? "true" : "false");
-    if (ipcEvent) ipcRenderer.send(ipcEvent, val);
+    
+    ipcRenderer.send('sync-setting', { 
+      key: storageKey, 
+      value: val, 
+      channel: ipcEvent 
+    });
+    
     if (callback) callback(val);
   });
   if (callback) callback(el.checked);
@@ -435,9 +441,7 @@ if (document.readyState === "loading") {
   updatePositionSettingsVisibility();
 }
 
-applyLayout(currentLayout);
-applyPosition("vertical", currentVerticalPosition);
-applyPosition("horizontal", currentHorizontalPosition);
+updateDropdownMenu("layout-dropdown", currentLayout);
 
 const shortcutInput = document.getElementById("shortcut-input");
 const resetShortcutBtn = document.getElementById("reset-shortcut");
@@ -875,7 +879,7 @@ bindCheckbox("text-solve-enabled", "text-solve-enabled", false);
 bindCheckbox("element-eraser-enabled", "element-eraser-enabled", true, "element-eraser-changed");
 bindCheckbox("snap-to-objects-enabled", "snap-to-objects-enabled", false, "snap-to-objects-changed");
 bindCheckbox("show-tray-icon", "show-tray-icon", true, "toggle-tray-icon");
-bindCheckbox("toolbar-accent-bg-enabled", "toolbar-accent-bg", false, "toolbar-accent-bg-changed", updateToolbarBackgroundColor);
+bindCheckbox("toolbar-accent-bg-enabled", "toolbar-accent-bg", false, null, updateToolbarBackgroundColor);
 bindCheckbox("toolbar-dragging-enabled", "toolbar-dragging-enabled", true, "toolbar-dragging-changed");
 bindCheckbox("standby-in-toolbar", "standby-in-toolbar", false, "standby-in-toolbar-changed");
 bindCheckbox("launch-on-startup", "launch-on-startup", false, "set-auto-launch");

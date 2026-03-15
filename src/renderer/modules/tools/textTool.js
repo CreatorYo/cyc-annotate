@@ -372,10 +372,10 @@ function initTextTool(state, canvas, helpers) {
     }
   }
 
-  function updateCurrentTextColor(color) {
+  function updateCurrentTextColor(color, isDragging = false) {
     const textInput = document.getElementById('text-input')
     if (textInput && textInput.style.display !== 'none') {
-      if (document.activeElement !== textInput) {
+      if (!isDragging && document.activeElement !== textInput) {
         textInput.focus()
       }
 
@@ -416,9 +416,7 @@ function initTextTool(state, canvas, helpers) {
 
   const textInput = document.getElementById('text-input')
   if (textInput) {
-    ['keyup', 'click', 'input', 'keydown', 'mouseup'].forEach(evt => {
-      textInput.addEventListener(evt, updateCaretColor)
-    })
+    textInput.addEventListener('input', updateCaretColor)
     
     document.addEventListener('selectionchange', () => {
       if (textInput.style.display !== 'none' && document.activeElement === textInput) {

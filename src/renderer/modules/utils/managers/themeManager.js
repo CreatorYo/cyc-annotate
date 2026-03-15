@@ -189,6 +189,12 @@ function updateAccentColor(color, notify = false) {
     const { getColorForPicker } = require('../../../pages/settings/utils/colorUtils.js');
     accentColorPicker.value = getColorForPicker(normalizedColor);
   }
+
+  try {
+    const { updateToggleSwitchColor } = require('../../../pages/settings/utils/toggleSwitch.js');
+    updateToggleSwitchColor();
+  } catch (e) {}
+
   if (accentColorHex) accentColorHex.value = normalizedColor;
   if (accentColorPreview) accentColorPreview.style.background = normalizedColor
   if (pickerBtn) pickerBtn.style.color = textColor

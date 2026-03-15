@@ -35,6 +35,10 @@ class WidgetComponent {
               <span class="material-symbols-outlined">brush</span>
               <span>Marker</span>
             </button>
+            <button class="drawing-tool-option" data-tool="highlighter" data-tooltip="Highlighter" data-shortcut="H">
+              <span class="material-symbols-outlined">ink_highlighter</span>
+              <span>Highlighter</span>
+            </button>
           </div>
         </div>
         <button id="text-btn" class="toolbar-btn" data-tool="text" data-tooltip="Text" data-shortcut="T">

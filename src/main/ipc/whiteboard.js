@@ -1,9 +1,9 @@
-const { ipcMain, app, BrowserWindow } = require('electron');
+const { ipcMain, app, BrowserWindow, Menu, MenuItem, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
 function initWhiteboardIpc(context) {
-  const { getWin } = context;
+  const { getWin, dialogs } = context;
   const userDataPath = app.getPath('userData');
   const whiteboardsDir = path.join(userDataPath, 'whiteboards');
   const metadataPath = path.join(whiteboardsDir, 'metadata.json');
@@ -18,7 +18,7 @@ function initWhiteboardIpc(context) {
       const data = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
       return Array.isArray(data) ? data : [];
     } catch (e) {
-      context.dialogs.showErrorDialog(getWin(), 'Whiteboard Metadata Error', 'Failed to parse whiteboard metadata library.', e.message);
+      dialogs.showErrorDialog(getWin(), 'Whiteboard Metadata Error', 'Failed to parse whiteboard metadata library.', e.message);
       return [];
     }
   }
@@ -83,7 +83,7 @@ function initWhiteboardIpc(context) {
       try {
         return JSON.parse(fs.readFileSync(boardPath, 'utf8'));
       } catch (e) {
-        context.dialogs.showErrorDialog(getWin(), 'Board Load Error', `Failed to load data for board ${id}.`, e.message);
+        dialogs.showErrorDialog(getWin(), 'Board Load Error', `Failed to load data for board ${id}.`, e.message);
         return null;
       }
     }
@@ -103,7 +103,6 @@ function initWhiteboardIpc(context) {
   });
 
   ipcMain.on('show-whiteboard-context-menu', (event, { boardId, title, x, y }) => {
-    const { Menu, MenuItem } = require('electron');
     const metadata = getMetadata();
     const board = metadata.find(b => b.id === boardId);
     if (!board) return;
@@ -173,7 +172,6 @@ function initWhiteboardIpc(context) {
   });
 
   ipcMain.handle('wb-export-board', async (event, { dataUrl, format, title }) => {
-    const { dialog } = require('electron');
     const win = BrowserWindow.fromWebContents(event.sender);
     
     const extensions = format === 'jpg' || format === 'jpeg' ? ['jpg', 'jpeg'] : ['png'];

@@ -76,9 +76,9 @@ function createTooltip(element) {
   element.addEventListener('mouseleave', hide)
   element.addEventListener('mousedown', hide)
   element.addEventListener('click', hide)
-  
-  window.addEventListener('scroll', hide, { passive: true })
 }
+
+let scrollListenerAdded = false
 
 function initTooltips() {
   document.addEventListener('DOMContentLoaded', () => {
@@ -86,6 +86,11 @@ function initTooltips() {
       document.querySelectorAll('[data-tooltip]').forEach(createTooltip)
     }, 100)
   })
+
+  if (!scrollListenerAdded) {
+    window.addEventListener('scroll', hideAllTooltips, { passive: true })
+    scrollListenerAdded = true
+  }
 
   document.addEventListener('mousedown', hideAllTooltips)
   document.addEventListener('contextmenu', hideAllTooltips)

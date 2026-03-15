@@ -164,7 +164,7 @@ function sendBounds() {
 function startBounds() {
   if (!boundsInterval) {
     sendBounds();
-    boundsInterval = setInterval(sendBounds, 100);
+    boundsInterval = setInterval(sendBounds, 500);
   }
 }
 function stopBounds() {

@@ -18,7 +18,9 @@
     (function() {
       const savedColor = localStorage.getItem('last-wb-page-color') || '#fffacd';
       document.documentElement.style.setProperty('--wb-page-color', savedColor);
-      const isDark = savedColor === '#1a1a1a';
+      const hex = savedColor.replace('#', '');
+      const r = parseInt(hex.substr(0, 2), 16), g = parseInt(hex.substr(2, 2), 16), b = parseInt(hex.substr(4, 2), 16);
+      const isDark = (r * 299 + g * 587 + b * 114) / 1000 < 128;
       document.documentElement.style.setProperty('--wb-icon-color', isDark ? '#ffffff' : '#1e1e1e');
       document.documentElement.style.backgroundColor = savedColor;
       document.addEventListener('DOMContentLoaded', () => {
@@ -125,6 +127,7 @@
                   <div class="wb-category-menu">
                     <div class="wb-category-item active" data-value="solid">Solid</div>
                     <div class="wb-category-item" data-value="pastel">Pastel</div>
+                    <div class="wb-category-item" data-value="warm">Warm</div>
                   </div>
                 </div>
               </div>
@@ -133,7 +136,6 @@
                 <div class="wb-category-grid-wrapper" data-category="pastel">
                   <div class="whiteboard-colour-grid">
                     <button class="wb-color-btn active" data-color="#fffacd" style="background: #fffacd; --btn-color: #fffacd;" title="Cream"></button>
-                    <button class="wb-color-btn" data-color="#ffffff" style="background: #ffffff; --btn-color: #ffffff;" title="White"></button>
                     <button class="wb-color-btn" data-color="#f5f5f5" style="background: #f5f5f5; --btn-color: #f5f5f5;" title="Cool Grey"></button>
                     <button class="wb-color-btn" data-color="#e3f2fd" style="background: #e3f2fd; --btn-color: #e3f2fd;" title="Sky Blue"></button>
                     <button class="wb-color-btn" data-color="#f1f8e9" style="background: #f1f8e9; --btn-color: #f1f8e9;" title="Pale Green"></button>
@@ -146,6 +148,7 @@
 
                 <div class="wb-category-grid-wrapper" data-category="solid">
                   <div class="whiteboard-colour-grid">
+                    <button class="wb-color-btn" data-color="#ffffff" style="background: #ffffff; --btn-color: #ffffff;" title="White"></button>
                     <button class="wb-color-btn" data-color="#1a1a1a" style="background: #1a1a1a; --btn-color: #1a1a1a;" title="Obsidian"></button>
                     <button class="wb-color-btn" data-color="#d32f2f" style="background: #d32f2f; --btn-color: #d32f2f;" title="Ruby Red"></button>
                     <button class="wb-color-btn" data-color="#f57c00" style="background: #f57c00; --btn-color: #f57c00;" title="Deep Orange"></button>
@@ -155,6 +158,20 @@
                     <button class="wb-color-btn" data-color="#7b1fa2" style="background: #7b1fa2; --btn-color: #7b1fa2;" title="Deep Purple"></button>
                     <button class="wb-color-btn" data-color="#c2185b" style="background: #c2185b; --btn-color: #c2185b;" title="Vivid Pink"></button>
                     <button class="wb-color-btn" data-color="#455a64" style="background: #455a64; --btn-color: #455a64;" title="Slate Grey"></button>
+                  </div>
+                </div>
+
+                <div class="wb-category-grid-wrapper" data-category="warm">
+                  <div class="whiteboard-colour-grid">
+                    <button class="wb-color-btn" data-color="#ef5350" style="background: #ef5350; --btn-color: #ef5350;" title="Warm Red"></button>
+                    <button class="wb-color-btn" data-color="#ec407a" style="background: #ec407a; --btn-color: #ec407a;" title="Rose Pink"></button>
+                    <button class="wb-color-btn" data-color="#ffa726" style="background: #ffa726; --btn-color: #ffa726;" title="Bright Orange"></button>
+                    <button class="wb-color-btn" data-color="#ffca28" style="background: #ffca28; --btn-color: #ffca28;" title="Amber"></button>
+                    <button class="wb-color-btn" data-color="#ffee58" style="background: #ffee58; --btn-color: #ffee58;" title="Mellow Yellow"></button>
+                    <button class="wb-color-btn" data-color="#ff8a65" style="background: #ff8a65; --btn-color: #ff8a65;" title="Salmon"></button>
+                    <button class="wb-color-btn" data-color="#d84315" style="background: #d84315; --btn-color: #d84315;" title="Terracotta"></button>
+                    <button class="wb-color-btn" data-color="#8d6e63" style="background: #8d6e63; --btn-color: #8d6e63;" title="Coffee"></button>
+                    <button class="wb-color-btn" data-color="#a1887f" style="background: #a1887f; --btn-color: #a1887f;" title="Warm Stone"></button>
                   </div>
                 </div>
               </div>
@@ -204,6 +221,7 @@
                   <div class="wb-category-menu">
                     <div class="wb-category-item active" data-value="solid">Solid</div>
                     <div class="wb-category-item" data-value="pastel">Pastel</div>
+                    <div class="wb-category-item" data-value="warm">Warm</div>
                   </div>
                 </div>
               </div>
@@ -231,6 +249,17 @@
                     <button class="wb-pattern-color-btn" data-color="#e0f2f1" style="background: #e0f2f1; --btn-color: #e0f2f1;" title="Soft Mint"></button>
                   </div>
                 </div>
+
+                <div class="wb-category-grid-wrapper" data-category="warm">
+                  <div class="whiteboard-pattern-colour-grid">
+                    <button class="wb-pattern-color-btn" data-color="#ff8a65" style="background: #ff8a65; --btn-color: #ff8a65;" title="Warm Coral"></button>
+                    <button class="wb-pattern-color-btn" data-color="#ffb74d" style="background: #ffb74d; --btn-color: #ffb74d;" title="Warm Amber"></button>
+                    <button class="wb-pattern-color-btn" data-color="#ffd54f" style="background: #ffd54f; --btn-color: #ffd54f;" title="Warm Gold"></button>
+                    <button class="wb-pattern-color-btn" data-color="#a1887f" style="background: #a1887f; --btn-color: #a1887f;" title="Warm Wood"></button>
+                    <button class="wb-pattern-color-btn" data-color="#d84315" style="background: #d84315; --btn-color: #d84315;" title="Deep Rust"></button>
+                    <button class="wb-pattern-color-btn" data-color="#bf360c" style="background: #bf360c; --btn-color: #bf360c;" title="Burnt Sienna"></button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -246,6 +275,10 @@
                 <button class="wb-export-btn" id="wb-export-jpg-btn" title="Export as JPG">
                   <span class="material-symbols-outlined">photo_library</span>
                   <span>JPG</span>
+                </button>
+                <button class="wb-export-btn" id="wb-copy-clipboard-btn" title="Copy to Clipboard">
+                  <span class="material-symbols-outlined">content_copy</span>
+                  <span>Copy</span>
                 </button>
                 <button class="wb-export-btn" id="wb-print-btn" title="Print Board">
                   <span class="material-symbols-outlined">print</span>

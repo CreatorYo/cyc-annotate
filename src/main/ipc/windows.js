@@ -1,7 +1,7 @@
 const { ipcMain } = require('electron');
 
 function initWindowsIpc(context) {
-  const { getWin, getSettingsWin, getOnboardingWin, setVisible, getWindowUtils } = context;
+  const { broadcast, getWin, setVisible, getWindowUtils } = context;
 
   ipcMain.on('window-minimize', (event) => {
     const { BrowserWindow } = require('electron');
@@ -74,28 +74,19 @@ function initWindowsIpc(context) {
   });
 
   ipcMain.on('layout-changed', (event, layout) => {
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('layout-changed', layout);
-    }
+    broadcast('layout-changed', layout);
   });
 
   ipcMain.on('vertical-position-changed', (event, position) => {
     const { setSetting } = context;
     setSetting('toolbar-position-vertical', position);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('vertical-position-changed', position);
-    }
+    broadcast('vertical-position-changed', position);
   });
 
   ipcMain.on('horizontal-position-changed', (event, position) => {
     const { setSetting } = context;
     setSetting('toolbar-position-horizontal', position);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('horizontal-position-changed', position);
-    }
+    broadcast('horizontal-position-changed', position);
   });
 
   const handleOpenWhiteboard = () => {
@@ -112,13 +103,8 @@ function initWindowsIpc(context) {
   ipcMain.on('open-new-whiteboard-window', handleOpenWhiteboard);
 
   ipcMain.on('whiteboard-closed', () => {
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('whiteboard-active', false);
-    }
+    broadcast('whiteboard-active', false);
   });
 }
-
-
 
 module.exports = initWindowsIpc;

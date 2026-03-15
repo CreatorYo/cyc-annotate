@@ -1,7 +1,7 @@
-const { ipcMain } = require('electron');
+const { ipcMain, dialog, BrowserWindow } = require('electron');
 
 function initDialogsIpc(context) {
-  const { getWin, getSettingsWin, getSetting, setSetting, dialogs, app, getOsVersion } = context;
+  const { getWin, getSettingsWin, getSetting, setSetting, dialogs, app, getOsVersion, broadcast } = context;
 
   ipcMain.handle('show-relaunch-dialog', async (event, settingName) => {
     return await dialogs.showRelaunchDialog(getSettingsWin(), settingName);
@@ -42,10 +42,7 @@ function initDialogsIpc(context) {
     if (result.dontShowAgain && result.confirmed) {
       dismissedDialogs['duplicate-warning'] = true;
       setSetting('dismissed-dialogs', dismissedDialogs);
-      const settingsWin = getSettingsWin();
-      if (settingsWin && !settingsWin.isDestroyed()) {
-        settingsWin.webContents.send('dismissed-dialogs-updated');
-      }
+      broadcast('dismissed-dialogs-updated');
     }
     
     return result.confirmed;
@@ -59,18 +56,12 @@ function initDialogsIpc(context) {
     const dismissedDialogs = getSetting('dismissed-dialogs', {});
     delete dismissedDialogs[dialogId];
     setSetting('dismissed-dialogs', dismissedDialogs);
-    const settingsWin = getSettingsWin();
-    if (settingsWin && !settingsWin.isDestroyed()) {
-      settingsWin.webContents.send('dismissed-dialogs-updated');
-    }
+    broadcast('dismissed-dialogs-updated');
   });
 
   ipcMain.on('reset-all-dismissed-dialogs', () => {
     setSetting('dismissed-dialogs', {});
-    const settingsWin = getSettingsWin();
-    if (settingsWin && !settingsWin.isDestroyed()) {
-      settingsWin.webContents.send('dismissed-dialogs-updated');
-    }
+    broadcast('dismissed-dialogs-updated');
   });
 
   ipcMain.handle('select-save-directory', async () => {
@@ -86,12 +77,10 @@ function initDialogsIpc(context) {
   });
 
   ipcMain.handle('show-open-dialog', async (event, options) => {
-    const { dialog } = require('electron');
     return await dialog.showOpenDialog(getSettingsWin(), options);
   });
 
   ipcMain.handle('show-info-dialog', async (event, title, message, detail) => {
-    const { dialog } = require('electron');
     await dialog.showMessageBox(getSettingsWin(), {
       type: 'info',
       title: title || 'Information',
@@ -113,17 +102,13 @@ function initDialogsIpc(context) {
     if (result.dontShowAgain && result.confirmed) {
       dismissedDialogs['toolbar-collision'] = true;
       setSetting('dismissed-dialogs', dismissedDialogs);
-      const settingsWin = getSettingsWin();
-      if (settingsWin && !settingsWin.isDestroyed()) {
-        settingsWin.webContents.send('dismissed-dialogs-updated');
-      }
+      broadcast('dismissed-dialogs-updated');
     }
     
     return result.confirmed;
   });
 
   ipcMain.handle('show-confirmation-dialog', async (event, options) => {
-    const { dialog, BrowserWindow } = require('electron');
     const senderWin = BrowserWindow.fromWebContents(event.sender);
     const win = senderWin && !senderWin.isDestroyed() ? senderWin : getWin();
     
@@ -141,4 +126,4 @@ function initDialogsIpc(context) {
   });
 }
 
-module.exports = initDialogsIpc;
+module.exports = initDialogsIpc;

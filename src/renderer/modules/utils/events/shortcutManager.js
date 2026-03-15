@@ -11,6 +11,7 @@ function init(deps) {
     clearCanvas,
     copySelectedElements,
     pasteElements,
+    pasteImageFromClipboard,
     toggleCommandMenu,
     closeCommandMenu,
     setColor,
@@ -57,10 +58,14 @@ function init(deps) {
           }
           break
         case 'v':
-          if (state.copiedElements && state.copiedElements.length > 0) {
-            e.preventDefault()
-            pasteElements()
-          }
+          e.preventDefault()
+          ;(async () => {
+            if (state.copiedElements && state.copiedElements.length > 0) {
+              pasteElements()
+            } else if (pasteImageFromClipboard && await pasteImageFromClipboard()) {
+              setTool('select')
+            }
+          })()
           break
         case 'z':
           if (e.shiftKey) {
@@ -139,6 +144,10 @@ function init(deps) {
       case 'b':
         e.preventDefault()
         setTool('marker')
+        break
+      case 'h':
+        e.preventDefault()
+        setTool('highlighter')
         break
       case 'n':
         e.preventDefault()

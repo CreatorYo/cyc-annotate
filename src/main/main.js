@@ -99,6 +99,17 @@ function getSetting(key, defaultValue) {
   return defaultValue
 }
 
+function getAllSettings() {
+  try {
+    const settingsPath = path.join(app.getPath('userData'), 'settings.json')
+    if (fs.existsSync(settingsPath)) {
+      const data = fs.readFileSync(settingsPath, 'utf8')
+      return JSON.parse(data)
+    }
+  } catch (e) {}
+  return {}
+}
+
 function setSetting(key, value) {
   try {
     const settingsPath = path.join(app.getPath('userData'), 'settings.json')
@@ -177,12 +188,17 @@ function createSettingsWindow() {
 
   settingsWin.on('closed', () => {
     settingsWin = null
+    const allSettings = getAllSettings();
+    
     if (win && !win.isDestroyed()) {
-      win.webContents.send('sync-toolbar-settings', { 
-        standbyInToolbar: getSetting('standby-in-toolbar', false), 
-        reduceClutter: getSetting('reduce-clutter', true) 
-      })
+      win.webContents.send('sync-toolbar-settings', allSettings);
     }
+
+    whiteboardWindows.forEach(w => {
+      if (w && !w.isDestroyed()) {
+        w.webContents.send('sync-toolbar-settings', allSettings);
+      }
+    });
   })
 }
 
@@ -211,8 +227,6 @@ initIpc({
   app,
   getWin: () => win,
   getSettingsWin: () => settingsWin,
-  getWhiteboardWin: () => whiteboardWindows.length > 0 ? whiteboardWindows[whiteboardWindows.length - 1] : null,
-  getWhiteboardWindows: () => whiteboardWindows,
   getOnboardingWin: () => onboardingWin,
   getVisible: () => visible,
   setVisible: (v) => { visible = v },
@@ -221,6 +235,7 @@ initIpc({
   getStandbyMode: () => standbyModeEnabled,
   setStandbyMode: (v) => { standbyModeEnabled = v },
   getSetting,
+  getAllSettings,
   setSetting,
   registerShortcut,
   showOverlay,
@@ -244,7 +259,20 @@ initIpc({
   getWindowsAccentColor,
   getWindowsAccentSyncEnabled: () => windowsAccentSyncEnabled,
   setWindowsAccentSyncEnabled: (v) => { windowsAccentSyncEnabled = v },
-  resetShortcutHeld: () => { isShortcutKeyHeld = false }
+  resetShortcutHeld: () => { isShortcutKeyHeld = false },
+  broadcast: (channel, ...args) => {
+    const windows = [
+      win,
+      settingsWin,
+      onboardingWin,
+      notificationHandler?.getWin ? notificationHandler.getWin() : null,
+      ...whiteboardWindows
+    ].filter(w => w && !w.isDestroyed());
+
+    windows.forEach(w => {
+      w.webContents.send(channel, ...args);
+    });
+  }
 })
 
 async function saveAnnotationsForRelaunch() {

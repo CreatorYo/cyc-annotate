@@ -151,6 +151,8 @@ function initStickyNoteTool(state, canvas, helpers) {
   if (header) {
     let isDragging = false
     let startX, startY
+    let dragRafPending = false
+    let dragRafId = null
 
     header.onmousedown = (e) => {
       if (e.target.closest('.sticky-note-menu-wrapper') || e.target.closest('.sticky-close-btn')) return
@@ -171,12 +173,24 @@ function initStickyNoteTool(state, canvas, helpers) {
 
         container.style.left = x + 'px'
         container.style.top = y + 'px'
-        redrawCanvas()
+        if (!dragRafPending) {
+          dragRafPending = true
+          dragRafId = requestAnimationFrame(() => {
+            redrawCanvas()
+            dragRafPending = false
+            dragRafId = null
+          })
+        }
       }
     })
 
     window.addEventListener('mouseup', () => {
       isDragging = false
+      if (dragRafId) {
+        cancelAnimationFrame(dragRafId)
+        dragRafId = null
+        dragRafPending = false
+      }
     })
   }
 

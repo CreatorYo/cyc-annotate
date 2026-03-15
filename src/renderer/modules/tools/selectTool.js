@@ -1,4 +1,5 @@
 const ContextMenu = require('../components/ContextMenu.js')
+const { getImageCache } = require('./clipboardTool.js')
 
 function initSelectTool(state, ctx, canvas, helpers) {
   const {
@@ -38,6 +39,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
 
   let activeGuides = [];
   const SNAP_THRESHOLD = 5;
+  let interactionHasChanges = false;
 
   const updateSelection = () =>
     updateSelectionOnly ? updateSelectionOnly() : redrawCanvas();
@@ -132,6 +134,9 @@ function initSelectTool(state, ctx, canvas, helpers) {
     } else if (element.type === "stickyNote") {
       element._initialPos = { x: element.x, y: element.y };
       element._initialSize = { width: element.width || 280, height: element.height || 280 };
+    } else if (element.type === "image") {
+      element._initialPos = { x: element.x, y: element.y };
+      element._initialSize = { width: element.width, height: element.height };
     }
   }
 
@@ -147,6 +152,9 @@ function initSelectTool(state, ctx, canvas, helpers) {
 
   function moveSelectedElements(totalDeltaX, totalDeltaY) {
     let hasChanges = false;
+    if (Math.abs(totalDeltaX) > 0.01 || Math.abs(totalDeltaY) > 0.01) {
+      interactionHasChanges = true;
+    }
     for (const elementId of state.selectedElements) {
       const element = getElement(elementId);
       if (!element) continue;
@@ -194,6 +202,14 @@ function initSelectTool(state, ctx, canvas, helpers) {
           hasChanges = true;
         }
       } else if (element.type === "stickyNote" && element._initialPos) {
+        const newX = element._initialPos.x + totalDeltaX;
+        const newY = element._initialPos.y + totalDeltaY;
+        if (element.x !== newX || element.y !== newY) {
+          element.x = newX;
+          element.y = newY;
+          hasChanges = true;
+        }
+      } else if (element.type === "image" && element._initialPos) {
         const newX = element._initialPos.x + totalDeltaX;
         const newY = element._initialPos.y + totalDeltaY;
         if (element.x !== newX || element.y !== newY) {
@@ -353,6 +369,10 @@ function initSelectTool(state, ctx, canvas, helpers) {
 
   function resizeSelectedElement(handle, totalDeltaX, totalDeltaY) {
     if (state.selectedElements.length === 0 || !state.resizeStartBounds) return;
+    
+    if (Math.abs(totalDeltaX) > 0.01 || Math.abs(totalDeltaY) > 0.01) {
+      interactionHasChanges = true;
+    }
 
     const calcBounds = state.resizeStartBounds;
     let newX = calcBounds.x,
@@ -467,6 +487,14 @@ function initSelectTool(state, ctx, canvas, helpers) {
           }
         });
       } else if (element.type === "stickyNote" && element._initialPos && element._initialSize) {
+        const relX = element._initialPos.x - calcBounds.x;
+        const relY = element._initialPos.y - calcBounds.y;
+        
+        element.x = calcBounds.x + offsetX + relX * scaleX + corrX;
+        element.y = calcBounds.y + offsetY + relY * scaleY + corrY;
+        element.width = element._initialSize.width * scaleX;
+        element.height = element._initialSize.height * scaleY;
+      } else if (element.type === "image" && element._initialPos && element._initialSize) {
         const relX = element._initialPos.x - calcBounds.x;
         const relY = element._initialPos.y - calcBounds.y;
         
@@ -881,6 +909,10 @@ function initSelectTool(state, ctx, canvas, helpers) {
       const currentMouseAngle = Math.atan2(coords.y - center.y, coords.x - center.x);
       const deltaRotation = currentMouseAngle - state.rotationStartAngle;
       
+      if (Math.abs(deltaRotation) > 0.001) {
+        interactionHasChanges = true;
+      }
+      
       getSelectedElements().forEach(el => {
         el.rotation = (el._baseRotation || 0) + deltaRotation;
         el._dirty = true;
@@ -1035,7 +1067,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
       state.resizeStartBounds = null;
       state.dragOffset = null;
       getSelectedElements().forEach((element) => cleanupTempState(element));
-      saveState();
+      if (interactionHasChanges) saveState();
     }
     if (state.isDraggingSelection) {
       state.isDraggingSelection = false;
@@ -1043,7 +1075,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
       state.dragStartBounds = null;
       activeGuides = [];
       getSelectedElements().forEach((element) => cleanupTempState(element));
-      saveState();
+      if (interactionHasChanges) saveState();
     }
     if (state.isSelecting) {
       selectElementsInBox();
@@ -1057,8 +1089,10 @@ function initSelectTool(state, ctx, canvas, helpers) {
       state.isRotating = false;
       state.resizeStartBounds = null;
       getSelectedElements().forEach(el => delete el._baseRotation);
-      saveState();
+      if (interactionHasChanges) saveState();
     }
+    
+    interactionHasChanges = false;
   }
 
   function getCursorForSelect(coords) {
@@ -1193,8 +1227,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
   async function moveToolbarToRight() {
     const manager = getToolbarPositionManager ? getToolbarPositionManager() : null;
     if (manager) {
-      manager.setLayout('vertical');
-      manager.setVerticalPosition('right');
+      manager.setLayout('vertical', false, false);
+      manager.setVerticalPosition('right', false);
       playSound('move');
       return;
     }
@@ -1221,8 +1255,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
   async function moveToolbarToLeft() {
     const manager = getToolbarPositionManager ? getToolbarPositionManager() : null;
     if (manager) {
-      manager.setLayout('vertical');
-      manager.setVerticalPosition('left');
+      manager.setLayout('vertical', false, false);
+      manager.setVerticalPosition('left', false);
       playSound('move');
       return;
     }
@@ -1289,9 +1323,30 @@ function initSelectTool(state, ctx, canvas, helpers) {
       } else if (newElement.type === 'stickyNote') {
         newElement.x += offset;
         newElement.y += offset;
+      } else if (newElement.type === 'image') {
+        newElement.x += offset;
+        newElement.y += offset;
       }
       
-      const newEl = createElement(newElement);
+      const elementType = newElement.type;
+      delete newElement.type;
+      delete newElement.id;
+      delete newElement._dirty;
+      delete newElement._initialPoints;
+      delete newElement._initialStart;
+      delete newElement._initialEnd;
+      delete newElement._initialPos;
+      delete newElement._initialFontSize;
+      delete newElement._initialBounds;
+      delete newElement._initialSize;
+      delete newElement._baseRotation;
+      delete newElement.createdAt;
+      const newEl = createElement(elementType, newElement);
+      if (elementType === 'image' && newEl.src) {
+        const htmlImg = new Image();
+        htmlImg.src = newEl.src;
+        getImageCache().set(newEl.id, htmlImg);
+      }
       newElements.push(newEl);
     });
     
@@ -1334,6 +1389,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
       else if (el.type === 'shape') { b.start = { ...el.start }; b.end = { ...el.end }; }
       else if (el.type === 'text') { b.x = el.x; b.y = el.y; }
       else if (el.type === 'stickyNote') { b.x = el.x; b.y = el.y; }
+      else if (el.type === 'image') { b.x = el.x; b.y = el.y; }
       return b;
     });
     
@@ -1362,6 +1418,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
         deltaY = (canvas.height - 50) - (bounds.y + bounds.height);
       }
       
+      element._dirty = true;
+      
       if (element.type === 'stroke' && element.points) {
         element.points.forEach(point => {
           point.x += deltaX;
@@ -1376,6 +1434,9 @@ function initSelectTool(state, ctx, canvas, helpers) {
         element.x += deltaX;
         element.y += deltaY;
       } else if (element.type === 'stickyNote') {
+        element.x += deltaX;
+        element.y += deltaY;
+      } else if (element.type === 'image') {
         element.x += deltaX;
         element.y += deltaY;
       }
@@ -1404,6 +1465,9 @@ function initSelectTool(state, ctx, canvas, helpers) {
                 el.x = b.x;
                 el.y = b.y;
               } else if (el.type === 'stickyNote') {
+                el.x = b.x;
+                el.y = b.y;
+              } else if (el.type === 'image') {
                 el.x = b.x;
                 el.y = b.y;
               }
@@ -1441,6 +1505,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
         const element = selected[index];
         const deltaX = currentX - bounds.x;
         
+        element._dirty = true;
+        
         if (element.type === 'stroke' && element.points) {
           element.points.forEach(point => {
             point.x += deltaX;
@@ -1451,6 +1517,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
         } else if (element.type === 'text') {
           element.x += deltaX;
         } else if (element.type === 'stickyNote') {
+          element.x += deltaX;
+        } else if (element.type === 'image') {
           element.x += deltaX;
         }
         
@@ -1469,6 +1537,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
         const element = selected[index];
         const deltaY = currentY - bounds.y;
         
+        element._dirty = true;
+        
         if (element.type === 'stroke' && element.points) {
           element.points.forEach(point => {
             point.y += deltaY;
@@ -1480,6 +1550,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
           element.y += deltaY;
         } else if (element.type === 'stickyNote') {
           element.y += deltaY;
+        } else if (element.type === 'image') {
+          element.y += deltaY;
         }
         
         currentY += bounds.height + spacing;
@@ -1490,7 +1562,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
     saveState();
     playSound('move');
   }
-  
+
   function centerSelectedElements() {
     const selected = getSelectedElements();
     if (selected.length === 0) return;
@@ -1508,6 +1580,8 @@ function initSelectTool(state, ctx, canvas, helpers) {
       const deltaX = canvasCenterX - elementCenterX;
       const deltaY = canvasCenterY - elementCenterY;
       
+      element._dirty = true;
+      
       if (element.type === 'stroke' && element.points) {
         element.points.forEach(point => {
           point.x += deltaX;
@@ -1524,6 +1598,9 @@ function initSelectTool(state, ctx, canvas, helpers) {
       } else if (element.type === 'stickyNote') {
         element.x += deltaX;
         element.y += deltaY;
+      } else if (element.type === 'image') {
+        element.x += deltaX;
+        element.y += deltaY;
       }
     });
     
@@ -1536,6 +1613,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
     if (state.selectedElements.length === 0) return;
     getSelectedElements().forEach((element) => {
       element.color = color;
+      element._dirty = true;
       if (element.type === "text" && element.segments) {
         element.segments.forEach((segment) => {
           if (segment.formatting) {
@@ -1552,6 +1630,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
     if (state.selectedElements.length === 0) return;
     getSelectedElements().forEach((element) => {
       element.strokeSize = size;
+      element._dirty = true;
       if (element.type === "text") element.fontSize = Math.max(12, size * 4);
     });
     redrawCanvas();
@@ -1562,6 +1641,7 @@ function initSelectTool(state, ctx, canvas, helpers) {
     if (state.selectedElements.length === 0) return;
     getSelectedElements().forEach(el => {
       el.rotation = 0;
+      el._dirty = true;
     });
     redrawCanvas();
     saveState();
@@ -1609,6 +1689,13 @@ function initSelectTool(state, ctx, canvas, helpers) {
             element.strokeSize = Math.max(1, Math.floor(element.fontSize / 4));
           }
         } else if (element.type === "stickyNote" && element._initialPos) {
+          element.x = element._initialPos.x;
+          element.y = element._initialPos.y;
+          if (element._initialSize) {
+            element.width = element._initialSize.width;
+            element.height = element._initialSize.height;
+          }
+        } else if (element.type === "image" && element._initialPos) {
           element.x = element._initialPos.x;
           element.y = element._initialPos.y;
           if (element._initialSize) {

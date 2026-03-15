@@ -6,7 +6,10 @@ class ToolbarPositionManager {
     this.dragStartPos = { x: 0, y: 0 }
     this.toolbarStartPos = { x: 0, y: 0 }
     
-    this.currentLayout = localStorage.getItem('toolbar-layout') || options.layout || 'vertical'
+    const isWhiteboard = window.location.pathname.includes('whiteboard.html')
+    this.storagePrefix = isWhiteboard ? 'wb-toolbar' : 'toolbar'
+    
+    this.currentLayout = localStorage.getItem(`${this.storagePrefix}-layout`) || options.layout || 'vertical'
     this.currentVerticalPosition = localStorage.getItem('toolbar-position-vertical') || options.verticalPosition || 'left'
     this.currentHorizontalPosition = localStorage.getItem('toolbar-position-horizontal') || options.horizontalPosition || 'bottom'
     
@@ -35,12 +38,13 @@ class ToolbarPositionManager {
     this.updateDropdownPositioning()
     this.updateDragHandleVisibility()
     
-    let revealAttempts = 0
+    this.revealAttempts = 0
     const revealToolbar = () => {
-      revealAttempts++
+      this.revealAttempts++
       const rect = this.toolbar.getBoundingClientRect()
       const minDim = this.currentLayout === 'vertical' ? rect.height : rect.width
-      if (minDim > 100 || revealAttempts > 20) {
+      
+      if ((minDim > 50 && rect.width > 0) || this.revealAttempts > 20) {
         this.resetPosition(true)
         this.toolbar.style.opacity = '1'
       } else {
@@ -51,12 +55,23 @@ class ToolbarPositionManager {
   }
 
   setupEventListeners() {
-    this.toolbar.addEventListener('mousedown', (e) => this.handleMouseDown(e))
-    document.addEventListener('mousemove', (e) => this.handleMouseMove(e))
-    document.addEventListener('mouseup', () => this.handleMouseUp())
-    document.addEventListener('mouseleave', () => this.handleMouseLeave())
-    this.toolbar.addEventListener('dblclick', (e) => this.handleDoubleClick(e))
-    window.addEventListener('resize', () => this.updateDropdownPositioning())
+    this._boundMouseDown = (e) => this.handleMouseDown(e)
+    this._boundMouseMove = (e) => this.handleMouseMove(e)
+    this._boundMouseUp = () => this.handleMouseUp()
+    this._boundMouseLeave = () => this.handleMouseLeave()
+    this._boundDblClick = (e) => this.handleDoubleClick(e)
+    this._boundResize = () => {
+      if (!this.isDragging) {
+        this.resetPosition(true)
+      }
+    }
+
+    this.toolbar.addEventListener('mousedown', this._boundMouseDown)
+    document.addEventListener('mousemove', this._boundMouseMove)
+    document.addEventListener('mouseup', this._boundMouseUp)
+    document.addEventListener('mouseleave', this._boundMouseLeave)
+    this.toolbar.addEventListener('dblclick', this._boundDblClick)
+    window.addEventListener('resize', this._boundResize)
     
     this.resizeObserver = new ResizeObserver(() => {
       if (!this.isDragging) {
@@ -68,8 +83,17 @@ class ToolbarPositionManager {
     window.addEventListener('storage', (e) => {
       if (e.key === 'toolbar-dragging-enabled') {
         this.updateDragHandleVisibility()
-      } else if (e.key === 'toolbar-x' || e.key === 'toolbar-y' || e.key === 'toolbar-layout') {
-        this.currentLayout = localStorage.getItem('toolbar-layout') || 'vertical'
+      } else if (
+        e.key.includes('toolbar-x') || 
+        e.key.includes('toolbar-y') || 
+        e.key.includes('toolbar-layout') ||
+        e.key === 'toolbar-position-vertical' ||
+        e.key === 'toolbar-position-horizontal'
+      ) {
+        this.currentLayout = localStorage.getItem(`${this.storagePrefix}-layout`) || 'vertical'
+        this.currentVerticalPosition = localStorage.getItem('toolbar-position-vertical') || 'left'
+        this.currentHorizontalPosition = localStorage.getItem('toolbar-position-horizontal') || 'bottom'
+        
         this.toolbar.classList.remove('toolbar-vertical', 'toolbar-horizontal')
         this.toolbar.classList.add(`toolbar-${this.currentLayout}`)
         this.resetPosition(true)
@@ -131,29 +155,25 @@ class ToolbarPositionManager {
     e.stopPropagation()
   }
 
-
   handleMouseMove(e) {
     if (!this.isDragging || !this.dragTarget) return
     
     const isShiftPressed = e.shiftKey
-    
-    if (isShiftPressed) {
-      this.toolbar.style.cursor = 'crosshair'
-    } else {
-      this.toolbar.style.cursor = 'grabbing'
-    }
+    this.toolbar.style.cursor = isShiftPressed ? 'crosshair' : 'grabbing'
     
     if (!isShiftPressed) {
-      const EDGE_THRESHOLD = 50 
-      const CORNER_THRESHOLD = 100
+      const EDGE_THRESHOLD = 20 
+      const CORNER_THRESHOLD = 40
       
       const distLeft = e.clientX
       const distRight = window.innerWidth - e.clientX
       const distTop = e.clientY
       const distBottom = window.innerHeight - e.clientY
       
-      const inCorner = (distLeft < CORNER_THRESHOLD || distRight < CORNER_THRESHOLD) && 
-                       (distTop < CORNER_THRESHOLD || distBottom < CORNER_THRESHOLD)
+      const inCorner = (distLeft < CORNER_THRESHOLD && distTop < CORNER_THRESHOLD) || 
+                       (distRight < CORNER_THRESHOLD && distTop < CORNER_THRESHOLD) ||
+                       (distLeft < CORNER_THRESHOLD && distBottom < CORNER_THRESHOLD) ||
+                       (distRight < CORNER_THRESHOLD && distBottom < CORNER_THRESHOLD)
       
       if (!inCorner) {
         if (this.currentLayout === 'vertical') {
@@ -186,24 +206,19 @@ class ToolbarPositionManager {
     this.currentLayout = newLayout
     this.toolbar.classList.remove('toolbar-vertical', 'toolbar-horizontal')
     this.toolbar.classList.add(`toolbar-${newLayout}`)
-    localStorage.setItem('toolbar-layout', newLayout)
+    localStorage.setItem(`${this.storagePrefix}-layout`, newLayout)
     
     const rect = this.toolbar.getBoundingClientRect()
-    
     this.dragStartPos = { x: clientX, y: clientY }
     
     if (newLayout === 'vertical') {
       this.toolbarStartPos.y = clientY - 12 + rect.height / 2
       this.toolbarStartPos.x = clientX
+      this.updateVerticalPosition(0, 0, false)
     } else {
       this.toolbarStartPos.x = clientX - 12 + rect.width / 2
       this.toolbarStartPos.y = window.innerHeight - clientY - rect.height / 2
-    }
-    
-    if (newLayout === 'vertical') {
-        this.updateVerticalPosition(0, 0, false)
-    } else {
-        this.updateHorizontalPosition(0, 0, false)
+      this.updateHorizontalPosition(0, 0, false)
     }
     
     this.updateDropdownPositioning()
@@ -220,18 +235,12 @@ class ToolbarPositionManager {
     const topLimit = isWhiteboard ? (40 + toolbarHalfHeight) : toolbarHalfHeight
     
     if (!isShiftPressed) {
-      const snapThreshold = 30
-      if (newX < toolbarHalfWidth + snapThreshold) {
-        newX = toolbarHalfWidth
-      } else if (newX > window.innerWidth - toolbarHalfWidth - snapThreshold) {
-        newX = window.innerWidth - toolbarHalfWidth
-      }
+      const snapThreshold = 15
+      if (newX < toolbarHalfWidth + snapThreshold) newX = toolbarHalfWidth
+      else if (newX > window.innerWidth - toolbarHalfWidth - snapThreshold) newX = window.innerWidth - toolbarHalfWidth
       
-      if (newY < toolbarHalfHeight + snapThreshold) {
-        newY = toolbarHalfHeight
-      } else if (newY > window.innerHeight - toolbarHalfHeight - snapThreshold) {
-        newY = window.innerHeight - toolbarHalfHeight
-      }
+      if (newY < toolbarHalfHeight + snapThreshold) newY = toolbarHalfHeight
+      else if (newY > window.innerHeight - toolbarHalfHeight - snapThreshold) newY = window.innerHeight - toolbarHalfHeight
     }
     
     newX = Math.max(toolbarHalfWidth, Math.min(newX, window.innerWidth - toolbarHalfWidth))
@@ -243,11 +252,7 @@ class ToolbarPositionManager {
     this.toolbar.style.bottom = 'auto'
     this.toolbar.style.right = 'auto'
     
-    if (!isShiftPressed) {
-      this.updateEdgeClasses(newX, newY, toolbarHalfWidth, toolbarHalfHeight)
-    } else {
-      this.toolbar.classList.remove('at-left-edge', 'at-right-edge', 'at-top-edge', 'at-bottom-edge')
-    }
+    this.updateEdgeClasses(newX, newY, toolbarHalfWidth, toolbarHalfHeight)
   }
 
   updateHorizontalPosition(deltaX, deltaY, isShiftPressed = false) {
@@ -261,18 +266,12 @@ class ToolbarPositionManager {
     const topLimitPos = isWhiteboard ? (window.innerHeight - 40 - toolbarHeight) : (window.innerHeight - toolbarHeight)
     
     if (!isShiftPressed) {
-      const snapThreshold = 30
-      if (newX < toolbarHalfWidth + snapThreshold) {
-        newX = toolbarHalfWidth
-      } else if (newX > window.innerWidth - toolbarHalfWidth - snapThreshold) {
-        newX = window.innerWidth - toolbarHalfWidth
-      }
+      const snapThreshold = 15
+      if (newX < toolbarHalfWidth + snapThreshold) newX = toolbarHalfWidth
+      else if (newX > window.innerWidth - toolbarHalfWidth - snapThreshold) newX = window.innerWidth - toolbarHalfWidth
       
-      if (newY < snapThreshold) {
-        newY = 0
-      } else if (newY > window.innerHeight - toolbarHeight - snapThreshold) {
-        newY = window.innerHeight - toolbarHeight
-      }
+      if (newY < snapThreshold) newY = 0
+      else if (newY > window.innerHeight - toolbarHeight - snapThreshold) newY = window.innerHeight - toolbarHeight
     }
     
     newX = Math.max(toolbarHalfWidth, Math.min(newX, window.innerWidth - toolbarHalfWidth))
@@ -284,11 +283,7 @@ class ToolbarPositionManager {
     this.toolbar.style.top = 'auto'
     this.toolbar.style.right = 'auto'
     
-    if (!isShiftPressed) {
-      this.updateEdgeClasses(newX, newY, toolbarHalfWidth, toolbarHeight / 2, true)
-    } else {
-      this.toolbar.classList.remove('at-left-edge', 'at-right-edge', 'at-top-edge', 'at-bottom-edge')
-    }
+    this.updateEdgeClasses(newX, newY, toolbarHalfWidth, toolbarHeight / 2, true)
   }
 
   handleMouseUp() {
@@ -318,83 +313,53 @@ class ToolbarPositionManager {
     if (ishandle) {
         e.stopPropagation()
         e.preventDefault()
-        this.resetPosition()
+        this.resetPosition(false, true)
         return
     }
-
-    const clickedButton = e.target.closest('button')
-    const clickedColor = e.target.closest('.color-swatch')
-    const clickedWrapper = e.target.closest('.stroke-thickness-wrapper, .shapes-wrapper, .drawing-tools-wrapper, .custom-color-wrapper')
-    const clickedPopup = e.target.closest('.stroke-popup, .shapes-popup, .drawing-tools-popup, .custom-color-popup')
-    const clickedOption = e.target.closest('.stroke-option, .shape-option, .drawing-tool-option, .color-option')
-    const clickedGroup = e.target.closest('.toolbar-group, .color-palette')
-    
-    if (clickedButton || clickedColor || clickedWrapper || clickedPopup || clickedOption || clickedGroup) {
-      return
-    }
-    
-    e.stopPropagation()
-    this.resetPosition()
   }
 
-  toggleLayout(clientX, clientY) {
-    const newLayout = this.currentLayout === 'vertical' ? 'horizontal' : 'vertical'
-    
-    if (clientX !== undefined && clientY !== undefined) {
-        this.switchLayout(newLayout, clientX, clientY)
-    } else {
-        this.setLayout(newLayout)
-    }
-  }
-
-  setLayout(layout, forceReset = false) {
+  setLayout(layout, forceReset = false, shouldSave = true) {
     const layoutChanged = this.currentLayout !== layout
     this.currentLayout = layout
     this.toolbar.classList.remove('toolbar-vertical', 'toolbar-horizontal')
     this.toolbar.classList.add(`toolbar-${layout}`)
-    localStorage.setItem('toolbar-layout', layout)
+    if (shouldSave) localStorage.setItem(`${this.storagePrefix}-layout`, layout)
     
-    if (layoutChanged || forceReset) {
-      this.resetPosition(forceReset ? false : true)
-    } else {
-      this.resetPosition(true)
-    }
+    this.resetPosition(forceReset ? false : true, shouldSave)
     this.updateDropdownPositioning()
   }
 
-  setVerticalPosition(position) {
-    const positionChanged = this.currentVerticalPosition !== position
+  setVerticalPosition(position, shouldSave = true) {
     this.currentVerticalPosition = position
-    localStorage.setItem('toolbar-position-vertical', position)
-    if (positionChanged || this.currentLayout === 'vertical') {
-      this.resetPosition(false)
+    if (shouldSave) localStorage.setItem('toolbar-position-vertical', position)
+    if (this.currentLayout === 'vertical') {
+      this.resetPosition(false, shouldSave)
     }
     this.updateDropdownPositioning()
   }
 
-  setHorizontalPosition(position) {
-    const positionChanged = this.currentHorizontalPosition !== position
+  setHorizontalPosition(position, shouldSave = true) {
     this.currentHorizontalPosition = position
-    localStorage.setItem('toolbar-position-horizontal', position)
-    if (positionChanged || this.currentLayout === 'horizontal') {
-      this.resetPosition(false)
+    if (shouldSave) localStorage.setItem('toolbar-position-horizontal', position)
+    if (this.currentLayout === 'horizontal') {
+      this.resetPosition(false, shouldSave)
     }
     this.updateDropdownPositioning()
   }
 
-  resetPosition(useSaved = false) {
+  resetPosition(useSaved = false, shouldSave = true) {
     const rect = this.toolbar.getBoundingClientRect()
-    
     const toolbarWidth = rect.width || this.toolbar.offsetWidth
     const toolbarHeight = rect.height || this.toolbar.offsetHeight
 
-    if (toolbarWidth === 0) {
-      requestAnimationFrame(() => this.resetPosition(useSaved))
+    if (toolbarWidth === 0 && this.revealAttempts < 20) {
+      requestAnimationFrame(() => this.resetPosition(useSaved, shouldSave))
       return
     }
 
-    const savedX = localStorage.getItem('toolbar-x')
-    const savedY = localStorage.getItem('toolbar-y')
+    const layoutKey = this.currentLayout === 'vertical' ? 'vertical' : 'horizontal'
+    const savedX = localStorage.getItem(`${this.storagePrefix}-${layoutKey}-x`)
+    const savedY = localStorage.getItem(`${this.storagePrefix}-${layoutKey}-y`)
 
     const toolbarHalfWidth = toolbarWidth / 2
     const toolbarHalfHeight = toolbarHeight / 2
@@ -416,7 +381,6 @@ class ToolbarPositionManager {
         this.toolbar.style.right = 'auto'
       } else {
         const topLimitPos = isWhiteboard ? (window.innerHeight - 40 - toolbarHeight) : (window.innerHeight - toolbarHeight)
-
         x = Math.max(toolbarHalfWidth, Math.min(x, window.innerWidth - toolbarHalfWidth))
         y = Math.max(0, Math.min(y, topLimitPos))
 
@@ -427,13 +391,12 @@ class ToolbarPositionManager {
         this.toolbar.style.right = 'auto'
       }
     } else {
-      if (!useSaved) {
-        localStorage.removeItem('toolbar-x')
-        localStorage.removeItem('toolbar-y')
+      if (!useSaved && shouldSave) {
+        localStorage.removeItem(`${this.storagePrefix}-${layoutKey}-x`)
+        localStorage.removeItem(`${this.storagePrefix}-${layoutKey}-y`)
       }
 
       const margin = 20
-
       if (this.currentLayout === 'vertical') {
         const isLeft = this.currentVerticalPosition === 'left'
         const centerX = isLeft ? (margin + toolbarHalfWidth) : (window.innerWidth - margin - toolbarHalfWidth)
@@ -445,65 +408,52 @@ class ToolbarPositionManager {
         this.toolbar.style.bottom = 'auto'
       } else {
         const isBottom = this.currentHorizontalPosition === 'bottom'
-        const centerY = isBottom ? margin : (window.innerHeight - toolbarHalfHeight * 2 - margin)
+        const distY = isBottom ? margin : (window.innerHeight - toolbarHeight * 2 - margin)
         
         this.toolbar.style.left = '50%'
-        this.toolbar.style.bottom = centerY + 'px'
+        this.toolbar.style.bottom = distY + 'px'
         this.toolbar.style.transform = 'translateX(-50%)'
         this.toolbar.style.top = 'auto'
         this.toolbar.style.right = 'auto'
       }
     }
     
-    setTimeout(() => {
-      this.updateDropdownPositioning()
-    }, 10)
+    setTimeout(() => this.updateDropdownPositioning(), 10)
   }
 
   savePosition() {
     const rect = this.toolbar.getBoundingClientRect()
+    const layoutKey = this.currentLayout === 'vertical' ? 'vertical' : 'horizontal'
+    const centerX = rect.left + rect.width / 2
+    
     if (this.currentLayout === 'vertical') {
-      const centerX = rect.left + rect.width / 2
       const centerY = rect.top + rect.height / 2
-      localStorage.setItem('toolbar-x', centerX)
-      localStorage.setItem('toolbar-y', centerY)
+      localStorage.setItem(`${this.storagePrefix}-vertical-x`, centerX)
+      localStorage.setItem(`${this.storagePrefix}-vertical-y`, centerY)
     } else {
-      const centerX = rect.left + rect.width / 2
       const bottomY = window.innerHeight - rect.bottom
-      localStorage.setItem('toolbar-x', centerX)
-      localStorage.setItem('toolbar-y', bottomY)
+      localStorage.setItem(`${this.storagePrefix}-horizontal-x`, centerX)
+      localStorage.setItem(`${this.storagePrefix}-horizontal-y`, bottomY)
     }
   }
 
   loadPosition() {
     this.resetPosition(true)
-    this.updateDropdownPositioning()
   }
 
   updateDropdownPositioning() {
     const rect = this.toolbar.getBoundingClientRect()
-    
+    if (rect.width === 0) return
+
     if (this.currentLayout === 'vertical') {
       const toolbarCenterX = rect.left + rect.width / 2
       const isOnRightSide = toolbarCenterX > window.innerWidth / 2
-      
-      if (isOnRightSide) {
-        this.toolbar.classList.add('toolbar-right-side')
-      } else {
-        this.toolbar.classList.remove('toolbar-right-side')
-      }
-      
+      this.toolbar.classList.toggle('toolbar-right-side', isOnRightSide)
       this.toolbar.classList.remove('toolbar-top-side')
     } else {
       const toolbarCenterY = rect.top + rect.height / 2
       const isOnTop = toolbarCenterY < window.innerHeight / 2
-      
-      if (isOnTop) {
-        this.toolbar.classList.add('toolbar-top-side')
-      } else {
-        this.toolbar.classList.remove('toolbar-top-side')
-      }
-      
+      this.toolbar.classList.toggle('toolbar-top-side', isOnTop)
       this.toolbar.classList.remove('toolbar-right-side')
     }
 
@@ -520,52 +470,28 @@ class ToolbarPositionManager {
 
   updateEdgeClasses(x, y, halfW, halfH, isHorizontal = false) {
     this.toolbar.classList.remove('at-left-edge', 'at-right-edge', 'at-top-edge', 'at-bottom-edge')
+    const threshold = 5
     
-    const threshold = 1
-    
-    if (x <= halfW + threshold) {
-      this.toolbar.classList.add('at-left-edge')
-    } else if (x >= window.innerWidth - halfW - threshold) {
-      this.toolbar.classList.add('at-right-edge')
-    }
+    if (x <= halfW + threshold) this.toolbar.classList.add('at-left-edge')
+    else if (x >= window.innerWidth - halfW - threshold) this.toolbar.classList.add('at-right-edge')
     
     if (isHorizontal) {
-      if (y <= threshold) {
-        this.toolbar.classList.add('at-bottom-edge')
-      } else if (y >= window.innerHeight - halfH * 2 - threshold) {
-        this.toolbar.classList.add('at-top-edge')
-      }
+      if (y <= threshold) this.toolbar.classList.add('at-bottom-edge')
+      else if (y >= window.innerHeight - halfH * 2 - threshold) this.toolbar.classList.add('at-top-edge')
     } else {
-      if (y <= halfH + threshold) {
-        this.toolbar.classList.add('at-top-edge')
-      } else if (y >= window.innerHeight - halfH - threshold) {
-        this.toolbar.classList.add('at-bottom-edge')
-      }
+      if (y <= halfH + threshold) this.toolbar.classList.add('at-top-edge')
+      else if (y >= window.innerHeight - halfH - threshold) this.toolbar.classList.add('at-bottom-edge')
     }
-  }
-
-  getLayout() {
-    return this.currentLayout
-  }
-
-  getVerticalPosition() {
-    return this.currentVerticalPosition
-  }
-
-  getHorizontalPosition() {
-    return this.currentHorizontalPosition
   }
 
   destroy() {
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect()
-    }
-    this.toolbar.removeEventListener('mousedown', this.handleMouseDown)
-    this.toolbar.removeEventListener('dblclick', this.handleDoubleClick)
-    document.removeEventListener('mousemove', this.handleMouseMove)
-    document.removeEventListener('mouseup', this.handleMouseUp)
-    document.removeEventListener('mouseleave', this.handleMouseLeave)
-    window.removeEventListener('resize', this.updateDropdownPositioning)
+    if (this.resizeObserver) this.resizeObserver.disconnect()
+    this.toolbar.removeEventListener('mousedown', this._boundMouseDown)
+    this.toolbar.removeEventListener('dblclick', this._boundDblClick)
+    document.removeEventListener('mousemove', this._boundMouseMove)
+    document.removeEventListener('mouseup', this._boundMouseUp)
+    document.removeEventListener('mouseleave', this._boundMouseLeave)
+    window.removeEventListener('resize', this._boundResize)
   }
 }
 

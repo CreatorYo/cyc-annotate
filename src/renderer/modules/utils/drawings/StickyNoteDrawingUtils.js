@@ -225,8 +225,14 @@ function parseHtmlToSegments(html) {
         case 'li':
           if (node.tagName.toLowerCase() === 'li') {
             const parentTag = node.parentElement?.tagName.toLowerCase()
-            const prefix = parentTag === 'ol' ? '• ' : '• ' 
-            segments.push({ text: prefix, formatting: { ...newFormatting, bold: true } })
+            if (parentTag === 'ol') {
+              const siblings = Array.from(node.parentElement.children).filter(c => c.tagName.toLowerCase() === 'li')
+              const index = siblings.indexOf(node) + 1
+              const prefix = `${index}. `
+              segments.push({ text: prefix, formatting: { ...newFormatting, bold: true } })
+            } else {
+              segments.push({ text: '• ', formatting: { ...newFormatting, bold: true } })
+            }
           }
           break
       }

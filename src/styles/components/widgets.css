@@ -588,10 +588,8 @@ body[data-theme="light"] .widget-card:hover .widget-label {
   transition: opacity 0.2s ease;
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  pointer-events: none; /* Keep it static */
+  pointer-events: none;
 }
-
-/* Removed hover effect to keep it muted */
 
 body[data-theme="light"] .widget-add-btn {
   background: rgba(0, 0, 0, 0.05);
@@ -599,8 +597,6 @@ body[data-theme="light"] .widget-add-btn {
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
-
-/* Removed light theme hover effect */
 
 .widget-clock-preview {
   background: rgba(0, 0, 0, 0.2);
@@ -1287,10 +1283,20 @@ body[data-theme="light"] .features-shelf-footer {
   background: var(--hover-bg);
 }
 
-.timer-adjust-btn.disabled {
+.timer-adjust-btn.disabled,
+.timer-adjust-btn[disabled],
+.timer-time-section .timer-adjust-btn.disabled,
+.timer-time-section .timer-adjust-btn[disabled] {
   opacity: 0.15 !important;
-  pointer-events: none;
-  cursor: default;
+  cursor: not-allowed !important;
+}
+
+.timer-adjust-btn.disabled:hover,
+.timer-adjust-btn[disabled]:hover,
+.timer-time-section .timer-adjust-btn.disabled:hover,
+.timer-time-section .timer-adjust-btn[disabled]:hover {
+  background: transparent !important;
+  opacity: 0.15 !important;
 }
 
 .timer-adjust-btn .material-symbols-outlined {

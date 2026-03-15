@@ -1,22 +1,7 @@
 const { ipcMain, nativeTheme } = require('electron');
 
 function initThemeIpc(context) {
-  const { setSetting, getSetting } = context;
-
-  const broadcast = (channel, ...args) => {
-    const windows = [
-      context.getWin(),
-      context.getSettingsWin(),
-      context.getOnboardingWin(),
-      context.getNotificationHandler()?.getWin(),
-      ...(context.getWhiteboardWindows ? context.getWhiteboardWindows() : [])
-    ];
-    windows.forEach(w => {
-      if (w && !w.isDestroyed()) {
-        w.webContents.send(channel, ...args);
-      }
-    });
-  };
+  const { setSetting, getSetting, broadcast } = context;
 
   nativeTheme.on('updated', () => {
     const currentTheme = getSetting('theme', 'system');

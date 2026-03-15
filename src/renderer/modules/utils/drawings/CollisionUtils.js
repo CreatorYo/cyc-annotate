@@ -102,6 +102,8 @@ function getElementBounds(element, returnUnrotated = false) {
     }
   } else if (element.type === 'stickyNote') {
     unrotatedBounds = { x: element.x, y: element.y, width: element.width || 280, height: element.height || 280 }
+  } else if (element.type === 'image') {
+    unrotatedBounds = { x: element.x, y: element.y, width: element.width, height: element.height }
   }
 
   if (!unrotatedBounds) return null
@@ -172,7 +174,7 @@ function hitTest(x, y, element) {
     return Math.sqrt((testX - xx) ** 2 + (testY - yy) ** 2) <= threshold
   }
   
-  const bounds = getElementBounds({ ...element, rotation: 0 })
+  const bounds = getElementBounds(element, true)
   if (!bounds) return false
   return testX >= bounds.x && testX <= bounds.x + bounds.width &&
          testY >= bounds.y && testY <= bounds.y + bounds.height

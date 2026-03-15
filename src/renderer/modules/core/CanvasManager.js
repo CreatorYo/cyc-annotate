@@ -33,9 +33,14 @@ function init(onResize) {
   ctx.lineJoin = 'round'
 
   resizeCanvas()
+  let resizeTimer = null
   window.addEventListener('resize', () => {
-    resizeCanvas()
-    if (resizeCallback) resizeCallback()
+    if (resizeTimer) cancelAnimationFrame(resizeTimer)
+    resizeTimer = requestAnimationFrame(() => {
+      resizeCanvas()
+      if (resizeCallback) resizeCallback()
+      resizeTimer = null
+    })
   })
 }
 
@@ -110,7 +115,7 @@ function createSelectionCanvas() {
       selectionCtx.imageSmoothingEnabled = false
       selectionCtx.imageSmoothingQuality = 'low'
     }
-  } else {
+  } else if (selectionCanvas.width !== canvas.width || selectionCanvas.height !== canvas.height) {
     selectionCanvas.width = canvas.width
     selectionCanvas.height = canvas.height
   }

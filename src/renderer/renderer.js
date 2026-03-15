@@ -1,11 +1,10 @@
-const { ipcRenderer } = require('electron')
-const { DEFAULT_ACCENT_COLOR } = require('../../shared/constants.js')
+const { ipcRenderer } = require('electron') 
 const { initSelectTool } = require('../modules/tools/selectTool.js')
 const { initTextTool } = require('../modules/tools/textTool.js')
 const { initStickyNoteTool } = require('../modules/tools/stickyNoteTool.js')
 const { initColorPickerTool } = require('../modules/tools/colorPicker.js')
 const { initCommandMenu } = require('../modules/tools/commandMenu.js')
-const { initThemeManager, applyTheme, updateToolbarBackgroundColor, updateAccentColor } = require('../modules/utils/managers/themeManager.js')
+const { initThemeManager, applyTheme } = require('../modules/utils/managers/themeManager.js')
 const { initTooltips, hideAllTooltips } = require('../modules/utils/managers/tooltipManager.js')
 const { initAudioContext, playSound } = require('../modules/utils/audio/soundEffects.js')
 const { initStandbyManager } = require('../modules/utils/managers/standbyManager.js')
@@ -13,352 +12,54 @@ const { initShortcutManager } = require('../modules/utils/events/shortcutManager
 const ToolbarPositionManager = require('../modules/utils/managers/toolbarPositionManager')
 const { initWindowControls } = require('../../shared/window-controls.js')
 const WidgetComponent = require('../modules/components/WidgetComponent.js')
-
-WidgetComponent.init()
+const CanvasManager = require('../modules/core/CanvasManager.js')
+const { state, createElement, saveState } = require('../modules/core/AppState.js')
+const { init: initInputHandler, updateCursor } = require('../modules/input/InputHandler.js')
+const { getElementBounds, hitTest, findElementAt } = require('../modules/utils/drawings/CollisionUtils.js')
+const { copySelectedElements, pasteElements, pasteImageFromClipboard } = require('../modules/tools/clipboardTool.js')
+const { drawGrid } = require('../modules/core/GridRenderer.js')
+const CanvasRenderer = require('../modules/core/CanvasRenderer.js')
+const HistoryManager = require('../modules/core/HistoryManager.js')
+const ToolbarController = require('../modules/ui/ToolbarController.js')
+const MoreMenu = require('../modules/ui/MoreMenu.js')
+const FeaturesShelf = require('../modules/ui/FeaturesShelf.js')
+const CaptureManager = require('../modules/utils/features/CaptureManager.js')
+const SettingsSync = require('../modules/utils/events/SettingsSync.js')
 
 const isWhiteboard = window.location.pathname.includes('whiteboard.html')
 
-const CanvasManager = require('../modules/core/CanvasManager.js')
-CanvasManager.init(() => redrawCanvas())
+WidgetComponent.init()
+CanvasManager.init(() => CanvasRenderer.redrawCanvas())
 const canvas = CanvasManager.getCanvas()
 const ctx = CanvasManager.getCtx()
-const optimizedRendering = CanvasManager.isOptimizedRendering()
 
 document.addEventListener('click', initAudioContext, { once: true })
 document.addEventListener('mousedown', initAudioContext, { once: true })
 
-const { init: initInputHandler, updateCursor } = require('../modules/input/InputHandler.js')
-const { state, createElement, saveState, undo, redo } = require('../modules/core/AppState.js')
-const { drawArrow } = require('../modules/utils/drawings/DrawingUtils.js')
-const { drawText, drawStickyNote } = require('../modules/utils/drawings/StickyNoteDrawingUtils.js')
-
-canvas.style.pointerEvents = 'auto'
-
-ctx.lineCap = 'round'
-ctx.lineJoin = 'round'
-
-function drawGrid(targetCtx = ctx) {
-  const gridMode = isWhiteboard ? state.whiteboardGridMode : (state.gridEnabled ? 'grid' : 'none');
-  if (gridMode === 'none') return;
-  
-  targetCtx.save();
-  
-  const isDark = isWhiteboard ? (state.whiteboardPageColor === '#1a1a1a') : (document.body.getAttribute('data-theme') === 'dark');
-  const customGridColor = isWhiteboard && state.whiteboardGridColor && state.whiteboardGridColor !== 'default' ? state.whiteboardGridColor : null;
-  const gridKey = `${gridMode}-${state.gridSize}-${isDark}-${customGridColor}`;
-  const cache = CanvasManager.getGridCache();
-  
-  let pattern = cache.get(gridKey);
-  
-  if (!pattern) {
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    const size = state.gridSize;
-    
-    let strokeStyle, fillStyle;
-    if (customGridColor) {
-      strokeStyle = customGridColor + '40';
-      fillStyle = customGridColor + '60';
-    } else {
-      strokeStyle = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.15)';
-      fillStyle = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
-    }
-
-    if (gridMode === 'dotted') {
-      tempCanvas.width = size;
-      tempCanvas.height = size;
-      tempCtx.fillStyle = fillStyle;
-      tempCtx.beginPath();
-      tempCtx.arc(size/2, size/2, 2, 0, Math.PI * 2);
-      tempCtx.fill();
-    } else if (gridMode === 'graph') {
-      tempCanvas.width = size;
-      tempCanvas.height = size;
-      tempCtx.strokeStyle = strokeStyle;
-      
-      const minorSpacing = size / 5;
-      tempCtx.lineWidth = 1;
-      tempCtx.globalAlpha = 0.4;
-      tempCtx.beginPath();
-      for (let i = 1; i < 5; i++) {
-        const p = i * minorSpacing;
-        tempCtx.moveTo(p, 0); tempCtx.lineTo(p, size);
-        tempCtx.moveTo(0, p); tempCtx.lineTo(size, p);
-      }
-      tempCtx.stroke();
-      
-      tempCtx.lineWidth = 1.5;
-      tempCtx.globalAlpha = 1.0;
-      tempCtx.beginPath();
-      tempCtx.moveTo(0, 0); tempCtx.lineTo(size, 0);
-      tempCtx.moveTo(0, 0); tempCtx.lineTo(0, size);
-      tempCtx.stroke();
-    } else if (gridMode === 'grid' || gridMode === 'lines') {
-      tempCanvas.width = size;
-      tempCanvas.height = size;
-      tempCtx.strokeStyle = strokeStyle;
-      tempCtx.lineWidth = 1;
-      tempCtx.beginPath();
-      tempCtx.moveTo(0, 0); tempCtx.lineTo(size, 0);
-      if (gridMode === 'grid') {
-        tempCtx.moveTo(0, 0); tempCtx.lineTo(0, size);
-      }
-      tempCtx.stroke();
-    } else if (gridMode === 'hexagonal') {
-      const s = size / 1.5;
-      const h = s * Math.sqrt(3);
-      tempCanvas.width = s * 3;
-      tempCanvas.height = h;
-      tempCtx.strokeStyle = strokeStyle;
-      tempCtx.lineWidth = 1;
-      
-      const drawHex = (cx, cy) => {
-        tempCtx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const angle = i * Math.PI / 3;
-          const px = cx + s * Math.cos(angle);
-          const py = cy + s * Math.sin(angle);
-          if (i === 0) tempCtx.moveTo(px, py);
-          else tempCtx.lineTo(px, py);
-        }
-        tempCtx.closePath();
-        tempCtx.stroke();
-      };
-
-      drawHex(0, 0);
-      drawHex(s * 1.5, h / 2);
-      drawHex(s * 3, 0);
-      drawHex(0, h);
-      drawHex(s * 3, h);
-    } else if (gridMode === 'isometric') {
-      targetCtx.restore();
-      return drawIsometricGrid(targetCtx, isDark, customGridColor);
-    }
-    
-    if (tempCanvas.width > 0) {
-      pattern = targetCtx.createPattern(tempCanvas, 'repeat');
-      cache.set(gridKey, pattern);
-    }
-  }
-
-  if (pattern) {
-    const matrix = new DOMMatrix().translate(state.panX, state.panY);
-    pattern.setTransform(matrix);
-    targetCtx.fillStyle = pattern;
-    targetCtx.setTransform(1, 0, 0, 1, 0, 0);
-    targetCtx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-  
-  targetCtx.restore();
-}
-
-function drawIsometricGrid(targetCtx, isDark, customGridColor) {
-  const spacing = state.gridSize;
-  const tan30 = 0.57735;
-  const verticalSpacing = spacing * 0.866 * 2;
-  const viewportX = -state.panX;
-  const viewportY = -state.panY;
-  const viewportWidth = canvas.width;
-  const viewportHeight = canvas.height;
-  const dpr = window.devicePixelRatio || 1;
-
-  targetCtx.save();
-  if (customGridColor) {
-    targetCtx.strokeStyle = customGridColor + '40';
-  } else {
-    targetCtx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.15)';
-  }
-  targetCtx.lineWidth = 1;
-  targetCtx.beginPath();
-  
-  const startX = Math.floor(viewportX / verticalSpacing) * verticalSpacing;
-  const endX = Math.ceil((viewportX + viewportWidth) / verticalSpacing) * verticalSpacing;
-  for (let x = startX; x <= endX; x += verticalSpacing) {
-    targetCtx.moveTo(x, viewportY); targetCtx.lineTo(x, viewportY + viewportHeight);
-  }
-  
-  const slantSpacing = spacing;
-  const c1_min = viewportY - (viewportX + viewportWidth) * tan30;
-  const c1_max = viewportY + viewportHeight - viewportX * tan30;
-  const startY1 = Math.floor(c1_min / slantSpacing) * slantSpacing;
-  const endY1 = Math.ceil(c1_max / slantSpacing) * slantSpacing;
-  for (let y = startY1; y <= endY1; y += slantSpacing) {
-    targetCtx.moveTo(viewportX, y + viewportX * tan30);
-    targetCtx.lineTo(viewportX + viewportWidth, y + (viewportX + viewportWidth) * tan30);
-  }
-  
-  const c2_min = viewportY + viewportX * tan30;
-  const c2_max = viewportY + viewportHeight + (viewportX + viewportWidth) * tan30;
-  const startY2 = Math.floor(c2_min / slantSpacing) * slantSpacing;
-  const endY2 = Math.ceil(c2_max / slantSpacing) * slantSpacing;
-  for (let y = startY2; y <= endY2; y += slantSpacing) {
-    targetCtx.moveTo(viewportX, y - viewportX * tan30);
-    targetCtx.lineTo(viewportX + viewportWidth, y - (viewportX + viewportWidth) * tan30);
-  }
-  targetCtx.stroke();
-  targetCtx.restore();
-}
-
-window.drawGridOnBuffer = (targetCtx) => drawGrid(targetCtx);
-
-function redrawCanvas() {
-  ctx.save()
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.globalAlpha = 1.0
-  ctx.globalCompositeOperation = 'source-over'
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.restore()
-  
-  ctx.save()
-  ctx.translate(state.panX, state.panY)
-
-  drawGrid()
-
-  state.elements.forEach(element => {
-    if (element) drawElement(element)
-  })
-  
-  ctx.restore()
-  updateSelectionOverlay()
-}
-
-function drawElement(element) {
-  if (!element) return
-  if (element.id === state.editingElementId) return
-  
-  ctx.save()
-  
-  ctx.globalCompositeOperation = 'source-over'
-  ctx.setLineDash([])
-  
-  if (optimizedRendering && (element.type === 'stroke' || element.type === 'shape')) {
-    ctx.imageSmoothingEnabled = false
-  }
-  
-  if (element.rotation) {
-    const bounds = getElementBounds(element, true)
-    if (bounds) {
-      const centerX = bounds.x + bounds.width / 2
-      const centerY = bounds.y + bounds.height / 2
-      ctx.translate(centerX, centerY)
-      ctx.rotate(element.rotation)
-      ctx.translate(-centerX, -centerY)
-    }
-  }
-  
-  if (element.type === 'stroke') {
-    ctx.strokeStyle = element.color || '#000000'
-    ctx.lineWidth = element.strokeSize || 4
-    ctx.globalAlpha = element.alpha !== undefined ? element.alpha : 1.0
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.globalCompositeOperation = element.compositeOperation || 'source-over'
-    
-    ctx.beginPath()
-    if (element.points && element.points.length > 0) {
-      ctx.moveTo(element.points[0].x, element.points[0].y)
-      for (let i = 1; i < element.points.length; i++) {
-        ctx.lineTo(element.points[i].x, element.points[i].y)
-      }
-      ctx.stroke()
-    }
-  } else if (element.type === 'shape') {
-    ctx.strokeStyle = element.color || '#000000'
-    ctx.fillStyle = element.color || '#000000'
-    ctx.lineWidth = element.strokeSize || 4
-    ctx.globalAlpha = 1.0
-    ctx.globalCompositeOperation = 'source-over'
-    
-    const x = Math.min(element.start.x, element.end.x)
-    const y = Math.min(element.start.y, element.end.y)
-    const w = Math.abs(element.end.x - element.start.x)
-    const h = Math.abs(element.end.y - element.start.y)
-    
-    if (element.shapeType === 'rectangle') {
-      if (element.filled) {
-        ctx.fillRect(x, y, w, h)
-      } else {
-        ctx.strokeRect(x, y, w, h)
-      }
-    } else if (element.shapeType === 'circle') {
-      const centerX = (element.start.x + element.end.x) / 2
-      const centerY = (element.start.y + element.end.y) / 2
-      const radius = Math.sqrt(w * w + h * h) / 2
-      ctx.beginPath()
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
-      if (element.filled) {
-        ctx.fill()
-      } else {
-        ctx.stroke()
-      }
-    } else if (element.shapeType === 'line') {
-      ctx.beginPath()
-      ctx.moveTo(element.start.x, element.start.y)
-      ctx.lineTo(element.end.x, element.end.y)
-      ctx.stroke()
-    } else if (element.shapeType === 'arrow') {
-      drawArrow(ctx, element.start.x, element.start.y, element.end.x, element.end.y)
-    }
-  } else if (element.type === 'text') {
-    drawText(ctx, element)
-  } else if (element.type === 'stickyNote') {
-    drawStickyNote(ctx, element, isLightColor)
-  }
-  
-  ctx.restore()
-}
-
-const { getElementBounds, hitTest, findElementAt } = require('../modules/utils/drawings/CollisionUtils.js')
-
-function updateSelectionOverlay() {
-  const { selectionCtx, selectionCanvas } = CanvasManager.createSelectionCanvas()
-  if (!selectionCtx) return
-  
-  selectionCtx.save()
-  selectionCtx.setTransform(1, 0, 0, 1, 0, 0)
-  selectionCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height)
-  selectionCtx.restore()
-  
-  selectionCtx.save()
-  selectionCtx.translate(state.panX, state.panY)
-  
-  selectTool.drawSelectionIndicators(selectionCtx)
-  
-  if (state.tool === 'select' && state.isSelecting) {
-    selectTool.drawSelectionBox(selectionCtx)
-  }
-  
-  selectionCtx.restore()
-  
-  updateShapeFillToggleState()
-}
-
-function updateSelectionOnly() {
-  updateSelectionOverlay()
-}
+window.drawGridOnBuffer = (targetCtx) => drawGrid(targetCtx)
 
 const selectTool = initSelectTool(state, ctx, canvas, {
   getElementBounds,
   hitTest,
   findElementAt,
-  redrawCanvas: () => redrawCanvas(),
-  updateSelectionOnly: () => updateSelectionOnly(),
-  saveState: () => saveState(updateUndoRedoButtons),
+  redrawCanvas: () => CanvasRenderer.redrawCanvas(),
+  updateSelectionOnly: () => CanvasRenderer.updateSelectionOnly(),
+  saveState: () => HistoryManager.doSaveState(),
   playSound: (type) => playSound(type),
   getToolbarPositionManager: () => toolbarPositionManager
 })
 
 const textTool = initTextTool(state, canvas, {
   createElement,
-  redrawCanvas: () => redrawCanvas(),
-  saveState: () => saveState(updateUndoRedoButtons),
-  updateSelectionOnly: () => updateSelectionOnly()
+  redrawCanvas: () => CanvasRenderer.redrawCanvas(),
+  saveState: () => HistoryManager.doSaveState(),
+  updateSelectionOnly: () => CanvasRenderer.updateSelectionOnly()
 })
 
 const stickyNoteTool = initStickyNoteTool(state, canvas, {
   createElement,
-  redrawCanvas: () => redrawCanvas(),
-  saveState: () => saveState(updateUndoRedoButtons)
+  redrawCanvas: () => CanvasRenderer.redrawCanvas(),
+  saveState: () => HistoryManager.doSaveState()
 })
 
 const colorTool = initColorPickerTool({
@@ -368,11 +69,48 @@ const colorTool = initColorPickerTool({
   stickyNoteTool,
   playSound,
   hideAllTooltips,
-  closeAllPopups,
-  redrawCanvas: () => redrawCanvas(),
-  saveState: () => saveState(updateUndoRedoButtons)
+  closeAllPopups: () => ToolbarController.closeAllPopups(),
+  redrawCanvas: () => CanvasRenderer.redrawCanvas(),
+  saveState: () => HistoryManager.doSaveState()
 })
 const { setColor, initColorPicker, setInitialColorBorder, isLightColor } = colorTool
+
+CanvasRenderer.init({
+  isLightColor,
+  selectTool,
+  updateShapeFillToggleState: () => ToolbarController.updateShapeFillToggleState()
+})
+
+HistoryManager.init({
+  selectTool,
+  redrawCanvas: () => CanvasRenderer.redrawCanvas(),
+  playSound,
+  canvas,
+  ctx
+})
+
+ToolbarController.init({
+  textTool,
+  stickyNoteTool,
+  selectTool,
+  updateCursor,
+  playSound,
+  hideAllTooltips,
+  closeAllPopups: () => ToolbarController.closeAllPopups()
+})
+
+ToolbarController.onShapeFillChanged(() => {
+  CanvasRenderer.redrawCanvas()
+  HistoryManager.doSaveState()
+})
+
+initInputHandler({
+  selectTool,
+  textTool,
+  stickyNoteTool,
+  redrawCanvas: () => CanvasRenderer.redrawCanvas(),
+  updateSelectionOnly: () => CanvasRenderer.updateSelectionOnly()
+})
 
 setInitialColorBorder()
 if (document.readyState === 'loading') {
@@ -383,477 +121,37 @@ if (document.readyState === 'loading') {
   setTimeout(initColorPicker, 200)
 }
 
-initInputHandler({
-  selectTool,
-  textTool,
-  stickyNoteTool,
-  redrawCanvas: () => redrawCanvas(),
-  updateSelectionOnly: () => updateSelectionOnly(),
-  playSound
-})
-
-function setTool(tool) {
-  state.tool = tool
-
-  if (tool !== 'text' && tool !== 'select') {
-    const textInput = document.getElementById('text-input')
-    if (textInput && textInput.style.display === 'block') {
-      textTool.finishTextInput()
-    }
-  }
-
-  if (tool !== 'sticky-note' && tool !== 'select') {
-    const stickyContainer = document.getElementById('sticky-note-input-container')
-    if (stickyContainer && stickyContainer.style.display === 'flex') {
-      stickyNoteTool.finishStickyNoteInput()
-    }
-  }
-  
-  if (tool !== 'select') {
-    selectTool.clearSelection()
-  }
-  
-  if (tool !== 'shapes') {
-    state.shapeStart = null
-    state.shapeEnd = null
-    state.drawing = false
-  }
-  
-  document.querySelectorAll('[data-tool]').forEach(btn => {
-    btn.classList.remove('active')
-  })
-  document.querySelector(`[data-tool="${tool}"]`)?.classList.add('active')
-  
-  updateShapeFillToggleState()
-
-  document.querySelectorAll('.drawing-tool-option').forEach(btn => {
-    btn.classList.remove('active')
-    if (btn.dataset.tool === tool) {
-      btn.classList.add('active')
-      
-      const icon = document.getElementById('pencil-btn')?.querySelector('.material-symbols-outlined')
-      if (icon) {
-        if (tool === 'select') {
-          icon.textContent = 'arrow_selector_tool'
-        } else if (tool === 'pencil') {
-          icon.textContent = 'edit'
-        } else if (tool === 'marker') {
-          icon.textContent = 'brush'
-        }
-      }
-    }
-  })
-
-  if (tool === 'select' || tool === 'pencil' || tool === 'marker') {
-    const pencilBtn = document.getElementById('pencil-btn')
-    if (pencilBtn) {
-      pencilBtn.classList.add('active')
-    }
-  }
-  
-  if (tool === 'shapes') {
-    const shapesBtn = document.getElementById('shapes-btn')
-    if (shapesBtn) {
-      shapesBtn.classList.add('active')
-    }
-  }
-  
-  updateCursor()
-}
-
-function updateUndoRedoButtons() {
-  const undoBtn = document.getElementById('undo-btn')
-  const redoBtn = document.getElementById('redo-btn')
-  const moreUndoBtn = document.getElementById('more-undo-btn')
-  const moreRedoBtn = document.getElementById('more-redo-btn')
-  
-  const canUndo = state.historyIndex > 0 && state.history.length > 0
-  const canRedo = state.historyIndex < state.history.length - 1
-  
-  if (undoBtn) {
-    if (canUndo) {
-      undoBtn.classList.remove('disabled')
-    } else {
-      undoBtn.classList.add('disabled')
-    }
-  }
-  
-  if (redoBtn) {
-    if (canRedo) {
-      redoBtn.classList.remove('disabled')
-    } else {
-      redoBtn.classList.add('disabled')
-    }
-  }
-  
-  if (moreUndoBtn) {
-    if (canUndo) {
-      moreUndoBtn.classList.remove('disabled')
-    } else {
-      moreUndoBtn.classList.add('disabled')
-    }
-  }
-  
-  if (moreRedoBtn) {
-    if (canRedo) {
-      moreRedoBtn.classList.remove('disabled')
-    } else {
-      moreRedoBtn.classList.add('disabled')
-    }
-  }
-}
-
-function handleUndo() {
-  if (state.historyIndex > 0) {
-    undo(
-      () => { 
-        selectTool.clearSelection()
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        redrawCanvas()
-        checkIfHasDrawn()
-        playSound('undo')
-      },
-      updateUndoRedoButtons
-    )
-  }
-}
-
-function handleRedo() {
-  if (state.historyIndex < state.history.length - 1) {
-    redo(
-      () => {
-        selectTool.clearSelection()
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        redrawCanvas()
-        checkIfHasDrawn()
-        playSound('redo')
-      },
-      updateUndoRedoButtons
-    )
-  }
-}
-
-function checkIfHasDrawn() {
-  state.hasDrawn = state.elements.length > 0
-}
-
-saveState(updateUndoRedoButtons)
-
-const { copySelectedElements, pasteElements } = require('../modules/tools/clipboardTool.js')
-
 const handleCopy = () => copySelectedElements(state, playSound)
-const handlePaste = () => pasteElements(state, redrawCanvas, saveState, playSound)
-
-const drawingToolsPopup = document.getElementById('drawing-tools-popup')
-const pencilBtn = document.getElementById('pencil-btn')
+const handlePaste = () => pasteElements(state, () => CanvasRenderer.redrawCanvas(), saveState, playSound)
+const handlePasteImage = () => pasteImageFromClipboard(state, () => CanvasRenderer.redrawCanvas(), () => HistoryManager.doSaveState(), playSound)
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    setTool(state.tool) 
+    ToolbarController.setTool(state.tool) 
   })
 } else {
-  setTool(state.tool) 
+  ToolbarController.setTool(state.tool) 
 }
 
-if (pencilBtn) {
-  pencilBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    hideAllTooltips()
-    if (drawingToolsPopup) {
-      const wasOpen = drawingToolsPopup.classList.contains('show')
-      closeAllPopups()
-      if (!wasOpen) {
-        drawingToolsPopup.classList.add('show')
-      }
-    }
-  })
-
-  pencilBtn.addEventListener('dblclick', (e) => {
-    e.stopPropagation()
-    e.preventDefault()
-    setTool('pencil')
-    if (drawingToolsPopup) {
-      drawingToolsPopup.classList.remove('show')
-    }
-  })
-}
-
-document.querySelectorAll('.drawing-tool-option').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    const tool = btn.dataset.tool
-    setTool(tool)
-    if (drawingToolsPopup) {
-      drawingToolsPopup.classList.remove('show')
-    }
-  })
-})
-
-document.getElementById('text-btn').addEventListener('click', () => {
-  const textBtn = document.getElementById('text-btn')
-  if (state.tool === 'text' && textBtn.classList.contains('active')) {
-    setTool('pencil')
-  } else {
-    setTool('text')
-  }
-})
-
-document.getElementById('sticky-note-btn').addEventListener('click', () => {
-  const stickyBtn = document.getElementById('sticky-note-btn')
-  if (state.tool === 'sticky-note' && stickyBtn.classList.contains('active')) {
-    setTool('pencil')
-  } else {
-    setTool('sticky-note')
-  }
-})
-
-document.getElementById('eraser-btn').addEventListener('click', () => setTool('eraser'))
-
-const shapesBtn = document.getElementById('shapes-btn')
-const shapesPopup = document.getElementById('shapes-popup')
-
-shapesBtn.addEventListener('click', (e) => {
-  e.stopPropagation()
-  hideAllTooltips()
-  const wasOpen = shapesPopup.classList.contains('show')
-  closeAllPopups()
-  if (!wasOpen) {
-    shapesPopup.classList.add('show')
-  }
-})
-
-document.querySelectorAll('.shape-option[data-shape]').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    const tooltip = btn.querySelector('.custom-tooltip')
-    if (tooltip) {
-      tooltip.classList.remove('show')
-    }
-    state.shapeType = btn.dataset.shape
-    setTool('shapes')
-    setActiveShape(state.shapeType)
-    shapesPopup.classList.remove('show')
-  })
-})
-
-function setActiveShape(shapeType) {
-  document.querySelectorAll('.shape-option[data-shape]').forEach(btn => {
-    btn.classList.remove('active')
-    if (btn.dataset.shape === shapeType) {
-      btn.classList.add('active')
-    }
-  })
-}
-
-function setShape(shape) {
-  state.shapeType = shape
-  setTool('shapes')
-  setActiveShape(shape)
-  const shapesPopup = document.getElementById('shapes-popup')
-  if (shapesPopup) {
-    shapesPopup.classList.remove('show')
-  }
-}
-
-function updateSelectedShapeFill(fillState) {
-  if (state.selectedElements.length === 0) return
-  
-  const fillableShapes = ['rectangle', 'circle']
-  let hasChanges = false
-  
-  for (const elementId of state.selectedElements) {
-    const element = state.elements.find(e => e.id === elementId)
-    if (element && element.type === 'shape' && fillableShapes.includes(element.shapeType)) {
-      element.filled = fillState
-      hasChanges = true
-    }
-  }
-  
-  if (hasChanges) {
-    redrawCanvas()
-    saveState()
-  }
-}
-
-function updateShapeFillToggleState() {
-  const shapeFillToggle = document.getElementById('shape-fill-toggle')
-  if (!shapeFillToggle) return
-  
-  if (state.tool === 'select' && state.selectedElements.length > 0) {
-    const fillableShapes = ['rectangle', 'circle']
-    const selectedShapes = state.selectedElements
-      .map(id => state.elements.find(e => e.id === id))
-      .filter(e => e && e.type === 'shape' && fillableShapes.includes(e.shapeType))
-    
-    if (selectedShapes.length > 0) {
-      const allFilled = selectedShapes.every(s => s.filled === true)
-      const allUnfilled = selectedShapes.every(s => s.filled === false)
-      
-      if (allFilled) {
-        shapeFillToggle.classList.add('active')
-      } else if (allUnfilled) {
-        shapeFillToggle.classList.remove('active')
-      } else {
-      }
-      return
-    }
-  }
-  
-  shapeFillToggle.classList.toggle('active', state.shapeFillEnabled)
-}
-
-const shapeFillToggle = document.getElementById('shape-fill-toggle')
-if (shapeFillToggle) {
-  const savedFillState = localStorage.getItem('shape-fill-enabled')
-  if (savedFillState !== null) {
-    state.shapeFillEnabled = savedFillState === 'true'
-    shapeFillToggle.classList.toggle('active', state.shapeFillEnabled)
-  }
-  
-  shapeFillToggle.addEventListener('click', (e) => {
-    e.stopPropagation()
-    
-    if (state.tool === 'select' && state.selectedElements.length > 0) {
-      const fillableShapes = ['rectangle', 'circle']
-      const selectedShapes = state.selectedElements
-        .map(id => state.elements.find(e => e.id === id))
-        .filter(e => e && e.type === 'shape' && fillableShapes.includes(e.shapeType))
-      
-      if (selectedShapes.length > 0) {
-        const currentFillState = selectedShapes[0].filled
-        updateSelectedShapeFill(!currentFillState)
-        updateShapeFillToggleState()
-        return
-      }
-    }
-    
-    state.shapeFillEnabled = !state.shapeFillEnabled
-    shapeFillToggle.classList.toggle('active', state.shapeFillEnabled)
-    localStorage.setItem('shape-fill-enabled', state.shapeFillEnabled.toString())
-  })
-}
-
-document.addEventListener('click', (e) => {
-  const shapesWrapper = document.querySelector('.shapes-wrapper')
-  if (shapesWrapper && !shapesWrapper.contains(e.target)) {
-    if (shapesPopup) {
-      shapesPopup.classList.remove('show')
-    }
-  }
-  
-  const strokeThicknessWrapper = document.querySelector('.stroke-thickness-wrapper')
-  if (strokeThicknessWrapper && !strokeThicknessWrapper.contains(e.target)) {
-    const strokePopup = document.getElementById('stroke-popup')
-    if (strokePopup) {
-      strokePopup.classList.remove('show')
-    }
-  }
-  
-  const drawingToolsWrapper = document.querySelector('.drawing-tools-wrapper')
-  if (drawingToolsWrapper?.contains(e.target) === false) {
-    if (drawingToolsPopup) {
-      drawingToolsPopup.classList.remove('show')
-    }
-  }
-  
-  const customColorWrapper = document.querySelector('.custom-color-wrapper')
-  if (customColorWrapper && !customColorWrapper.contains(e.target)) {
-    const customColorPopup = document.getElementById('custom-color-popup')
-    if (customColorPopup) {
-      customColorPopup.classList.remove('show')
-    }
-  }
-})
-
-function closeAllPopups() {
-  const popups = [
-    document.getElementById('stroke-popup'),
-    document.getElementById('drawing-tools-popup'),
-    document.getElementById('shapes-popup'),
-    document.getElementById('custom-color-popup'),
-    document.getElementById('more-menu-dropdown'),
-    document.getElementById('sticky-note-input-container'),
-    document.getElementById('timer-settings-popup'),
-    document.getElementById('clock-settings-popup')
-  ]
-  popups.forEach(popup => {
-    if (popup) {
-      popup.classList.remove('show')
-    }
-  })
-}
-
-function setStrokeSize(size) {
-  state.strokeSize = size
-  
-  if (state.selectedElements.length > 0) {
-    selectTool.updateSelectedStrokeSize(size)
-  }
-  
-  document.querySelectorAll('.stroke-option').forEach(btn => {
-    btn.classList.remove('active')
-  })
-  document.querySelector(`.stroke-option[data-size="${size}"]`)?.classList.add('active')
-  
-  const popup = document.getElementById('stroke-popup')
-  popup.classList.remove('show')
-}
-
-const strokeThicknessBtn = document.getElementById('stroke-thickness-btn')
-const strokePopup = document.getElementById('stroke-popup')
-
-strokeThicknessBtn.addEventListener('click', (e) => {
-  e.stopPropagation()
-  hideAllTooltips()
-  const wasOpen = strokePopup.classList.contains('show')
-  closeAllPopups()
-  if (!wasOpen) {
-    strokePopup.classList.add('show')
-  }
-})
-
-document.querySelectorAll('.stroke-option').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    setStrokeSize(parseInt(btn.dataset.size))
-  })
-})
-
-setStrokeSize(2)
-
-function clearCanvas() {
-  closeAllPopups()
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  state.elements = []
-  state.selectedElements = []
-  state.nextElementId = 1
-  state.history = []
-  state.historyIndex = -1
-  state.hasDrawn = false
-  saveState(updateUndoRedoButtons)
-  updateUndoRedoButtons()
-  redrawCanvas()
-  
-  setTimeout(() => {
-    playSound('trash')
-  }, 10)
-}
+// Initial history set is now handled in HistoryManager.init
+// saveState(HistoryManager.updateUndoRedoButtons)
 
 document.getElementById('clear-btn').addEventListener('click', (e) => {
   e.stopPropagation()
-  clearCanvas()
+  HistoryManager.clearCanvas(() => ToolbarController.closeAllPopups())
 })
 
-document.getElementById('undo-btn').addEventListener('click', handleUndo)
-document.getElementById('redo-btn').addEventListener('click', handleRedo)
+document.getElementById('undo-btn').addEventListener('click', () => HistoryManager.handleUndo())
+document.getElementById('redo-btn').addEventListener('click', () => HistoryManager.handleRedo())
 
-updateUndoRedoButtons()
+HistoryManager.updateUndoRedoButtons()
 
 const mainToolbar = document.getElementById('main-toolbar')
 let toolbarPositionManager
 
 if (mainToolbar) {
-  const savedLayout = localStorage.getItem('toolbar-layout') || 'vertical'
+  const storagePrefix = isWhiteboard ? 'wb-toolbar' : 'toolbar'
+  const savedLayout = localStorage.getItem(`${storagePrefix}-layout`) || 'vertical'
   const savedVerticalPosition = localStorage.getItem('toolbar-position-vertical') || 'left'
   const savedHorizontalPosition = localStorage.getItem('toolbar-position-horizontal') || 'bottom'
   
@@ -900,11 +198,6 @@ ipcRenderer.on('horizontal-position-changed', (event, position) => {
   }
 })
 
-ipcRenderer.on('element-eraser-changed', (event, enabled) => {
-  state.elementEraserEnabled = enabled
-  localStorage.setItem('element-eraser-enabled', enabled)
-})
-
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   initSettings()
 } else {
@@ -922,58 +215,6 @@ function initSettings() {
     playSound('pop')
   }, true)
 }
-
-function updateSettingsBadge(show) {
-  const settingsBadge = document.getElementById('settings-badge')
-  const moreSettingsBadge = document.getElementById('more-settings-badge')
-  
-  if (settingsBadge) {
-    settingsBadge.style.display = show ? 'flex' : 'none'
-  }
-  if (moreSettingsBadge) {
-    moreSettingsBadge.style.display = show ? 'flex' : 'none'
-  }
-}
-
-ipcRenderer.on('update-settings-badge', (event, show) => {
-  updateSettingsBadge(show)
-})
-
-function checkSettingsBadge() {
-  const autoSaveEnabled = localStorage.getItem('auto-save-snapshots') === 'true'
-  const saveDirectory = localStorage.getItem('save-directory-path')
-  
-  if (autoSaveEnabled && saveDirectory) {
-    ipcRenderer.invoke('check-directory-exists', saveDirectory).then(exists => {
-      updateSettingsBadge(!exists)
-    }).catch(err => {
-      ipcRenderer.invoke('show-error-dialog', 'Directory Error', 'Failed to check if save directory exists', err.message)
-    })
-  } else {
-    updateSettingsBadge(false)
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(checkSettingsBadge, 500)
-  })
-} else {
-  setTimeout(checkSettingsBadge, 500)
-}
-
-setInterval(() => {
-  const autoSaveEnabled = localStorage.getItem('auto-save-snapshots') === 'true'
-  const saveDirectory = localStorage.getItem('save-directory-path')
-  
-  if (autoSaveEnabled && saveDirectory) {
-    ipcRenderer.invoke('check-directory-exists', saveDirectory).then(exists => {
-      updateSettingsBadge(!exists)
-    }).catch(err => {
-      ipcRenderer.invoke('show-error-dialog', 'Directory Error', 'Failed to check if save directory exists', err.message)
-    })
-  }
-}, 5000)
 
 window.updateReduceClutter = updateReduceClutter
 function updateReduceClutter() {
@@ -1012,903 +253,7 @@ function updateReduceClutter() {
 
 updateReduceClutter()
 
-function initMoreMenu() {
-  const moreMenuBtn = document.getElementById('more-menu-btn')
-  const moreMenuDropdown = document.getElementById('more-menu-dropdown')
-  const moreUndoBtn = document.getElementById('more-undo-btn')
-  const moreRedoBtn = document.getElementById('more-redo-btn')
-  const moreHideBtn = document.getElementById('more-hide-btn')
-  const moreMenuSettingsBtn = document.getElementById('more-menu-settings-btn')
-  
-  if (!moreMenuBtn || !moreMenuDropdown) return
-  
-  moreMenuBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    hideAllTooltips()
-    const isVisible = moreMenuDropdown.classList.contains('show')
-    if (isVisible) {
-      moreMenuDropdown.classList.remove('show')
-    } else {
-      closeAllPopups()
-      moreMenuDropdown.classList.add('show')
-    }
-  })
-  
-  document.addEventListener('click', (e) => {
-    if (!moreMenuDropdown.contains(e.target) && e.target !== moreMenuBtn && !moreMenuBtn.contains(e.target)) {
-      moreMenuDropdown.classList.remove('show')
-    }
-  })
-  
-  if (moreUndoBtn) {
-    moreUndoBtn.addEventListener('click', () => {
-      if (moreUndoBtn.classList.contains('disabled')) return
-      handleUndo()
-      moreMenuDropdown.classList.remove('show')
-    })
-  }
-  
-  if (moreRedoBtn) {
-    moreRedoBtn.addEventListener('click', () => {
-      if (moreRedoBtn.classList.contains('disabled')) return
-      handleRedo()
-      moreMenuDropdown.classList.remove('show')
-    })
-  }
-  
-  if (moreHideBtn) {
-    moreHideBtn.addEventListener('click', () => {
-      document.getElementById('hide-btn').click()
-      moreMenuDropdown.classList.remove('show')
-    })
-  }
-  
-  if (moreMenuSettingsBtn) {
-    moreMenuSettingsBtn.addEventListener('click', () => {
-      document.getElementById('menu-btn').click()
-      moreMenuDropdown.classList.remove('show')
-    })
-  }
-
-  const moreStickyNoteBtn = document.getElementById('more-sticky-note-btn')
-  if (moreStickyNoteBtn) {
-    moreStickyNoteBtn.addEventListener('click', () => {
-      if (moreStickyNoteBtn.classList.contains('disabled')) return
-      setTool('sticky-note')
-      moreMenuDropdown.classList.remove('show')
-    })
-  }
-  
-  function updateMoreMenuButtons() {
-    const canUndo = state.historyIndex > 0 && state.history.length > 0
-    const canRedo = state.historyIndex < state.history.length - 1
-    
-    if (moreUndoBtn) {
-      if (canUndo) {
-        moreUndoBtn.classList.remove('disabled')
-      } else {
-        moreUndoBtn.classList.add('disabled')
-      }
-    }
-    
-    if (moreRedoBtn) {
-      if (canRedo) {
-        moreRedoBtn.classList.remove('disabled')
-      } else {
-        moreRedoBtn.classList.add('disabled')
-      }
-    }
-  }
-  
-  updateMoreMenuButtons()
-}
-
-function initFeaturesShelf() {
-  const openFeaturesBtn = document.getElementById('open-features-btn')
-  const featuresShelfOverlay = document.getElementById('features-shelf-overlay')
-  const closeFeaturesShelf = document.getElementById('close-features-shelf')
-  const featuresShelfDone = document.getElementById('features-shelf-done')
-  const featureWhiteboard = document.getElementById('feature-whiteboard')
-  const moreMenuDropdown = document.getElementById('more-menu-dropdown')
-
-  if (!openFeaturesBtn || !featuresShelfOverlay) return
-
-  const toggleShelf = (show) => {
-    if (show) {
-      featuresShelfOverlay.style.display = 'flex'
-      setTimeout(() => featuresShelfOverlay.classList.add('show'), 10)
-      playSound('pop')
-    } else {
-      featuresShelfOverlay.classList.remove('show')
-      setTimeout(() => featuresShelfOverlay.style.display = 'none', 400)
-    }
-  }
-
-  openFeaturesBtn.addEventListener('click', () => {
-    if (moreMenuDropdown) moreMenuDropdown.classList.remove('show')
-    toggleShelf(true)
-  })
-
-  closeFeaturesShelf?.addEventListener('click', () => toggleShelf(false))
-  featuresShelfDone?.addEventListener('click', () => toggleShelf(false))
-
-  featuresShelfOverlay.addEventListener('click', (e) => {
-    if (e.target === featuresShelfOverlay) toggleShelf(false)
-  })
-
-  featureWhiteboard?.addEventListener('click', () => {
-    ipcRenderer.send('open-whiteboard')
-    toggleShelf(false)
-  })
-
-
-
-  document.getElementById('feature-timer')?.addEventListener('click', () => {
-    state.timerEnabled = !state.timerEnabled
-    const card = document.querySelector('#feature-timer')
-    card?.classList.toggle('active', state.timerEnabled)
-    const timerWidget = document.getElementById('timer-widget')
-    if (timerWidget) {
-      timerWidget.style.display = state.timerEnabled ? 'flex' : 'none'
-    }
-    toggleShelf(false)
-    playSound('pop')
-  })
-
-  document.getElementById('feature-clock')?.addEventListener('click', () => {
-    state.clockEnabled = !state.clockEnabled
-    const card = document.querySelector('#feature-clock')
-    card?.classList.toggle('active', state.clockEnabled)
-    const clockWidget = document.getElementById('clock-widget')
-    if (clockWidget) {
-      clockWidget.style.display = state.clockEnabled ? 'block' : 'none'
-    }
-    toggleShelf(false)
-    playSound('pop')
-  })
-
-  const Dropdown = require('../modules/components/Dropdown.js')
-  
-  let clockStyle = localStorage.getItem('clock-style') || 'digital'
-  let clockTimezone = localStorage.getItem('clock-timezone') || 'local'
-  
-  const clockSettingsBtn = document.getElementById('clock-settings-btn')
-  const clockCloseBtn = document.getElementById('clock-close-btn')
-  const clockSettingsPopup = document.getElementById('clock-settings-popup')
-  const clockDigitalDisplay = document.getElementById('clock-digital-display')
-  const clockAnalogDisplay = document.getElementById('clock-analog-display')
-  const clockStyleBtns = document.querySelectorAll('.clock-style-btn')
-  const clockTimezoneContainer = document.getElementById('clock-timezone-dropdown')
-
-  const generateTimezoneOptions = () => {
-    const common = [
-      { value: 'local', label: 'Local Time', icon: 'home' },
-      { value: 'UTC', label: 'UTC', icon: 'public' }
-    ];
-    
-    const allTimezones = Intl.supportedValuesOf('timeZone');
-    
-    const formattedTimezones = allTimezones.map(tz => {
-      const parts = tz.split('/');
-      const city = (parts[parts.length - 1] || tz).replace(/_/g, ' ');
-      
-      try {
-        const formatter = new Intl.DateTimeFormat('en-US', {
-          timeZone: tz,
-          timeZoneName: 'short'
-        });
-        const tzName = formatter.formatToParts(new Date()).find(p => p.type === 'timeZoneName').value;
-        return { value: tz, label: `${city} (${tzName})` };
-      } catch (e) {
-        return { value: tz, label: city };
-      }
-    });
-
-    formattedTimezones.sort((a, b) => a.label.localeCompare(b.label));
-    
-    return [...common, ...formattedTimezones];
-  };
-
-  const timezoneOptions = generateTimezoneOptions();
-
-  let clockTimezoneDropdown = null
-  if (clockTimezoneContainer) {
-    clockTimezoneDropdown = new Dropdown({
-      id: 'clock-tz-dropdown',
-      options: timezoneOptions,
-      defaultValue: clockTimezone,
-      icon: 'schedule',
-      searchable: true,
-      searchPlaceholder: 'Search timezones...',
-      onChange: (value) => {
-        clockTimezone = value
-        localStorage.setItem('clock-timezone', value)
-        updateClockWidget()
-        playSound('switch')
-      }
-    })
-    clockTimezoneDropdown.render(clockTimezoneContainer)
-  }
-
-  function applyClockStyle(style) {
-    clockStyle = style
-    localStorage.setItem('clock-style', style)
-    
-    if (style === 'digital') {
-      clockDigitalDisplay.style.display = 'flex'
-      clockAnalogDisplay.style.display = 'none'
-    } else {
-      clockDigitalDisplay.style.display = 'none'
-      clockAnalogDisplay.style.display = 'flex'
-    }
-    
-    clockStyleBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.style === style)
-    })
-  }
-
-  clockStyleBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      applyClockStyle(btn.dataset.style)
-      playSound('switch')
-    })
-  })
-
-  if (clockSettingsBtn) {
-    clockSettingsBtn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      
-      if (!clockSettingsPopup?.classList.contains('show')) {
-        const widget = document.getElementById('clock-widget')
-        if (widget) {
-          const rect = widget.getBoundingClientRect()
-          const popupHeight = 60
-          const dropdownHeight = 220
-          const totalHeight = popupHeight + dropdownHeight
-          
-          const spaceBelow = window.innerHeight - rect.bottom
-          const spaceAbove = rect.top
-          
-          if (spaceBelow < totalHeight && spaceAbove > spaceBelow) {
-            clockSettingsPopup.classList.add('flip')
-            const dropdown = clockSettingsPopup.querySelector('.app-dropdown')
-            if (dropdown) dropdown.classList.add('flip')
-          } else {
-            clockSettingsPopup.classList.remove('flip')
-            const dropdown = clockSettingsPopup.querySelector('.app-dropdown')
-            if (dropdown) dropdown.classList.remove('flip')
-          }
-        }
-      }
-      
-      clockSettingsPopup?.classList.toggle('show')
-    })
-  }
-
-  if (clockCloseBtn) {
-    clockCloseBtn.addEventListener('click', () => {
-      state.clockEnabled = false
-      const clockWidget = document.getElementById('clock-widget')
-      if (clockWidget) clockWidget.style.display = 'none'
-      const card = document.querySelector('#feature-clock')
-      card?.classList.remove('active')
-      playSound('pop')
-    })
-  }
-
-  document.addEventListener('click', (e) => {
-    if (clockSettingsPopup?.classList.contains('show')) {
-      if (!clockSettingsPopup.contains(e.target) && e.target !== clockSettingsBtn) {
-        clockSettingsPopup.classList.remove('show')
-      }
-    }
-  })
-
-  applyClockStyle(clockStyle)
-
-  function updateClockWidget() {
-    let now = new Date()
-    
-    if (clockTimezone !== 'local') {
-      try {
-        const options = { timeZone: clockTimezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }
-        const formatter = new Intl.DateTimeFormat('en-GB', options)
-        const parts = formatter.formatToParts(now)
-        const hours = parseInt(parts.find(p => p.type === 'hour').value)
-        const minutes = parseInt(parts.find(p => p.type === 'minute').value)
-        const seconds = parseInt(parts.find(p => p.type === 'second').value)
-        
-        const dayFormatter = new Intl.DateTimeFormat('en-US', { timeZone: clockTimezone, weekday: 'short' })
-        const dayOfWeek = dayFormatter.format(now).toUpperCase()
-        
-        const hoursEl = document.getElementById('clock-hours')
-        const minutesEl = document.getElementById('clock-minutes')
-        if (hoursEl) hoursEl.textContent = hours.toString().padStart(2, '0')
-        if (minutesEl) minutesEl.textContent = minutes.toString().padStart(2, '0')
-        
-        updateAnalogHands(hours, minutes, seconds)
-        updateAnalogInfo(hours, minutes, dayOfWeek)
-      } catch (e) {
-        updateClockLocal(now)
-      }
-    } else {
-      updateClockLocal(now)
-    }
-  }
-
-  function updateClockLocal(now) {
-    const hours = now.getHours()
-    const minutes = now.getMinutes()
-    const seconds = now.getSeconds()
-    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-    const dayOfWeek = days[now.getDay()]
-    
-    const hoursEl = document.getElementById('clock-hours')
-    const minutesEl = document.getElementById('clock-minutes')
-    if (hoursEl) hoursEl.textContent = hours.toString().padStart(2, '0')
-    if (minutesEl) minutesEl.textContent = minutes.toString().padStart(2, '0')
-    
-    updateAnalogHands(hours, minutes, seconds)
-    updateAnalogInfo(hours, minutes, dayOfWeek)
-  }
-
-  function updateAnalogInfo(hours, minutes, dayOfWeek) {
-    const dayEl = document.getElementById('analog-clock-day')
-    const timeEl = document.getElementById('analog-clock-time')
-    const periodEl = document.getElementById('analog-clock-period')
-    
-    if (dayEl) dayEl.textContent = dayOfWeek
-    if (timeEl) {
-      const hour12 = hours % 12 || 12
-      timeEl.textContent = `${hour12}:${minutes.toString().padStart(2, '0')}`
-    }
-    if (periodEl) periodEl.textContent = hours >= 12 ? 'PM' : 'AM'
-  }
-
-  function updateAnalogHands(hours, minutes, seconds) {
-    const hourHand = document.getElementById('analog-hour-hand')
-    const minuteHand = document.getElementById('analog-minute-hand')
-    const secondHand = document.getElementById('analog-second-hand')
-    
-    if (hourHand && minuteHand && secondHand) {
-      const hourDeg = (hours % 12) * 30 + minutes * 0.5
-      const minuteDeg = minutes * 6 + seconds * 0.1
-      const secondDeg = seconds * 6
-      
-      hourHand.style.transform = `rotate(${hourDeg}deg)`
-      minuteHand.style.transform = `rotate(${minuteDeg}deg)`
-      secondHand.style.transform = `rotate(${secondDeg}deg)`
-    }
-  }
-
-  setInterval(updateClockWidget, 1000)
-  updateClockWidget()
-
-  let timerHours = 0
-  let timerMinutes = 5
-  let timerSecondsVal = 0
-  let timerInterval = null
-  let timerRunning = false
-  let timerStartTotal = 0
-  let timerEndAction = localStorage.getItem('timer-end-action') || 'overlay'
-
-  const TIMER_CIRCUMFERENCE = 2 * Math.PI * 150
-
-  function updateTimerProgress() {
-    const progressBar = document.getElementById('timer-progress-bar')
-    if (!progressBar) return
-    
-    const currentTotal = timerHours * 3600 + timerMinutes * 60 + timerSecondsVal
-    
-    if (timerStartTotal > 0) {
-      const progress = currentTotal / timerStartTotal
-      const offset = TIMER_CIRCUMFERENCE * (1 - progress)
-      progressBar.style.strokeDashoffset = offset
-    } else {
-      progressBar.style.strokeDashoffset = 0
-    }
-  }
-
-  function updateTimerDisplay() {
-    const hoursEl = document.getElementById('timer-hours')
-    const minutesEl = document.getElementById('timer-minutes')
-    const secondsEl = document.getElementById('timer-seconds')
-    if (hoursEl) hoursEl.value = timerHours.toString().padStart(2, '0')
-    if (minutesEl) minutesEl.value = timerMinutes.toString().padStart(2, '0')
-    if (secondsEl) secondsEl.value = timerSecondsVal.toString().padStart(2, '0')
-    
-    const btns = document.querySelectorAll('.timer-adjust-btn')
-    btns.forEach(btn => {
-      const action = btn.dataset.action
-      let disabled = timerRunning
-      
-      if (!disabled) {
-        if (action === 'hours-up' && timerHours >= 23) disabled = true
-        if (action === 'hours-down' && timerHours <= 0) disabled = true
-        if (action === 'minutes-up' && timerMinutes >= 59) disabled = true
-        if (action === 'minutes-down' && timerMinutes <= 0) disabled = true
-        if (action === 'seconds-up' && timerSecondsVal >= 59) disabled = true
-        if (action === 'seconds-down' && timerSecondsVal <= 0) disabled = true
-      }
-      
-      btn.classList.toggle('disabled', disabled)
-      btn.disabled = disabled
-    })
-
-    updateTimerProgress()
-  }
-
-  function setupTimerInput(inputEl, getter, setter, max) {
-    if (!inputEl) return
-    
-    inputEl.addEventListener('focus', () => {
-      if (timerRunning) return
-      inputEl.select()
-    })
-    
-    inputEl.addEventListener('blur', () => {
-      if (timerRunning) return
-      let val = parseInt(inputEl.value, 10)
-      if (isNaN(val) || val < 0) val = 0
-      if (val > max) val = max
-      setter(val)
-      timerStartTotal = 0
-      updateTimerDisplay()
-    })
-    
-    inputEl.addEventListener('keydown', (e) => {
-      if (timerRunning) return
-      if (e.key === 'Enter' || e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        inputEl.blur()
-        return
-      }
-      if (!/^\d$/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-        e.preventDefault()
-      }
-    })
-  }
-  
-  setupTimerInput(document.getElementById('timer-hours'), 
-    () => timerHours, 
-    (v) => { timerHours = v }, 
-    23
-  )
-  setupTimerInput(document.getElementById('timer-minutes'), 
-    () => timerMinutes, 
-    (v) => { timerMinutes = v }, 
-    59
-  )
-  setupTimerInput(document.getElementById('timer-seconds'), 
-    () => timerSecondsVal, 
-    (v) => { timerSecondsVal = v }, 
-    59
-  )
-
-  let holdInterval = null
-  let holdTimeout = null
-  
-  function performAction(action) {
-    if (action === 'hours-up') timerHours = Math.min(23, timerHours + 1)
-    if (action === 'hours-down') timerHours = Math.max(0, timerHours - 1)
-    if (action === 'minutes-up') timerMinutes = Math.min(59, timerMinutes + 1)
-    if (action === 'minutes-down') timerMinutes = Math.max(0, timerMinutes - 1)
-    if (action === 'seconds-up') timerSecondsVal = Math.min(59, timerSecondsVal + 1)
-    if (action === 'seconds-down') timerSecondsVal = Math.max(0, timerSecondsVal - 1)
-    timerStartTotal = 0
-    updateTimerDisplay()
-  }
-  
-  function stopHold() {
-    if (holdTimeout) {
-      clearTimeout(holdTimeout)
-      holdTimeout = null
-    }
-    if (holdInterval) {
-      clearInterval(holdInterval)
-      holdInterval = null
-    }
-  }
-
-  document.querySelectorAll('.timer-adjust-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      if (timerRunning) return
-      performAction(btn.dataset.action)
-    })
-    
-    btn.addEventListener('mousedown', (e) => {
-      if (timerRunning) return
-      const action = btn.dataset.action
-      
-      holdTimeout = setTimeout(() => {
-        holdInterval = setInterval(() => {
-          performAction(action)
-        }, 80)
-      }, 400)
-    })
-    
-    btn.addEventListener('mouseup', stopHold)
-    btn.addEventListener('mouseleave', stopHold)
-  })
-
-  document.getElementById('timer-play')?.addEventListener('click', () => {
-    const timerWidget = document.getElementById('timer-widget')
-    
-    if (timerRunning) {
-      clearInterval(timerInterval)
-      timerInterval = null
-      timerRunning = false
-      timerWidget?.classList.remove('running')
-      document.querySelector('#timer-play .material-symbols-outlined').textContent = 'play_arrow'
-      updateTimerDisplay() 
-    } else {
-      const currentTotal = timerHours * 3600 + timerMinutes * 60 + timerSecondsVal
-      if (currentTotal === 0) return
-      
-      if (timerStartTotal === 0) {
-        timerStartTotal = currentTotal
-      }
-      
-      timerRunning = true
-      timerWidget?.classList.add('running')
-      document.querySelector('#timer-play .material-symbols-outlined').textContent = 'pause'
-      updateTimerDisplay()
-      timerInterval = setInterval(() => {
-        const totalSeconds = timerHours * 3600 + timerMinutes * 60 + timerSecondsVal
-        if (totalSeconds > 0) {
-          const newTotal = totalSeconds - 1
-          timerHours = Math.floor(newTotal / 3600)
-          timerMinutes = Math.floor((newTotal % 3600) / 60)
-          timerSecondsVal = newTotal % 60
-          updateTimerDisplay()
-        } else {
-          clearInterval(timerInterval)
-          timerInterval = null
-          timerRunning = false
-          timerStartTotal = 0
-          timerWidget?.classList.remove('running')
-          document.querySelector('#timer-play .material-symbols-outlined').textContent = 'play_arrow'
-          playSound('timerAlarm')
-          updateTimerDisplay()
-          if (timerEndAction === 'overlay') {
-            showTimesUpOverlay()
-          }
-        }
-      }, 1000)
-    }
-  })
-
-  let confettiAnimationId = null
-  
-  function showTimesUpOverlay() {
-    const overlay = document.getElementById('times-up-overlay')
-    const canvas = document.getElementById('confetti-canvas')
-    if (!overlay || !canvas) return
-    
-    overlay.style.display = 'flex'
-    
-    const ctx = canvas.getContext('2d')
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
-    
-    const confettiColors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff', '#5f27cd', '#00d2d3', '#ff9f43']
-    const confettiPieces = []
-    
-    for (let i = 0; i < 150; i++) {
-      confettiPieces.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height - canvas.height,
-        size: Math.random() * 10 + 5,
-        color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
-        speedY: Math.random() * 3 + 2,
-        speedX: Math.random() * 2 - 1,
-        rotation: Math.random() * 360,
-        rotationSpeed: Math.random() * 10 - 5
-      })
-    }
-    
-    function animateConfetti() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      
-      confettiPieces.forEach(piece => {
-        ctx.save()
-        ctx.translate(piece.x, piece.y)
-        ctx.rotate(piece.rotation * Math.PI / 180)
-        ctx.fillStyle = piece.color
-        ctx.fillRect(-piece.size / 2, -piece.size / 2, piece.size, piece.size * 0.6)
-        ctx.restore()
-        
-        piece.y += piece.speedY
-        piece.x += piece.speedX
-        piece.rotation += piece.rotationSpeed
-        
-        if (piece.y > canvas.height + 20) {
-          piece.y = -20
-          piece.x = Math.random() * canvas.width
-        }
-      })
-      
-      confettiAnimationId = requestAnimationFrame(animateConfetti)
-    }
-    
-    animateConfetti()
-  }
-  
-  function hideTimesUpOverlay() {
-    const overlay = document.getElementById('times-up-overlay')
-    if (overlay) {
-      overlay.style.display = 'none'
-    }
-    if (confettiAnimationId) {
-      cancelAnimationFrame(confettiAnimationId)
-      confettiAnimationId = null
-    }
-  }
-  
-  document.getElementById('times-up-dismiss')?.addEventListener('click', hideTimesUpOverlay)
-
-  document.getElementById('timer-reset')?.addEventListener('click', () => {
-    if (timerInterval) {
-      clearInterval(timerInterval)
-      timerInterval = null
-    }
-    timerRunning = false
-    timerHours = 0
-    timerMinutes = 5
-    timerSecondsVal = 0
-    timerStartTotal = 0
-    const timerWidget = document.getElementById('timer-widget')
-    timerWidget?.classList.remove('running')
-    document.querySelector('#timer-play .material-symbols-outlined').textContent = 'play_arrow'
-    updateTimerDisplay()
-  })
-
-  document.getElementById('timer-close')?.addEventListener('click', () => {
-    state.timerEnabled = false
-    const timerWidget = document.getElementById('timer-widget')
-    if (timerWidget) {
-      timerWidget.style.display = 'none'
-    }
-    const card = document.querySelector('#feature-timer')
-    card?.classList.remove('active')
-    if (timerInterval) {
-      clearInterval(timerInterval)
-      timerInterval = null
-      timerRunning = false
-    }
-  })
-
-  function makeDraggable(element) {
-    if (!element) return
-    let isDragging = false
-    let offsetX = 0
-    let offsetY = 0
-    let hasBeenDragged = false
-
-    element.addEventListener('mousedown', (e) => {
-      if (e.target.closest('button') || e.target.closest('input')) return
-      
-      const rect = element.getBoundingClientRect()
-      
-      if (!hasBeenDragged) {
-        element.style.transform = 'none'
-        element.style.left = `${rect.left}px`
-        element.style.top = `${rect.top}px`
-        hasBeenDragged = true
-      }
-      
-      isDragging = true
-      offsetX = e.clientX - rect.left
-      offsetY = e.clientY - rect.top
-      element.style.cursor = 'grabbing'
-      e.preventDefault()
-    })
-
-    document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return
-      
-      const rect = element.getBoundingClientRect()
-      const width = rect.width
-      const height = rect.height
-      
-      let newX = e.clientX - offsetX
-      let newY = e.clientY - offsetY
-      
-      const minVisible = 50
-      newX = Math.max(-width + minVisible, Math.min(window.innerWidth - minVisible, newX))
-      newY = Math.max(0, Math.min(window.innerHeight - minVisible, newY))
-      
-      element.style.left = `${newX}px`
-      element.style.top = `${newY}px`
-    })
-
-    document.addEventListener('mouseup', () => {
-      if (isDragging) {
-        isDragging = false
-        element.style.cursor = 'move'
-      }
-    })
-  }
-
-  makeDraggable(document.getElementById('timer-widget'))
-  makeDraggable(document.getElementById('clock-widget'))
-
-  const timerSettingsBtn = document.getElementById('timer-settings-btn')
-  const timerSettingsPopup = document.getElementById('timer-settings-popup')
-  const timerEndActionBtns = document.querySelectorAll('.timer-end-action-btn')
-
-  if (timerSettingsBtn && timerSettingsPopup) {
-    timerSettingsBtn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      timerSettingsPopup.classList.toggle('show')
-    })
-
-    document.addEventListener('click', (e) => {
-      if (!timerSettingsPopup.contains(e.target) && e.target !== timerSettingsBtn) {
-        timerSettingsPopup.classList.remove('show')
-      }
-    })
-  }
-
-  function applyTimerEndAction(action) {
-    timerEndAction = action
-    localStorage.setItem('timer-end-action', action)
-    timerEndActionBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.action === action)
-    })
-  }
-
-  timerEndActionBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      applyTimerEndAction(btn.dataset.action)
-      playSound('switch')
-    })
-  })
-
-  applyTimerEndAction(timerEndAction)
-  updateTimerDisplay()
-
-}
-
-function syncSettingsFromMain() {
-  try {
-    const settings = ipcRenderer.sendSync('get-system-settings')
-    if (settings) {
-      if (settings.standbyInToolbar !== undefined) {
-        localStorage.setItem('standby-in-toolbar', settings.standbyInToolbar ? 'true' : 'false')
-      }
-      if (settings.stickyNoteInToolbar !== undefined) {
-        state.stickyNoteInToolbar = settings.stickyNoteInToolbar
-        localStorage.setItem('sticky-note-in-toolbar', state.stickyNoteInToolbar ? 'true' : 'false')
-      }
-    }
-  } catch (e) {
-  }
-  updateReduceClutter()
-  initMoreMenu()
-  initFeaturesShelf()
-}
-
-
-ipcRenderer.on('sticky-note-in-toolbar-changed', (event, enabled) => {
-  state.stickyNoteInToolbar = enabled
-  localStorage.setItem('sticky-note-in-toolbar', enabled ? 'true' : 'false')
-  updateReduceClutter()
-})
-
-
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  syncSettingsFromMain()
-} else {
-  document.addEventListener('DOMContentLoaded', () => {
-    syncSettingsFromMain()
-  })
-}
-
-ipcRenderer.on('reduce-clutter-changed', (event, enabled) => {
-  localStorage.setItem('reduce-clutter', enabled ? 'true' : 'false')
-  setTimeout(() => updateReduceClutter(), 0)
-})
-
-ipcRenderer.on('toolbar-dragging-changed', (event, enabled) => {
-  localStorage.setItem('toolbar-dragging-enabled', enabled ? 'true' : 'false')
-  updateToolbarMovingState()
-})
-
-ipcRenderer.on('standby-in-toolbar-changed', (event, enabled) => {
-  localStorage.setItem('standby-in-toolbar', enabled ? 'true' : 'false')
-  updateReduceClutter()
-  if (typeof standbyManager !== 'undefined') {
-    standbyManager.updateStandbyButtons(enabled)
-  }
-})
-
-ipcRenderer.on('sync-toolbar-settings', (event, settings) => {
-  if (settings.standbyInToolbar !== undefined) {
-    localStorage.setItem('standby-in-toolbar', settings.standbyInToolbar ? 'true' : 'false')
-  }
-  if (settings.reduceClutter !== undefined) {
-    localStorage.setItem('reduce-clutter', settings.reduceClutter ? 'true' : 'false')
-  }
-  updateReduceClutter()
-})
-
-ipcRenderer.on('hardware-acceleration-changed', (event, enabled) => {
-  localStorage.setItem('hardware-acceleration', enabled ? 'true' : 'false')
-  if (enabled) {
-    canvas.style.willChange = 'contents'
-    canvas.style.transform = 'translateZ(0)'
-    canvas.style.backfaceVisibility = 'hidden'
-    const pCanvas = CanvasManager.getPreviewCanvas()
-    if (pCanvas) {
-      pCanvas.style.willChange = 'contents'
-      pCanvas.style.transform = 'translateZ(0)'
-      pCanvas.style.backfaceVisibility = 'hidden'
-    }
-    const sCanvas = CanvasManager.getSelectionCanvas()
-    if (sCanvas) {
-      sCanvas.style.willChange = 'contents'
-      sCanvas.style.transform = 'translateZ(0)'
-      sCanvas.style.backfaceVisibility = 'hidden'
-    }
-  } else {
-    canvas.style.willChange = ''
-    canvas.style.transform = ''
-    canvas.style.backfaceVisibility = ''
-    const pCanvas = CanvasManager.getPreviewCanvas()
-    if (pCanvas) {
-      pCanvas.style.willChange = ''
-      pCanvas.style.transform = ''
-      pCanvas.style.backfaceVisibility = ''
-    }
-    const sCanvas = CanvasManager.getSelectionCanvas()
-    if (sCanvas) {
-      sCanvas.style.willChange = ''
-      sCanvas.style.transform = ''
-      sCanvas.style.backfaceVisibility = ''
-    }
-  }
-});
-
-
-
-ipcRenderer.on('sounds-changed', (event, enabled) => {
-  const soundsCheckbox = document.getElementById('sounds-enabled')
-  if (soundsCheckbox) {
-    soundsCheckbox.checked = enabled
-  }
-})
-
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  initSettings()
-} else {
-  document.addEventListener('DOMContentLoaded', initSettings)
-}
-
-function initSoundsSetting() {
-  const soundsCheckbox = document.getElementById('sounds-enabled')
-  if (soundsCheckbox) {
-    const soundsEnabled = localStorage.getItem('sounds-enabled')
-    if (soundsEnabled !== null) {
-      soundsCheckbox.checked = soundsEnabled === 'true'
-    }
-    
-    soundsCheckbox.addEventListener('change', (e) => {
-      localStorage.setItem('sounds-enabled', e.target.checked)
-    })
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initSoundsSetting)
-} else {
-  initSoundsSetting()
-}
-
 initThemeManager()
-
 initTooltips()
 
 let standbyManager
@@ -1916,8 +261,8 @@ if (!isWhiteboard) {
   standbyManager = initStandbyManager({
     state,
     canvas,
-    setTool,
-    closeAllPopups,
+    setTool: (t) => ToolbarController.setTool(t),
+    closeAllPopups: () => ToolbarController.closeAllPopups(),
     finishTextInput: () => textTool.finishTextInput(),
     playSound
   })
@@ -1935,13 +280,13 @@ if (!isWhiteboard) {
 }
 
 window.commandMenu = initCommandMenu({
-  setTool,
-  setShape,
-  undo: handleUndo,
-  redo: handleRedo,
-  clearCanvas,
+  setTool: (t) => ToolbarController.setTool(t),
+  setShape: (s) => ToolbarController.setShape(s),
+  undo: () => HistoryManager.handleUndo(),
+  redo: () => HistoryManager.handleRedo(),
+  clearCanvas: () => HistoryManager.clearCanvas(() => ToolbarController.closeAllPopups()),
   standbyManager,
-  triggerCapture,
+  triggerCapture: () => CaptureManager.triggerCapture(),
   playSound,
   applyTheme
 })
@@ -1952,21 +297,46 @@ initShortcutManager({
   state,
   standbyManager,
   selectTool,
-  setTool,
-  undo: handleUndo,
-  redo: handleRedo,
-  clearCanvas,
+  setTool: (t) => ToolbarController.setTool(t),
+  undo: () => HistoryManager.handleUndo(),
+  redo: () => HistoryManager.handleRedo(),
+  clearCanvas: () => HistoryManager.clearCanvas(() => ToolbarController.closeAllPopups()),
   copySelectedElements: handleCopy,
   pasteElements: handlePaste,
+  pasteImageFromClipboard: handlePasteImage,
   toggleCommandMenu: () => commandMenu.toggleCommandMenu(),
   closeCommandMenu: () => commandMenu.closeCommandMenu(),
   setColor,
-  setShape,
+  setShape: (s) => ToolbarController.setShape(s),
   playSound,
   hideAllTooltips,
-  closeAllPopups,
+  closeAllPopups: () => ToolbarController.closeAllPopups(),
   applyTheme
 })
+
+CaptureManager.init({
+  standbyManager,
+  playSound
+})
+
+SettingsSync.init({
+  updateReduceClutter,
+  initMoreMenu: () => MoreMenu.init({
+    handleUndo: () => HistoryManager.handleUndo(),
+    handleRedo: () => HistoryManager.handleRedo(),
+    hideAllTooltips,
+    closeAllPopups: () => ToolbarController.closeAllPopups(),
+    setTool: (t) => ToolbarController.setTool(t)
+  }),
+  initFeaturesShelf: () => FeaturesShelf.init({
+    playSound,
+    setTool: (t) => ToolbarController.setTool(t)
+  }),
+  updateToolbarMovingState,
+  standbyManager
+})
+
+SettingsSync.initSounds()
 
 let canvasVisible = true
 const hideBtn = document.getElementById('hide-btn')
@@ -1995,138 +365,10 @@ if (hideBtn) {
   })
 }
 
-let toolbarWasVisible = false
-let standbyWasActive = false
-let commandMenuWasVisible = false
-
-function restoreCaptureState() {
-  const toolbar = document.getElementById('main-toolbar')
-  if (toolbar && toolbarWasVisible) {
-    toolbar.style.display = ''
-  }
-
-  if (standbyWasActive) {
-    standbyManager.resume()
-  }
-
-  if (commandMenuWasVisible && window.commandMenu) {
-    window.commandMenu.toggleCommandMenu()
-    commandMenuWasVisible = false
-  }
-
-  state.enabled = true
-  canvas.style.pointerEvents = standbyWasActive ? 'none' : 'auto'
-  
-  toolbarWasVisible = false
-  standbyWasActive = false
-}
-
-async function triggerCapture() {
-  try {
-    const toolbar = document.getElementById('main-toolbar')
-    toolbarWasVisible = toolbar && toolbar.style.display !== 'none'
-    standbyWasActive = state.standbyMode
-    if (toolbar && toolbarWasVisible) {
-      toolbar.style.display = 'none'
-    }
-
-    const commandMenuOverlay = document.getElementById('command-menu-overlay')
-    commandMenuWasVisible = commandMenuOverlay && (commandMenuOverlay.style.display === 'flex' || commandMenuOverlay.classList.contains('show'))
-    
-    if (commandMenuWasVisible && window.commandMenu) {
-      window.commandMenu.closeCommandMenu()
-    }
-
-    state.enabled = false
-    canvas.style.pointerEvents = 'none'
-    
-    if (standbyWasActive) {
-      standbyManager.pause()
-    }
-
-    ipcRenderer.invoke('open-capture-overlay').catch(async (error) => {
-      await ipcRenderer.invoke('show-error-dialog', 'Capture Error', 'Failed to open capture overlay', error.message || 'Please try again.')
-      restoreCaptureState()
-    })
-  } catch (error) {
-    await ipcRenderer.invoke('show-error-dialog', 'Capture Error', 'Failed to open capture overlay', error.message || 'Please try again.')
-    restoreCaptureState()
-  }
-}
-
-document.getElementById('capture-btn').addEventListener('click', triggerCapture)
-
-ipcRenderer.on('trigger-capture', triggerCapture)
-
-ipcRenderer.on('capture-cancelled', restoreCaptureState)
-
-ipcRenderer.on('capture-selection-result', (event, desktopDataURL, bounds) => {
-  
-  if (!desktopDataURL || !bounds) {
-    alert('Failed to capture selection. Please try again.')
-    return
-  }
-
-  restoreCaptureState(false)
-
-  playSound('capture')
-
-  const desktopImg = new Image()
-  desktopImg.onload = async () => {
-    try {
-      const tempCanvas = document.createElement('canvas')
-      tempCanvas.width = bounds.width
-      tempCanvas.height = bounds.height
-      const tempCtx = tempCanvas.getContext('2d')
-
-      tempCtx.drawImage(desktopImg, 0, 0, bounds.width, bounds.height)
-
-      const canvasRect = canvas.getBoundingClientRect()
-      const scaleX = canvas.width / canvasRect.width
-      const scaleY = canvas.height / canvasRect.height
-
-      const canvasX = (bounds.x - canvasRect.left) * scaleX
-      const canvasY = (bounds.y - canvasRect.top) * scaleY
-      const canvasWidth = bounds.width * scaleX
-      const canvasHeight = bounds.height * scaleY
-
-      const sourceCanvas = document.createElement('canvas')
-      sourceCanvas.width = canvas.width
-      sourceCanvas.height = canvas.height
-      const sourceCtx = sourceCanvas.getContext('2d')
-      sourceCtx.drawImage(canvas, 0, 0)
-
-      const annotationImg = sourceCanvas.toDataURL()
-      const annotationImage = new Image()
-      annotationImage.onload = () => {
-        tempCtx.drawImage(annotationImage, canvasX, canvasY, canvasWidth, canvasHeight)
-
-        const dataURL = tempCanvas.toDataURL('image/png')
-        ipcRenderer.send('save-screenshot', dataURL, `annotation-${Date.now()}.png`)
-      }
-      annotationImage.onerror = () => {
-        restoreCaptureState()
-      }
-      annotationImage.src = annotationImg
-    } catch (error) {
-      await ipcRenderer.invoke('show-error-dialog', 'Processing Error', 'Error processing capture', error.message)
-      restoreCaptureState()
-    }
-  }
-  desktopImg.onerror = () => {
-    alert('Failed to load desktop screenshot. Please try again.')
-    restoreCaptureState()
-  }
-  desktopImg.src = desktopDataURL
-})
-
-ipcRenderer.on('screenshot-saved', () => {
-})
-
 ipcRenderer.on('close-toolbar-on-esc', () => {
-  const closeBtn = document.getElementById('close-btn')
-  if (closeBtn) {
-    closeBtn.click()
+  const closeBtnEl = document.getElementById('close-btn')
+  if (closeBtnEl) {
+    closeBtnEl.click()
   }
 })
 
@@ -2138,8 +380,8 @@ if (closeBtn) {
     
     standbyManager.disable(false)
     
-    const isWhiteboard = document.body.classList.contains('whiteboard-mode')
-    if (isWhiteboard) {
+    const isWB = document.body.classList.contains('whiteboard-mode')
+    if (isWB) {
       if (state.saveCurrentBoard) {
         await state.saveCurrentBoard()
       }
@@ -2150,7 +392,7 @@ if (closeBtn) {
   })
 }
 
-ipcRenderer.on('clear', clearCanvas)
+ipcRenderer.on('clear', () => HistoryManager.clearCanvas(() => ToolbarController.closeAllPopups()))
 ipcRenderer.on('draw-mode', (_, enabled) => {
   if (enabled) {
     initAudioContext()
@@ -2167,26 +409,22 @@ ipcRenderer.on('restore-annotations', (_, data) => {
     state.elements = data.elements.map(el => ({ ...el, _dirty: true }))
     state.nextElementId = data.nextElementId || (data.elements.length + 1)
     state.hasDrawn = data.elements.length > 0
-    state.history = []
-    state.historyIndex = -1
-    saveState()
-    redrawCanvas()
-    updateUndoRedoButtons()
+    
+    // Set restored elements as the base state (index 0)
+    const { cloneElements } = require('../modules/core/AppState.js')
+    state.history = [{
+      elements: cloneElements(state.elements),
+      nextElementId: state.nextElementId
+    }]
+    state.historyIndex = 0
+    state.initialStateSaved = true
+    
+    CanvasRenderer.redrawCanvas()
+    HistoryManager.updateUndoRedoButtons()
   }
 })
-window.addEventListener('storage', (e) => {
-  if (e.key === 'snap-to-objects-enabled') {
-    state.snapToObjectsEnabled = e.newValue === 'true'
-  }
-  if (e.key === 'reduce-clutter' || e.key === 'standby-in-toolbar') {
-    updateReduceClutter()
-  }
-  if (e.key === 'accent-color') {
-    applyAccentColor(e.newValue)
-  }
-  if (e.key === 'toolbar-accent-bg') {
-    updateToolbarBackgroundColor()
-  }
+
+ipcRenderer.on('screenshot-saved', () => {
 })
 
 const { initWhiteboardMode } = require('../modules/utils/features/whiteboardManager.js')
@@ -2195,7 +433,7 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initWhiteboardMode({
       state,
-      redrawCanvas,
+      redrawCanvas: () => CanvasRenderer.redrawCanvas(),
       initWindowControls,
       updateCursor,
       playSound
@@ -2204,7 +442,7 @@ if (document.readyState === 'loading') {
 } else {
   initWhiteboardMode({
     state,
-    redrawCanvas,
+    redrawCanvas: () => CanvasRenderer.redrawCanvas(),
     initWindowControls,
     updateCursor,
     playSound

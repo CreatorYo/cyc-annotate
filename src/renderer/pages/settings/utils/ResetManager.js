@@ -85,6 +85,16 @@ async function resetEverything() {
 
     localStorage.removeItem('toolbar-x')
     localStorage.removeItem('toolbar-y')
+    localStorage.removeItem('toolbar-vertical-x')
+    localStorage.removeItem('toolbar-vertical-y')
+    localStorage.removeItem('toolbar-horizontal-x')
+    localStorage.removeItem('toolbar-horizontal-y')
+    localStorage.removeItem('wb-toolbar-vertical-x')
+    localStorage.removeItem('wb-toolbar-vertical-y')
+    localStorage.removeItem('wb-toolbar-horizontal-x')
+    localStorage.removeItem('wb-toolbar-horizontal-y')
+    localStorage.removeItem('toolbar-layout')
+    localStorage.removeItem('wb-toolbar-layout')
 
     ipcRenderer.send('reset-everything')
     ipcRenderer.send('reset-all-dismissed-dialogs')

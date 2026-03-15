@@ -1,7 +1,7 @@
 const { ipcMain } = require('electron');
 
 function initSettingsIpc(context) {
-  const { getWin, getVisible, setVisible, getSettingsWin, getSetting, setSetting, createSettingsWindow } = context;
+  const { broadcast, getWin, getVisible, setVisible, getSettingsWin, setSetting, createSettingsWindow } = context;
 
   ipcMain.on('open-settings', () => {
     const win = getWin();
@@ -27,88 +27,58 @@ function initSettingsIpc(context) {
   });
 
   ipcMain.on('update-settings-badge', (event, show) => {
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('update-settings-badge', show);
-    }
+    broadcast('update-settings-badge', show);
+  });
+
+  ipcMain.on('get-all-settings', (event) => {
+    event.returnValue = context.getAllSettings();
   });
 
   ipcMain.on('get-system-settings', (event) => {
-    event.returnValue = {
-      standbyInToolbar: getSetting('standby-in-toolbar', false),
-      stickyNoteInToolbar: getSetting('sticky-note-in-toolbar', false),
-      showTrayIcon: getSetting('show-tray-icon', true),
-      launchOnStartup: getSetting('launch-on-startup', false)
-    };
+    event.returnValue = context.getAllSettings();
   });
 
-  ipcMain.on('sticky-note-in-toolbar-changed', (event, enabled) => {
-    setSetting('sticky-note-in-toolbar', enabled);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('sticky-note-in-toolbar-changed', enabled);
+  ipcMain.on('sync-setting', (event, { key, value, channel }) => {
+    if (key) setSetting(key, value);
+    if (channel) {
+      broadcast(channel, value);
+      
+      const sideEffectChannels = ['toggle-tray-icon', 'set-auto-launch'];
+      if (sideEffectChannels.includes(channel)) {
+        ipcMain.emit(channel, event, value);
+      }
     }
   });
 
-  ipcMain.on('auto-save-snapshots-changed', (event, enabled) => {
-    setSetting('auto-save-snapshots', enabled);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('auto-save-snapshots-changed', enabled);
-    }
+  const autoSyncSettings = [
+    'sticky-note-in-toolbar-changed',
+    'auto-save-snapshots-changed',
+    'reduce-clutter-changed',
+    'toolbar-dragging-changed',
+    'standby-in-toolbar-changed',
+    'element-eraser-changed',
+    'hardware-acceleration-changed',
+    'startup-window-changed',
+    'screenshot-notification-changed',
+    'copy-snapshot-clipboard-changed'
+  ];
+
+  autoSyncSettings.forEach(channel => {
+    ipcMain.on(channel, (event, value) => {
+      const key = channel.replace('-changed', '');
+      setSetting(key, value);
+      broadcast(channel, value);
+    });
   });
 
   ipcMain.on('save-directory-changed', (event, directoryPath) => {
-    if (!directoryPath || directoryPath.trim() === '') {
-      setSetting('save-directory-path', null);
-    } else {
-      setSetting('save-directory-path', directoryPath);
-    }
-  });
-
-  ipcMain.on('screenshot-notification-changed', (event, enabled) => {
-    setSetting('screenshot-notification', enabled);
-  });
-
-  ipcMain.on('copy-snapshot-clipboard-changed', (event, enabled) => {
-    setSetting('copy-snapshot-clipboard', enabled);
+    const value = (!directoryPath || directoryPath.trim() === '') ? null : directoryPath;
+    setSetting('save-directory-path', value);
+    broadcast('save-directory-changed', value);
   });
 
   ipcMain.on('optimized-rendering-changed', (event, enabled) => {
     setSetting('optimized-rendering', enabled);
-  });
-
-  ipcMain.on('hardware-acceleration-changed', (event, enabled) => {
-    setSetting('hardware-acceleration', enabled);
-  });
-
-  ipcMain.on('reduce-clutter-changed', (event, enabled) => {
-    setSetting('reduce-clutter', enabled);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('reduce-clutter-changed', enabled);
-    }
-  });
-
-  ipcMain.on('toolbar-dragging-changed', (event, enabled) => {
-    setSetting('toolbar-dragging-enabled', enabled);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('toolbar-dragging-changed', enabled);
-    }
-  });
-
-  ipcMain.on('standby-in-toolbar-changed', (event, enabled) => {
-    setSetting('standby-in-toolbar', enabled);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('standby-in-toolbar-changed', enabled);
-      setTimeout(() => {
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('standby-in-toolbar-changed', enabled);
-        }
-      }, 100);
-    }
   });
 
   ipcMain.on('set-standby-mode', (event, enabled) => {
@@ -119,29 +89,11 @@ function initSettingsIpc(context) {
 
   ipcMain.on('toolbar-bg-changed', (event, data) => {
     setSetting('toolbar-accent-bg', data.enabled);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('toolbar-bg-changed', data);
-    }
+    broadcast('toolbar-bg-changed', data);
   });
 
   ipcMain.on('sounds-changed', (event, enabled) => {
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('sounds-changed', enabled);
-    }
-  });
-
-  ipcMain.on('element-eraser-changed', (event, enabled) => {
-    setSetting('element-eraser-enabled', enabled);
-    const win = getWin();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('element-eraser-changed', enabled);
-    }
-  });
-
-  ipcMain.on('startup-window-changed', (event, value) => {
-    setSetting('startup-window', value);
+    broadcast('sounds-changed', enabled);
   });
 }
 

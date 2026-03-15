@@ -40,9 +40,14 @@ function initWhiteboardMode(deps) {
           state.panY = boardData.panY || 0;
           state.currentBoardId = boardId;
           
-          state.history = [];
-          state.historyIndex = -1;
+          const { cloneElements } = require('../../core/AppState.js');
           state.nextElementId = (Math.max(...state.elements.map(e => e.id), 0) || 0) + 1;
+          state.history = [{
+            elements: cloneElements(state.elements),
+            nextElementId: state.nextElementId
+          }];
+          state.historyIndex = 0;
+          state.initialStateSaved = true;
           state.saveStatus = 'saved';
 
           updateWhiteboardTheme(state.whiteboardPageColor);
@@ -162,7 +167,10 @@ function initWhiteboardMode(deps) {
 
             tempCtx.drawImage(canvas, 0, 0);
 
-            return tempCanvas.toDataURL('image/webp', 0.5);
+            const result = tempCanvas.toDataURL('image/webp', 0.5);
+            tempCanvas.width = 0;
+            tempCanvas.height = 0;
+            return result;
         } catch (e) {
             ipcRenderer.invoke('show-error-dialog', 'Whiteboard Error', 'Failed to capture board preview', e.message);
         }
@@ -170,7 +178,7 @@ function initWhiteboardMode(deps) {
     }
 
     let lastPreviewCapture = 0;
-    const PREVIEW_CAPTURE_INTERVAL = 30000; // 30 seconds
+    const PREVIEW_CAPTURE_INTERVAL = 30000;
 
     const saveCurrentBoard = async (options = { capturePreview: true }) => {
         if (!state.currentBoardId) return;
@@ -262,8 +270,7 @@ function initWhiteboardMode(deps) {
       listContainer.innerHTML = '';
 
       const createSection = (id, title, boards) => {
-        if (boards.length === 0 && !searchQuery) return;
-        if (boards.length === 0 && searchQuery) return;
+        if (boards.length === 0) return;
 
         const section = document.createElement('div');
         section.className = `wb-list-section ${collapsedSections[id] ? 'collapsed' : ''}`;
@@ -385,10 +392,6 @@ function initWhiteboardMode(deps) {
         }
     }
 
-    const settingsBtnSidebar = document.getElementById('wb-sidebar-settings-btn');
-    if (settingsBtnSidebar) {
-    }
-    
     const updateActiveBoardUI = () => {
         const titleInput = document.getElementById('wb-title-input');
         if (titleInput) {
@@ -441,8 +444,12 @@ function initWhiteboardMode(deps) {
 
     const updateWhiteboardTheme = (color) => {
       document.body.style.setProperty('--wb-page-color', color)
+      document.body.style.backgroundColor = color
+      document.documentElement.style.backgroundColor = color
       localStorage.setItem('last-wb-page-color', color)
       const isDark = getBrightness(color) < 128;
+      const iconColor = isDark ? '#ffffff' : '#1e1e1e';
+      document.documentElement.style.setProperty('--wb-icon-color', iconColor)
       const header = document.querySelector('.whiteboard-header');
       if (header) header.setAttribute('data-header-theme', isDark ? 'dark' : 'light');
       redrawCanvas();
@@ -497,7 +504,6 @@ function initWhiteboardMode(deps) {
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                // First, handle color category dropdowns
                 const openCategoryMenus = document.querySelectorAll('.wb-category-dropdown-container.open');
                 if (openCategoryMenus.length > 0) {
                     openCategoryMenus.forEach(c => c.classList.remove('open'));
@@ -809,13 +815,10 @@ function initWhiteboardMode(deps) {
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           const value = item.dataset.value;
-          const labelText = item.dataset.label || item.textContent;
           const section = item.closest('.wb-settings-section');
           const container = item.closest('.wb-category-dropdown-container');
           if (section) {
             section.setAttribute('data-active-category', value);
-            const label = container.querySelector('.current-label');
-            if (label) label.textContent = labelText;
             container.querySelectorAll('.wb-category-item').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
             container.classList.remove('open');
@@ -886,6 +889,48 @@ function initWhiteboardMode(deps) {
         }
     };
 
+    const handleCopy = async () => {
+        const dataUrl = captureFullBoard('image/png');
+        if (!dataUrl) return;
+
+        try {
+            const response = await fetch(dataUrl);
+            const blob = await response.blob();
+            
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    [blob.type]: blob
+                })
+            ]);
+            
+            if (typeof playSound === 'function') playSound('pop');
+            showNotification('Copied', 'Board copied to clipboard');
+        } catch (err) {
+            try {
+                const parts = dataUrl.split(',');
+                const mime = parts[0].match(/:(.*?);/)[1];
+                const bstr = atob(parts[1]);
+                let n = bstr.length;
+                const u8arr = new Uint8Array(n);
+                while (n--) {
+                    u8arr[n] = bstr.charCodeAt(n);
+                }
+                const blob = new Blob([u8arr], { type: mime });
+
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        [blob.type]: blob
+                    })
+                ]);
+                
+                if (typeof playSound === 'function') playSound('pop');
+                showNotification('Copied', 'Board copied to clipboard');
+            } catch (fallbackErr) {
+                ipcRenderer.invoke('show-error-dialog', 'Copy Error', 'Failed to copy board to clipboard', fallbackErr.message);
+            }
+        }
+    };
+
     document.getElementById('wb-export-png-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         handleExport('png');
@@ -894,6 +939,11 @@ function initWhiteboardMode(deps) {
     document.getElementById('wb-export-jpg-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         handleExport('jpg');
+    });
+
+    document.getElementById('wb-copy-clipboard-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleCopy();
     });
 
     document.getElementById('wb-print-btn')?.addEventListener('click', (e) => {
