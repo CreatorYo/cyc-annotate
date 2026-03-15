@@ -1,5 +1,5 @@
-const { isLightColor } = require('./colorUtils.js')
-const { DEFAULT_ACCENT_COLOR } = require('../../../../shared/constants.js')
+const { isLightColor } = require('../theme/colorUtils.js')
+const { DEFAULT_ACCENT_COLOR } = require('../../../../../shared/constants.js')
 
 function updateToggleSwitchColor() {
   const currentAccentColor = localStorage.getItem('accent-color') || DEFAULT_ACCENT_COLOR

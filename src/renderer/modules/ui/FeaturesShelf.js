@@ -2,11 +2,9 @@ const { ipcRenderer } = require('electron')
 const { state } = require('../core/AppState.js')
 
 let _playSound = null
-let _setTool = null
 
 function init(deps) {
   _playSound = deps.playSound
-  _setTool = deps.setTool
   initFeaturesShelf()
 }
 
@@ -601,7 +599,6 @@ function initTimerWidget() {
     }
   })
 
-  // Timer settings
   const timerSettingsBtn = document.getElementById('timer-settings-btn')
   const timerSettingsPopup = document.getElementById('timer-settings-popup')
   const timerEndActionBtns = document.querySelectorAll('.timer-end-action-btn')

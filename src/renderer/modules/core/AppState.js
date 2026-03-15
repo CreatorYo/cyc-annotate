@@ -67,7 +67,6 @@ function cloneElements(elements) {
     if (!el) continue
     const clone = { ...el }
     
-    // Deep clone points array
     if (el.points) {
       const pLen = el.points.length
       const pClone = new Array(pLen)
@@ -77,7 +76,6 @@ function cloneElements(elements) {
       clone.points = pClone
     }
     
-    // Clone coordinate objects
     if (el.start) clone.start = { x: el.start.x, y: el.start.y }
     if (el.end) clone.end = { x: el.end.x, y: el.end.y }
     if (el.x1 != null) clone.x1 = el.x1
@@ -89,7 +87,6 @@ function cloneElements(elements) {
     if (el.width != null) clone.width = el.width
     if (el.height != null) clone.height = el.height
     
-    // Deep clone text segments
     if (el.segments) {
       clone.segments = el.segments.map(s => ({
         text: s.text,
@@ -97,7 +94,6 @@ function cloneElements(elements) {
       }))
     }
     
-    // Clean up temporary rendering flags
     delete clone._dirty
     delete clone._initialPoints
     delete clone._initialStart
@@ -126,17 +122,15 @@ function createElement(type, data) {
 }
 
 function saveState(updateUndoRedoCallback) {
-  // Ensure initial empty state is saved if history is empty
   if (!state.initialStateSaved || state.history.length === 0) {
     state.history = [{
-      elements: [], // Initial state is truly empty
+      elements: [],
       nextElementId: 1
     }]
     state.historyIndex = 0
     state.initialStateSaved = true
   }
 
-  // If we've undone and then perform a new action, truncate the redo history
   if (state.historyIndex < state.history.length - 1) {
     state.history = state.history.slice(0, state.historyIndex + 1)
   }
@@ -149,7 +143,6 @@ function saveState(updateUndoRedoCallback) {
   state.history.push(elementState)
   state.historyIndex++
 
-  // Handle max history size
   if (state.history.length > state.maxHistorySize) {
     state.history.shift()
     state.historyIndex--

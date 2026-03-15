@@ -133,9 +133,6 @@ if (document.readyState === 'loading') {
   ToolbarController.setTool(state.tool) 
 }
 
-// Initial history set is now handled in HistoryManager.init
-// saveState(HistoryManager.updateUndoRedoButtons)
-
 document.getElementById('clear-btn').addEventListener('click', (e) => {
   e.stopPropagation()
   HistoryManager.clearCanvas(() => ToolbarController.closeAllPopups())
@@ -410,7 +407,6 @@ ipcRenderer.on('restore-annotations', (_, data) => {
     state.nextElementId = data.nextElementId || (data.elements.length + 1)
     state.hasDrawn = data.elements.length > 0
     
-    // Set restored elements as the base state (index 0)
     const { cloneElements } = require('../modules/core/AppState.js')
     state.history = [{
       elements: cloneElements(state.elements),

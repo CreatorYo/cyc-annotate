@@ -14,10 +14,8 @@ function init(deps) {
   _canvas = deps.canvas
   _ctx = deps.ctx
   
-  // Register history listener to keep UI in sync automatically
   setHistoryListener(updateUndoRedoButtons)
   
-  // Initialize history with current state if empty
   initHistory(updateUndoRedoButtons)
 }
 
@@ -89,12 +87,10 @@ function clearCanvas(closeAllPopups) {
   if (closeAllPopups) closeAllPopups()
   _ctx.clearRect(0, 0, _canvas.width, _canvas.height)
   
-  // Clear the board but keep history for undo
   state.elements = []
   state.selectedElements = []
   state.hasDrawn = false
   
-  // Save the new cleared state to history
   saveState(updateUndoRedoButtons)
   
   _redrawCanvas()

@@ -89,7 +89,6 @@
   --text-primary: var(--text-light);
   --stroke-dot-color: var(--stroke-dot-color-dark);
   --hover-bg: var(--hover-bg-dark);
-  
   --widget-preview-bg: rgba(255, 255, 255, 0.1);
   --widget-preview-border: rgba(255, 255, 255, 0.08);
   --widget-label: rgba(255, 255, 255, 0.6);
@@ -110,13 +109,12 @@
   --text-primary: #000000;
   --stroke-dot-color: #424242;
   --hover-bg: var(--hover-bg-light);
-  
   --widget-preview-bg: rgba(0, 0, 0, 0.05);
   --widget-preview-border: rgba(0, 0, 0, 0.1);
   --widget-label: rgba(0, 0, 0, 0.6);
-  --widget-add-btn-bg: rgba(0, 0, 0, 0.1);
-  --widget-add-btn-border: rgba(0, 0, 0, 0.15);
-  --widget-add-btn-text: rgba(0, 0, 0, 0.6);
+  --widget-add-btn-bg: #e5e5e5;
+  --widget-add-btn-border: #cccccc;
+  --widget-add-btn-text: #1a1a1a;
   --widget-icon: rgba(0, 0, 0, 0.5);
   --widget-icon-hover: #000000;
   --container-border: rgba(0, 0, 0, 0.15);

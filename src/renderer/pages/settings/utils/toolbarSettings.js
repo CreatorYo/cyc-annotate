@@ -1,5 +1,5 @@
 const { ipcRenderer } = require('electron')
-const { updateDropdownMenu } = require('./dropdownMenu.js') 
+const { updateDropdownMenu } = require('./interface/dropdownMenu.js') 
 
 let currentLayout = localStorage.getItem('toolbar-layout') || 'vertical'
 

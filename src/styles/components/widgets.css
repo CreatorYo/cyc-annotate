@@ -483,13 +483,12 @@ body[data-theme="light"] .features-shelf-container {
 
 .widget-card.active .widget-add-btn {
   background: var(--widget-add-btn-bg);
-  opacity: 0.8;
   font-size: 0;
 }
 
 .widget-card.active .widget-add-btn::before {
   content: '−';
-  font-size: 10px;
+  font-size: 14px;
   color: #ffffff;
 }
 
@@ -573,29 +572,28 @@ body[data-theme="light"] .widget-card:hover .widget-label {
 
 .widget-add-btn {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 16px;
-  height: 16px;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
   background: var(--widget-add-btn-bg);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 16px;
   color: #ffffff;
   border: 1px solid var(--widget-add-btn-border);
-  transition: opacity 0.2s ease;
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   pointer-events: none;
 }
 
 body[data-theme="light"] .widget-add-btn {
-  background: rgba(0, 0, 0, 0.05);
+  background: #e5e5e5;
   color: #1a1a1a;
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  border-color: #cccccc;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 .widget-clock-preview {

@@ -1189,14 +1189,13 @@ html, body {
   z-index: 10000;
   padding: 4px;
   display: none;
-  backdrop-filter: blur(30px) saturate(125%);
-  -webkit-backdrop-filter: blur(30px) saturate(125%);
   overflow: hidden;
   transform-origin: top;
+  will-change: transform, opacity;
 }
 
 [data-theme="light"] .dropdown-menu-menu {
-  background: rgba(255, 255, 255, 0.85);
+  background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: 
     0 2px 5px rgba(0, 0, 0, 0.08),
@@ -2127,6 +2126,11 @@ html, body {
   outline: none;
 }
 
+.custom-sounds-search-box input::placeholder {
+  color: var(--text-primary);
+  opacity: 0.6;
+}
+
 .custom-sounds-search-box input:focus {
   border-bottom-color: transparent;
   outline: none;
@@ -2281,10 +2285,15 @@ html, body {
 }
 
 .icon-btn:hover {
-  background: var(--bg-primary);
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--accent-color), transparent 88%);
+  border-color: color-mix(in srgb, var(--accent-color), transparent 80%);
   color: var(--accent-color);
   opacity: 1;
+}
+
+[data-theme="light"] .icon-btn:hover {
+  background: color-mix(in srgb, var(--accent-color), transparent 82%);
+  border-color: color-mix(in srgb, var(--accent-color), transparent 70%);
 }
 
 .icon-btn.reset-action:hover {
@@ -2320,7 +2329,7 @@ html, body {
   border: none;
   border-radius: 10px;
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
 }

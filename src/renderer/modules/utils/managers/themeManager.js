@@ -1,5 +1,5 @@
 const { ipcRenderer } = require('electron')
-const { updateAccentColorContrast } = require('../../../pages/settings/utils/colorUtils.js')
+const { updateAccentColorContrast } = require('../../../pages/settings/utils/theme/colorUtils.js')
 
 const { DEFAULT_ACCENT_COLOR } = require('../../../../shared/constants.js')
 
@@ -30,7 +30,7 @@ function applyTheme(theme, notify = true) {
   const themeDropdown = document.getElementById('theme-dropdown')
   if (themeDropdown) {
     try {
-      const { updateDropdownMenu } = require('../../../pages/settings/utils/dropdownMenu.js')
+      const { updateDropdownMenu } = require('../../../pages/settings/utils/interface/dropdownMenu.js')
       updateDropdownMenu('theme-dropdown', theme)
     } catch (e) {
       ipcRenderer.invoke('show-error-dialog', 'UI Error', 'Failed to update theme dropdown menu', e.message)
@@ -186,12 +186,12 @@ function updateAccentColor(color, notify = false) {
   const pickerBtn = document.getElementById('open-color-picker-btn')
 
   if (accentColorPicker) {
-    const { getColorForPicker } = require('../../../pages/settings/utils/colorUtils.js');
+    const { getColorForPicker } = require('../../../pages/settings/utils/theme/colorUtils.js');
     accentColorPicker.value = getColorForPicker(normalizedColor);
   }
 
   try {
-    const { updateToggleSwitchColor } = require('../../../pages/settings/utils/toggleSwitch.js');
+    const { updateToggleSwitchColor } = require('../../../pages/settings/utils/interface/toggleSwitch.js');
     updateToggleSwitchColor();
   } catch (e) {}
 

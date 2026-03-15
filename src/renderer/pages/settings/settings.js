@@ -1,21 +1,19 @@
 const { ipcRenderer } = require("electron");
-const { updatePositionToggle, updateDropdownMenu } = require("./utils/dropdownMenu.js");
-const { updateToggleSwitchColor } = require("./utils/toggleSwitch.js");
-const { normalizeHex, getColorForPicker } = require("./utils/colorUtils.js");
-const SettingsSearch = require("./utils/search");
+const { updatePositionToggle, updateDropdownMenu } = require("./utils/interface/dropdownMenu.js");
+const { updateToggleSwitchColor } = require("./utils/interface/toggleSwitch.js");
+const { normalizeHex, getColorForPicker } = require("./utils/theme/colorUtils.js");
+const SettingsSearch = require("./utils/interface/search");
 const {
   initThemeManager,
   applyTheme,
   updateToolbarBackgroundColor,
   updateAccentColor,
 } = require("../../modules/utils/managers/themeManager.js");
-const { resetEverything } = require("./utils/ResetManager.js");
 const {
   formatShortcut,
   parseShortcut,
   updateResetShortcutVisibility,
 } = require("./utils/shortcutUtils.js");
-
 const {
   DEFAULT_ACCENT_COLOR,
   DEFAULT_SHORTCUT,

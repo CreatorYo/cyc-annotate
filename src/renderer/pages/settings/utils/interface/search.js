@@ -125,6 +125,7 @@ class SettingsSearch {
     }
 
     document.addEventListener('keydown', (e) => {
+      if (e.repeat) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         e.stopPropagation()
